@@ -1,0 +1,20 @@
+Arazzo Toolkit
+Copyright (c) 2026 UseArazzo
+Arazzo Toolkit is licensed under Apache 2.0 license.
+Copy of the Apache 2.0 license can be found in `LICENSE` file.
+
+jentic/jentic-arazzo-tools
+Copyright (c) 2026 Jentic
+Jentic Arazzo Tools is licensed under Apache 2.0 license.
+Copy of the Apache 2.0 license can be found in `LICENSE` file.
+Arazzo Tookit project was founded on Jentic Arazzo Tools from commit c696c9.
+Arazzo Toolkit includes modifications by members of UseArazzo GitHub organization.
+All such modifications are licensed under the Apache License, Version 2.0.
+
+swagger-js/swagger-client
+Copyright 2020-2021 SmartBear Software Inc.
+swagger-client is being pre-processed by our build process
+and swagger-client build artifact is included in npm distribution.
+It's not dynamically linked via npm dependency management.
+swagger-client is licensed under Apache 2.0 license.
+Copy of the Apache 2.0 license can be found in `LICENSE` file.

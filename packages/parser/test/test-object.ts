@@ -1,0 +1,137 @@
+import { assert } from 'chai';
+import { isParseResultElement } from '@speclynx/apidom-datamodel';
+import { isArazzoSpecification1Element } from '@speclynx/apidom-ns-arazzo-1';
+
+import { parseArazzo } from '../src/index.ts';
+import ParseError from '../src/errors/ParseError.ts';
+
+describe('parse', function () {
+  context('given plain object', function () {
+    const arazzoObject = {
+      arazzo: '1.0.1',
+      info: {
+        title: 'Test API Workflow',
+        version: '1.0.0',
+      },
+      sourceDescriptions: [
+        {
+          name: 'testApi',
+          type: 'openapi',
+          url: 'https://example.com/openapi.json',
+        },
+      ],
+      workflows: [
+        {
+          workflowId: 'test-workflow',
+          steps: [
+            {
+              stepId: 'step1',
+              operationId: 'getResource',
+            },
+          ],
+        },
+      ],
+    };
+
+    specify('should return ParseResultElement', async function () {
+      const result = await parseArazzo(arazzoObject);
+
+      assert.isTrue(isParseResultElement(result));
+    });
+
+    specify('should contain ArazzoSpecification1Element as api', async function () {
+      const result = await parseArazzo(arazzoObject);
+
+      assert.isTrue(isArazzoSpecification1Element(result.api));
+    });
+
+    specify('should not be empty', async function () {
+      const result = await parseArazzo(arazzoObject);
+
+      assert.isFalse(result.isEmpty);
+    });
+  });
+
+  context('given null', function () {
+    specify('should throw ParseError', async function () {
+      try {
+        // @ts-expect-error testing invalid input
+        await parseArazzo(null);
+        assert.fail('Expected ParseError to be thrown');
+      } catch (error) {
+        assert.instanceOf(error, ParseError);
+      }
+    });
+  });
+
+  context('given undefined', function () {
+    specify('should throw ParseError', async function () {
+      try {
+        // @ts-expect-error testing invalid input
+        await parseArazzo(undefined);
+        assert.fail('Expected ParseError to be thrown');
+      } catch (error) {
+        assert.instanceOf(error, ParseError);
+      }
+    });
+  });
+
+  context('given number', function () {
+    specify('should throw ParseError', async function () {
+      try {
+        // @ts-expect-error testing invalid input
+        await parseArazzo(42);
+        assert.fail('Expected ParseError to be thrown');
+      } catch (error) {
+        assert.instanceOf(error, ParseError);
+      }
+    });
+  });
+
+  context('given array', function () {
+    specify('should throw ParseError', async function () {
+      try {
+        // @ts-expect-error testing invalid input
+        await parseArazzo([]);
+        assert.fail('Expected ParseError to be thrown');
+      } catch (error) {
+        assert.instanceOf(error, ParseError);
+      }
+    });
+  });
+
+  context('given class instance', function () {
+    specify('should throw ParseError', async function () {
+      try {
+        // @ts-expect-error testing invalid input
+        await parseArazzo(new Date());
+        assert.fail('Expected ParseError to be thrown');
+      } catch (error) {
+        assert.instanceOf(error, ParseError);
+      }
+    });
+  });
+
+  context('given object with sourceMap option', function () {
+    const arazzoObject = {
+      arazzo: '1.0.1',
+      info: { title: 'Test', version: '1.0.0' },
+      sourceDescriptions: [
+        { name: 'test', type: 'openapi', url: 'https://example.com/openapi.json' },
+      ],
+      workflows: [],
+    };
+
+    specify('should include source maps when sourceMap is true', async function () {
+      const result = await parseArazzo(arazzoObject, {
+        parse: { parserOpts: { sourceMap: true, strict: false } },
+      });
+
+      assert.isTrue(isParseResultElement(result));
+      assert.isDefined(result.api!.startLine);
+      assert.isDefined(result.api!.startCharacter);
+      assert.isDefined(result.api!.endLine);
+      assert.isDefined(result.api!.endCharacter);
+    });
+  });
+});
