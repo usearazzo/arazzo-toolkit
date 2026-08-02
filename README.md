@@ -1,6 +1,6 @@
 # Arazzo Toolkit
 
-A comprehensive JavaScript toolkit for parsing, resolving, validating, running and rendering [Arazzo Specification](https://spec.openapis.org/arazzo/latest.html) documents.
+A comprehensive JavaScript/TypeScript toolkit for parsing, resolving, validating and running [Arazzo Specification](https://spec.openapis.org/arazzo/latest.html) documents.
 
 [![Build Status](https://github.com/usearazzo/arazzo-toolkit/actions/workflows/build.yml/badge.svg)](https://github.com/usearazzo/arazzo-toolkit/actions)
 [![Dependabot enabled](https://badgen.net/badge/icon/dependabot?icon=dependabot&label)](https://docs.github.com/en/code-security/supply-chain-security/keeping-your-dependencies-updated-automatically)
@@ -29,105 +29,17 @@ This monorepo contains the following packages:
 
 ---
 
-## Parser
+## CLI
 
-The Parser parses Arazzo Documents from various sources and produces a [SpecLynx ApiDOM](https://github.com/speclynx/apidom) data model using the [Arazzo 1.x namespace](https://github.com/speclynx/apidom/tree/main/packages/apidom-ns-arazzo-1#readme).
+-- Placeholder --
 
-```sh
-npm install @usearazzo/parser
-```
-
-```js
-import { parse } from '@usearazzo/parser';
-
-// Parse from object
-const parseResult = await parse({
-  arazzo: '1.0.1',
-  info: { title: 'My Workflow', version: '1.0.0' },
-  sourceDescriptions: [{ name: 'api', type: 'openapi', url: 'https://example.com/openapi.json' }],
-  workflows: [],
-});
-
-// Parse from JSON/YAML string
-const parseResult = await parse('{"arazzo": "1.0.1", ...}');
-
-// Parse from file
-const parseResult = await parse('/path/to/arazzo.json');
-
-// Parse from URL
-const parseResult = await parse('https://example.com/arazzo.yaml');
-
-// Access the parsed Arazzo specification
-const arazzoSpec = parseResult.api;
-```
-
-For complete documentation, see the [@usearazzo/parser README](./packages/parser/README.md).
-
----
-
-## Resolver
-
-The Resolver dereferences Arazzo and OpenAPI Documents, resolving all references inline to produce self-contained [SpecLynx ApiDOM](https://github.com/speclynx/apidom) data models.
-
-```sh
-npm install @usearazzo/resolver
-```
-
-```js
-import { dereferenceArazzo, dereferenceOpenAPI } from '@usearazzo/resolver';
-
-// Dereference Arazzo from file or URL
-const arazzoResult = await dereferenceArazzo('/path/to/arazzo.json');
-const arazzoSpec = arazzoResult.api; // All references resolved inline
-
-// Dereference with source descriptions
-const resultWithSources = await dereferenceArazzo('/path/to/arazzo.json', {
-  dereference: { strategyOpts: { sourceDescriptions: true } },
-});
-
-// Dereference OpenAPI from file or URL
-const openapiResult = await dereferenceOpenAPI('/path/to/openapi.json');
-const openapiSpec = openapiResult.api; // All $ref references resolved inline
-```
-
-For complete documentation, see the [@usearazzo/resolver README](./packages/resolver/README.md).
+For complete documentation, see the [@usearazzo/CLI README](./packages/cli/README.md).
 
 ---
 
 ## Validator
 
-The Validator validates and lints Arazzo Documents against JSON Schema and performs semantic validation using [SpecLynx ApiDOM Language Service](https://www.npmjs.com/package/@speclynx/apidom-ls).
-
-### CLI
-
-Validate Arazzo documents from the command line:
-
-```sh
-npx @usearazzo/validator arazzo.yaml
-```
-
-```text
-arazzo.yaml
-  1:1  error  json-schema  Object must have required property "sourceDescriptions"
-  2:1  error  json-schema  "info" property must have required property "version"
-
-✖ 2 problems (2 errors, 0 warnings)
-```
-
-Multiple output formats available: `stylish` (default), `codeframe`, `json`, `github-actions`.
-
-### Programmatic API
-
-```sh
-npm install @usearazzo/validator
-```
-
-```js
-import { validateURI, DiagnosticSeverity } from '@usearazzo/validator';
-
-const diagnostics = await validateURI('/path/to/arazzo.yaml');
-const errors = diagnostics.filter((d) => d.severity === DiagnosticSeverity.Error);
-```
+-- Placeholder --
 
 For complete documentation, see the [@usearazzo/validator README](./packages/validator/README.md).
 
@@ -135,34 +47,7 @@ For complete documentation, see the [@usearazzo/validator README](./packages/val
 
 ## Runner
 
-The Runner executes Arazzo Workflows against live APIs described by their OpenAPI source descriptions. It composes small, single-responsibility engines bottom-up — an `OpenAPIOperationExecutor` (runs one OpenAPI operation), a `StepExecutor` (runs one Arazzo step), and a `WorkflowExecutor` (iterates a workflow's steps, owns the run state, and interprets control-flow actions).
-
-> [!WARNING]
-> This package is under heavy development and is not yet published to npm. It is developed within this monorepo and will be publicly installable once its API stabilizes; until then, APIs may change without notice. Not all Arazzo control-flow features are implemented yet — see the package README for the current "Not yet supported" list.
-
-```js
-import {
-  DocumentRegistry,
-  OpenAPIOperationExecutor,
-  StepExecutor,
-  WorkflowExecutor,
-  OpenAPIClientSwagger,
-} from '@usearazzo/runner';
-
-const registry = new DocumentRegistry();
-const arazzoDoc = await registry.acquireEntryDocument('/path/to/workflow.arazzo.yaml');
-
-// compose the engines bottom-up; each takes its collaborator rather than building one.
-const operationExecutor = new OpenAPIOperationExecutor({
-  clientFactory: (document) => new OpenAPIClientSwagger(document),
-});
-const stepExecutor = new StepExecutor({ document: arazzoDoc, registry, operationExecutor });
-const executor = new WorkflowExecutor({ document: arazzoDoc, registry, stepExecutor });
-
-const result = await executor.execute('myWorkflow', { username: 'user1' });
-console.log(result.status); // 'completed' | 'ended' | 'failed'
-console.log(result.outputs); // resolved workflow outputs
-```
+-- Placeholder --
 
 For complete documentation, see the [@usearazzo/runner README](./packages/runner/README.md).
 
@@ -178,4 +63,4 @@ Arazzo Toolkit was founded on [Jentic Arazzo Tools](https://github.com/jentic/je
 
 ## License
 
-This project is licensed under the [Apache 2.0 License](./LICENSE).
+This project is licensed under the [Apache 2.0 License](./LICENSE) and comes with an explicit [NOTICE](./NOTICE) file containing additional legal notices and information.
