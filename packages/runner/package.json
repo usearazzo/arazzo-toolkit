@@ -1,6 +1,6 @@
 {
   "name": "@usearazzo/runner",
-  "version": "1.0.0",
+  "version": "1.0.1-alpha.0",
   "private": true,
   "description": "Runner for Arazzo Workflows.",
   "keywords": [
@@ -49,8 +49,8 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@babel/runtime-corejs3": "^8.0.0",
-    "@usearazzo/parser": "1.0.0",
-    "@usearazzo/resolver": "1.0.0",
+    "@usearazzo/parser": "1.0.1-alpha.0",
+    "@usearazzo/resolver": "1.0.1-alpha.0",
     "@speclynx/apidom-core": "^5.0.1",
     "@speclynx/apidom-datamodel": "^5.0.1",
     "@speclynx/apidom-error": "^5.0.1",

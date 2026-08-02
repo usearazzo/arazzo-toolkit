@@ -1,6 +1,6 @@
 {
   "name": "@usearazzo/parser",
-  "version": "1.0.0",
+  "version": "1.0.1-alpha.0",
   "description": "Parser for Arazzo Documents producing SpecLynx ApiDOM data model.",
   "keywords": [
     "arazzo",

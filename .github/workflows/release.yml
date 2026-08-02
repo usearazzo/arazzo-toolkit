@@ -42,7 +42,13 @@ jobs:
         run: |
           git config user.name  "Vladimir Gorej"
           git config user.email "vladimir.gorej@gmail.com"
-          npx lerna version --conventional-commits --no-private --yes --force-publish
+          npx lerna version prerelease --preid alpha --no-private --yes --force-publish
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+      - name: Mark release as latest
+        run: |
+          VERSION=$(node -p "require('./lerna.json').version")
+          gh release edit "v${VERSION}" --prerelease=false --latest
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
       - name: Publish monorepo npm packages
