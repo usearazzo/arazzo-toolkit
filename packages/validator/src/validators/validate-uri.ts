@@ -4,10 +4,12 @@ import { defaultParseArazzoOptions } from '@usearazzo/parser';
 import {
   readFile,
   mergeOptions,
+  url,
   type ApiDOMReferenceResolveOptions,
   type ApiDOMReferenceOptions,
 } from '@speclynx/apidom-reference/configuration/empty';
 import type { PartialDeep } from 'type-fest';
+import { mergeDeepRight } from 'ramda';
 
 import { createTextDocument } from '../document.ts';
 import { validate } from './validate.ts';
@@ -21,6 +23,25 @@ import { validate } from './validate.ts';
  * @public
  */
 export const defaultArazzoResolveOptions = defaultParseArazzoOptions.resolve;
+
+/**
+ * Canonicalizes a document source (path or URL) into an absolute URI.
+ *
+ * http(s) URLs pass through untouched. A filesystem path (relative or
+ * absolute) or a `file:` URI is resolved against the current working
+ * directory (a no-op when already absolute) and normalized. Uses
+ * `@speclynx/apidom-reference`'s own isomorphic `url` utilities rather than
+ * `node:path`/`node:url`, since this module is also bundled for the browser
+ * target. This canonical URI doubles as the `baseURI` used to resolve
+ * relative external references (e.g. `sourceDescriptions[].url`) within
+ * the document.
+ */
+function canonicalizeDocumentURI(source: string): string {
+  if (url.isHttpUrl(source)) {
+    return source;
+  }
+  return url.sanitize(url.resolve(url.cwd(), source));
+}
 
 /**
  * Validates an Arazzo Document from a URI (file path or HTTP(S) URL).
@@ -71,12 +92,20 @@ export async function validateURI(
   context: PartialDeep<LanguageServiceContext> = {},
   resolveOptions: PartialDeep<ApiDOMReferenceResolveOptions> = {},
 ): Promise<Diagnostic[]> {
+  const canonicalURI = canonicalizeDocumentURI(uri);
   const mergedOptions = mergeOptions(defaultParseArazzoOptions as ApiDOMReferenceOptions, {
     resolve: resolveOptions,
   });
-  const buffer = await readFile(uri, mergedOptions);
+  const buffer = await readFile(canonicalURI, mergedOptions);
   const content = new TextDecoder().decode(buffer);
-  const textDocument = createTextDocument(uri, content);
+  const textDocument = createTextDocument(canonicalURI, content);
 
-  return validate(textDocument, context);
+  // validateURI always has a real, resolvable document location, so - unlike
+  // validate()'s in-memory default - it's safe to turn reference validation on
+  // and anchor it to that location for resolving relative external references.
+  const uriDefaults: PartialDeep<LanguageServiceContext> = {
+    validationContext: { baseURI: canonicalURI, referenceValidation: true },
+  };
+
+  return validate(textDocument, mergeDeepRight(uriDefaults, context));
 }

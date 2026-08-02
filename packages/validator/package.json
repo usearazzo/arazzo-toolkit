@@ -31,9 +31,6 @@
     "require": "./src/index.cjs"
   },
   "types": "./types/validator.d.ts",
-  "bin": {
-    "arazzo-validator": "./bin/arazzo-validator.mjs"
-  },
   "scripts": {
     "build": "npm run clean && run-p --max-parallel ${CPU_CORES:-2} typescript:declaration build:es build:cjs build:umd:browser",
     "build:es": "cross-env BABEL_ENV=es babel src --out-dir src --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward'",
@@ -63,15 +60,12 @@
     "@speclynx/apidom-parser-adapter-arazzo-yaml-1": "^5.0.1",
     "@speclynx/apidom-reference": "^5.0.1",
     "@swaggerexpert/arazzo-runtime-expression": "^3.1.0",
-    "chalk": "^5.6.2",
-    "commander": "^14.0.3",
     "ramda": "^0.32.0",
     "type-fest": "^5.4.4",
     "vscode-languageserver-textdocument": "^1.0.12",
     "vscode-languageserver-types": "=3.17.6-next.6"
   },
   "files": [
-    "bin/",
     "src/**/*.mjs",
     "src/**/*.cjs",
     "dist/",
