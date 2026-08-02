@@ -57,7 +57,10 @@ export const defaultOptions: Options = {
   resolve: {
     resolvers: [
       new MemoryResolver(),
-      new FileResolver({ fileAllowList: ['*.json', '*.yaml', '*.yml'] }),
+      // regex patterns, not glob strings - picomatch's glob matching never
+      // matches a dotfile basename (e.g. .arazzo.yaml) without `dot: true`,
+      // which FileResolver does not set.
+      new FileResolver({ fileAllowList: [/\.json$/i, /\.ya?ml$/i] }),
       new HTTPResolverAxios({ timeout: 15000, redirects: 5, withCredentials: false }),
     ],
     resolverOpts: {},

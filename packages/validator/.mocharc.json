@@ -1,4 +1,5 @@
 {
   "recursive": true,
-  "spec": "test/**/*.mjs"
+  "spec": "test/**/*.mjs",
+  "ignore": ["test/helpers.mjs"]
 }

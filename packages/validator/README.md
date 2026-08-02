@@ -18,83 +18,6 @@ You can install this package via [npm](https://npmjs.org/) CLI by running the fo
 npm install @usearazzo/validator
 ```
 
-## CLI
-
-Validate Arazzo documents from the command line:
-
-```sh
-npx @usearazzo/validator arazzo.yaml
-```
-
-### Options
-
-| Option | Description |
-|--------|-------------|
-| `[file]` | File path or URL to validate |
-| `--stdin-retrieval-uri <uri>` | Read from stdin, use URI for reference resolution |
-| `-f, --format <format>` | Output format: `stylish` (default), `codeframe`, `json`, `github-actions` |
-| `-o, --output <file>` | Write output to file instead of stdout |
-| `--fail-severity <level>` | Minimum severity to trigger failure: `error` (default), `warning`, `info`, `hint` |
-| `--max-problems <n>` | Limit output to N problems |
-| `-q, --quiet` | Suppress output, only return exit code |
-| `-v, --verbose` | Show additional information |
-
-### Output formats
-
-**stylish** (default) - Compact, colored output similar to ESLint:
-```text
-/path/to/arazzo.yaml
-  1:1  error  json-schema  Object must have required property "sourceDescriptions"
-  2:1  error  json-schema  "info" property must have required property "version"
-
-✖ 2 problems (2 errors, 0 warnings)
-```
-
-**codeframe** - Shows code snippets with context:
-```text
-/path/to/arazzo.yaml
-  2:1  error  json-schema  "info" property must have required property "version"
-
- 1 | arazzo: "1.0.0"
- 2 | info:
-   | ^^^^
- 3 |   title: Test
-
-✖ 1 problem (1 error, 0 warnings)
-```
-
-**json** - Machine-readable JSON output with diagnostics and summary.
-
-**github-actions** - GitHub Actions workflow annotations for CI integration.
-
-### Examples
-
-```sh
-# Validate a file (with options)
-npx @usearazzo/validator --format json --fail-severity warning arazzo.yaml
-
-# Validate a URL
-npx @usearazzo/validator https://example.com/arazzo.yaml
-
-# Read from stdin
-cat arazzo.yaml | npx @usearazzo/validator --stdin-retrieval-uri file:///arazzo.yaml
-```
-
-### Exit codes
-
-| Code | Description |
-|------|-------------|
-| `0` | Success (no diagnostics at or above fail-severity level) |
-| `1` | Validation errors found |
-| `2` | CLI error (invalid arguments, file not found, etc.) |
-
-When installed, the `arazzo-validator` command is available directly:
-
-```sh
-npm install @usearazzo/validator
-arazzo-validator arazzo.yaml
-```
-
 ## Programmatic API
 
 `@usearazzo/validator` provides two validation functions:
@@ -169,7 +92,7 @@ const diagnostics = await validateURI('/path/to/arazzo.yaml', {
   validationContext: {
     jsonSchemaValidation: true,   // Validate against JSON Schema (default: true)
     semanticValidation: true,     // Perform semantic validation (default: true)
-    referenceValidation: false,   // Validate references (default: false)
+    referenceValidation: false,   // Validate references (default: true for validateURI, false for validate)
     semanticLinting: true,        // Apply linting rules (default: true)
     betterAjvErrors: true,        // Use improved error messages (default: true)
   },
@@ -182,9 +105,13 @@ const diagnostics = await validateURI('/path/to/arazzo.yaml', {
 });
 ```
 
+`referenceValidation` defaults differently depending on which function you call: `validateURI` always resolves its input to a real, absolute document location, so it turns reference validation on and anchors it (`baseURI`) to that location — this is what allows relative `sourceDescriptions[].url` entries to resolve correctly. The lower-level `validate` function works from an in-memory `TextDocument` that may not have a resolvable `uri` at all, so it leaves `referenceValidation` off by default; pass `baseURI` yourself via the context parameter if you need it on.
+
 ### Customizing URI resolution
 
-The `validateURI` function accepts an optional third parameter for customizing how the URI is resolved. The shape of these options is defined by [SpecLynx ApiDOM Reference Resolve Options](https://github.com/speclynx/apidom/blob/main/packages/apidom-reference/src/options/index.ts):
+`validateURI` also canonicalizes its input into an absolute URI before doing anything else — a relative path (`./arazzo.yaml`), an absolute path, or any legal form of a `file:` URI all normalize to the same absolute location, which is what makes relative external references inside the document (e.g. `sourceDescriptions[].url: ./openapi.yaml`) resolve correctly regardless of how the input was given.
+
+To fetch that document, `validateURI` reuses the file and HTTP resolvers from [`@usearazzo/parser`](https://www.npmjs.com/package/@usearazzo/parser)'s default options. The `validateURI` function accepts an optional third parameter for overriding these. The shape of these options is defined by [SpecLynx ApiDOM Reference Resolve Options](https://github.com/speclynx/apidom/blob/main/packages/apidom-reference/src/options/index.ts):
 
 ```js
 import { validateURI } from '@usearazzo/validator';
@@ -198,7 +125,7 @@ const diagnostics = await validateURI('https://example.com/arazzo.yaml', {}, {
 
 ### Security considerations
 
-By default, `fileAllowList` is set to `['*']` which allows the validator to access any file on the filesystem when resolving source descriptions. Additionally, `sourceDescriptionsResolution` is enabled by default, which means the validator will fetch and parse external documents referenced in the Arazzo document.
+By default, `validateURI`'s file resolver (from `@usearazzo/parser`) allows reading local `.json`/`.yaml`/`.yml` files, matched via regex rather than glob patterns so dotfile basenames (e.g. `.arazzo.yaml`) are matched correctly too. Separately, `parseContext.fileAllowList` is set to `['*']` by default, which allows the validator to access any file on the filesystem when resolving source descriptions during semantic linting. Additionally, `sourceDescriptionsResolution` is enabled by default, which means the validator will fetch and parse external documents referenced in the Arazzo document.
 
 When validating untrusted documents, consider restricting file access:
 
@@ -224,7 +151,7 @@ import {
 } from '@usearazzo/validator';
 ```
 
-- `defaultArazzoResolveOptions` - file and HTTP resolvers configuration
+- `defaultArazzoResolveOptions` - file and HTTP resolvers configuration used by `validateURI`
 - `defaultLanguageServiceContext` - validation settings (JSON Schema, semantic validation, linting)
 
 ## Working with diagnostics

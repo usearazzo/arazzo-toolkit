@@ -1,0 +1,13 @@
+arazzo: '1.0.1'
+info:
+  title: Dotfile Named Workflow
+  version: '1.0.0'
+sourceDescriptions:
+  - name: myApi
+    type: openapi
+    url: https://example.com/openapi.json
+workflows:
+  - workflowId: myWorkflow
+    steps:
+      - stepId: step1
+        operationId: myApi.getUsers
