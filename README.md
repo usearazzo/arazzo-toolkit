@@ -172,6 +172,10 @@ For complete documentation, see the [@usearazzo/runner README](./packages/runner
 
 Please read our [Contributing Guide](./CONTRIBUTING.md) and [Code of Conduct](./CODE_OF_CONDUCT.md) before submitting a pull request.
 
+## Origins
+
+Arazzo Toolkit was founded on [Jentic Arazzo Tools](https://github.com/jentic/jentic-arazzo-tools), Apache 2.0, from commit `c696c9`. The parser, resolver, and runner originate there and are developed further here. See [NOTICE](./NOTICE) for full attribution.
+
 ## License
 
 This project is licensed under the [Apache 2.0 License](./LICENSE).
