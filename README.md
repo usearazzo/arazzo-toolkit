@@ -1,6 +1,6 @@
 # Arazzo Toolkit
 
-A comprehensive JavaScript/TypeScript toolkit for parsing, resolving, validating and running [Arazzo Specification](https://spec.openapis.org/arazzo/latest.html) documents.
+A comprehensive JavaScript/TypeScript toolkit for **parsing**, **resolving**, **validating** and **running** [Arazzo Specification](https://spec.openapis.org/arazzo/latest.html) documents.
 
 [![Build Status](https://github.com/usearazzo/arazzo-toolkit/actions/workflows/build.yml/badge.svg)](https://github.com/usearazzo/arazzo-toolkit/actions)
 [![Dependabot enabled](https://badgen.net/badge/icon/dependabot?icon=dependabot&label)](https://docs.github.com/en/code-security/supply-chain-security/keeping-your-dependencies-updated-automatically)
