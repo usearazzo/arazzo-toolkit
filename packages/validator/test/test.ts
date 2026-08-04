@@ -1,8 +1,14 @@
 import { assert } from 'chai';
 import dedent from 'dedent';
 
-import { validate, DiagnosticSeverity, createTextDocument } from '../src/index.ts';
-import ApilintCodes from '../src/config/codes.ts';
+import { ApilintCodes } from '@speclynx/apidom-ls';
+
+import {
+  validate,
+  DiagnosticSeverity,
+  createTextDocument,
+  defaultLanguageServiceContext,
+} from '../src/index.ts';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -167,6 +173,166 @@ describe('validate', function () {
       const notDetected = diagnostics.find((d) => d.code === ApilintCodes.ARAZZO_NOT_DETECTED);
       assert.isDefined(notDetected, 'expected diagnostic with code 9000001');
       assert.equal(notDetected!.severity, DiagnosticSeverity.Error);
+    });
+  });
+
+  context('given document matching both Arazzo and another specification', function () {
+    // the language service classifies documents itself, and Arazzo sits behind
+    // every OpenAPI variant in its detection chain, so such a document would be
+    // parsed and linted as OpenAPI. it must be rejected rather than reported
+    // against another specification's rules.
+    const hybrid = dedent`
+      arazzo: '1.0.1'
+      openapi: '3.0.0'
+      info:
+        title: My Workflow
+        version: '1.0.0'
+      sourceDescriptions:
+        - name: myApi
+          type: openapi
+          url: https://example.com/openapi.json
+      workflows:
+        - workflowId: myWorkflow
+          steps:
+            - stepId: step1
+              operationId: myApi.getUsers
+    `;
+
+    specify('should return ARAZZO_NOT_DETECTED error', async function () {
+      const textDocument = createTextDocument('memory://arazzo.yaml', hybrid);
+      const diagnostics = await validate(textDocument);
+      const notDetected = diagnostics.find((d) => d.code === ApilintCodes.ARAZZO_NOT_DETECTED);
+      assert.isDefined(notDetected, 'expected diagnostic with code 9000001');
+      assert.equal(notDetected!.severity, DiagnosticSeverity.Error);
+    });
+
+    specify('should not report another specification diagnostics', async function () {
+      const textDocument = createTextDocument('memory://arazzo.yaml', hybrid);
+      const diagnostics = await validate(textDocument);
+      assert.deepEqual(
+        diagnostics.map((d) => d.code),
+        [ApilintCodes.ARAZZO_NOT_DETECTED],
+      );
+    });
+  });
+
+  context('given Arazzo document using Reusable Objects', function () {
+    // Reusable Objects are permitted wherever a Parameter, Success Action or
+    // Failure Action Object is. requires @speclynx/apidom-ls >= 2.11.7, which
+    // stopped those objects being validated against the referenced type's rules.
+    const withReusables = dedent`
+      arazzo: '1.0.1'
+      info:
+        title: My Workflow
+        version: '1.0.0'
+        summary: A summary
+        description: A description
+      sourceDescriptions:
+        - name: myApi
+          type: openapi
+          url: https://example.com/openapi.json
+      components:
+        parameters:
+          petId:
+            name: petId
+            in: query
+            value: 1
+        successActions:
+          done:
+            name: done
+            type: end
+        failureActions:
+          bail:
+            name: bail
+            type: end
+      workflows:
+        - workflowId: myWorkflow
+          summary: A summary
+          description: A description
+          parameters:
+            - reference: $components.parameters.petId
+          successActions:
+            - reference: $components.successActions.done
+          failureActions:
+            - reference: $components.failureActions.bail
+          steps:
+            - stepId: step1
+              description: A description
+              operationId: myApi.getUsers
+              onSuccess:
+                - reference: $components.successActions.done
+              onFailure:
+                - reference: $components.failureActions.bail
+    `;
+
+    specify('should return no diagnostics', async function () {
+      const textDocument = createTextDocument('memory://arazzo.yaml', withReusables);
+      const diagnostics = await validate(textDocument);
+      assert.deepEqual(diagnostics, []);
+    });
+  });
+
+  context('given Arazzo document with a local JSON Schema $ref', function () {
+    // reference validation is on by default and requires
+    // @speclynx/apidom-ls >= 2.11.7; earlier versions report every local $ref
+    // as unresolved regardless of whether the target exists.
+    const withRef = (ref: string) => dedent`
+      arazzo: '1.0.1'
+      info:
+        title: My Workflow
+        version: '1.0.0'
+        summary: A summary
+        description: A description
+      sourceDescriptions:
+        - name: myApi
+          type: openapi
+          url: https://example.com/openapi.json
+      components:
+        inputs:
+          pet:
+            type: object
+      workflows:
+        - workflowId: myWorkflow
+          summary: A summary
+          description: A description
+          inputs:
+            $ref: '${ref}'
+          steps:
+            - stepId: step1
+              description: A description
+              operationId: myApi.getUsers
+    `;
+
+    specify('should return no diagnostics when the target exists', async function () {
+      const textDocument = createTextDocument(
+        'memory://arazzo.yaml',
+        withRef('#/components/inputs/pet'),
+      );
+      const diagnostics = await validate(textDocument);
+      assert.deepEqual(diagnostics, []);
+    });
+
+    specify('should return an error when the target is missing', async function () {
+      const textDocument = createTextDocument(
+        'memory://arazzo.yaml',
+        withRef('#/components/inputs/missing'),
+      );
+      const diagnostics = await validate(textDocument);
+      const unresolved = diagnostics.filter((d) => /reference/i.test(d.message));
+      assert.lengthOf(unresolved, 1);
+      assert.equal(unresolved[0].severity, DiagnosticSeverity.Error);
+    });
+  });
+});
+
+describe('defaultLanguageServiceContext', function () {
+  specify('should make JSON Schema validation opt-in and enable the rest', function () {
+    assert.deepEqual(defaultLanguageServiceContext.validationContext, {
+      jsonSchemaValidation: false,
+      semanticValidation: true,
+      referenceValidation: true,
+      semanticLinting: true,
+      betterAjvErrors: true,
     });
   });
 });

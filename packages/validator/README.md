@@ -1,7 +1,7 @@
 # @usearazzo/validator
 
 `@usearazzo/validator` is a validator and linter for [Arazzo Specification](https://spec.openapis.org/arazzo/latest.html) documents.
-It performs JSON Schema validation, semantic validation, and semantic linting using [SpecLynx ApiDOM Language Service](https://www.npmjs.com/package/@speclynx/apidom-ls).
+It performs semantic validation and semantic linting — with JSON Schema validation available opt-in — using [SpecLynx ApiDOM Language Service](https://www.npmjs.com/package/@speclynx/apidom-ls).
 
 **Supported Arazzo versions:**
 - [Arazzo 1.0.0](https://spec.openapis.org/arazzo/v1.0.0)
@@ -90,9 +90,9 @@ import { validateURI } from '@usearazzo/validator';
 
 const diagnostics = await validateURI('/path/to/arazzo.yaml', {
   validationContext: {
-    jsonSchemaValidation: true,   // Validate against JSON Schema (default: true)
+    jsonSchemaValidation: true,   // Opt in to JSON Schema validation (default: false)
     semanticValidation: true,     // Perform semantic validation (default: true)
-    referenceValidation: false,   // Validate references (default: true for validateURI, false for validate)
+    referenceValidation: true,    // Validate references (default: true)
     semanticLinting: true,        // Apply linting rules (default: true)
     betterAjvErrors: true,        // Use improved error messages (default: true)
   },
@@ -105,7 +105,11 @@ const diagnostics = await validateURI('/path/to/arazzo.yaml', {
 });
 ```
 
-`referenceValidation` defaults differently depending on which function you call: `validateURI` always resolves its input to a real, absolute document location, so it turns reference validation on and anchors it (`baseURI`) to that location — this is what allows relative `sourceDescriptions[].url` entries to resolve correctly. The lower-level `validate` function works from an in-memory `TextDocument` that may not have a resolvable `uri` at all, so it leaves `referenceValidation` off by default; pass `baseURI` yourself via the context parameter if you need it on.
+JSON Schema (AJV) validation is opt-in. Enabling `jsonSchemaValidation` adds structural checks derived from the Arazzo JSON Schema — most notably `oneOf` discrimination for Reusable Objects — at the cost of a second diagnostic for many problems the linting rules already report.
+
+`referenceValidation` checks that local `$ref` pointers inside JSON Schema objects — `workflow.inputs`, `components.inputs` — resolve to an existing target. It requires `@speclynx/apidom-ls` 2.11.7 or later; earlier versions report every `#`-prefixed `$ref` as unresolved regardless of whether the target exists.
+
+Resolution of relative `sourceDescriptions[].url` entries is separate, and driven by `parseContext.arazzo.sourceDescriptionsResolution` together with a `baseURI`. `validateURI` sets `baseURI` automatically from the document's resolved location. The lower-level `validate` function works from an in-memory `TextDocument` that may not have a resolvable `uri` at all, so pass `baseURI` yourself via the context parameter when relative source descriptions need to resolve.
 
 ### Customizing URI resolution
 
@@ -152,7 +156,7 @@ import {
 ```
 
 - `defaultArazzoResolveOptions` - file and HTTP resolvers configuration used by `validateURI`
-- `defaultLanguageServiceContext` - validation settings (JSON Schema, semantic validation, linting)
+- `defaultLanguageServiceContext` - validation settings (semantic validation, linting, opt-in JSON Schema)
 
 ## Working with diagnostics
 

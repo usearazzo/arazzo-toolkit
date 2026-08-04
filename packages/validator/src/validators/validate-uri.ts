@@ -74,7 +74,7 @@ function canonicalizeDocumentURI(source: string): string {
  * Validate with custom context
  * ```typescript
  * const diagnostics = await validateURI('/path/to/arazzo.yaml', {
- *   validationContext: { jsonSchemaValidation: false }
+ *   validationContext: { jsonSchemaValidation: true }
  * });
  * ```
  *
@@ -100,11 +100,10 @@ export async function validateURI(
   const content = new TextDecoder().decode(buffer);
   const textDocument = createTextDocument(canonicalURI, content);
 
-  // validateURI always has a real, resolvable document location, so - unlike
-  // validate()'s in-memory default - it's safe to turn reference validation on
-  // and anchor it to that location for resolving relative external references.
+  // validateURI always has a real, resolvable document location, so it anchors
+  // resolution of relative source descriptions to that location.
   const uriDefaults: PartialDeep<LanguageServiceContext> = {
-    validationContext: { baseURI: canonicalURI, referenceValidation: true },
+    validationContext: { baseURI: canonicalURI },
   };
 
   return validate(textDocument, mergeDeepRight(uriDefaults, context));

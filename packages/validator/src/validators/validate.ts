@@ -2,26 +2,27 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { DiagnosticSeverity } from 'vscode-languageserver-types';
 import type { Diagnostic } from 'vscode-languageserver-types';
 import { mediaTypes } from '@speclynx/apidom-ns-arazzo-1';
-import { getLanguageService, LogLevel, type LanguageServiceContext } from '@speclynx/apidom-ls';
-import { detect as detectArazzoJSON } from '@speclynx/apidom-parser-adapter-arazzo-json-1';
-import { detect as detectArazzoYAML } from '@speclynx/apidom-parser-adapter-arazzo-yaml-1';
+import {
+  getLanguageService,
+  findNamespace,
+  ApilintCodes,
+  LogLevel,
+  type LanguageServiceContext,
+} from '@speclynx/apidom-ls';
 import type { PartialDeep } from 'type-fest';
 import { mergeDeepRight } from 'ramda';
 
-import { config } from '../config/config.ts';
-import ApilintCodes from '../config/codes.ts';
 import { Arazzo1JsonSchemaValidationProvider } from './json-schema-provider.ts';
 
 /**
  * Default language service context for validation.
  *
- * Controls validation behavior including JSON Schema validation,
- * semantic validation, and linting rules.
+ * Controls validation behavior: semantic validation, reference validation and
+ * semantic linting are enabled, JSON Schema validation is opt-in.
  *
  * @public
  */
 export const defaultLanguageServiceContext: Partial<LanguageServiceContext> = {
-  metadata: config(),
   logLevel: LogLevel.NONE,
   defaultContentLanguage: {
     namespace: 'arazzo',
@@ -29,10 +30,13 @@ export const defaultLanguageServiceContext: Partial<LanguageServiceContext> = {
     mediaType: mediaTypes.findBy('1.0.1'),
   },
   validatorProviders: [new Arazzo1JsonSchemaValidationProvider()],
+  // semantic validation, reference validation and semantic linting are always
+  // on, while JSON Schema (AJV) validation is opt-in. `betterAjvErrors` is kept
+  // on so opting in also gets the friendlier AJV messages.
   validationContext: {
-    jsonSchemaValidation: true,
+    jsonSchemaValidation: false,
     semanticValidation: true,
-    referenceValidation: false,
+    referenceValidation: true,
     semanticLinting: true,
     betterAjvErrors: true,
   },
@@ -70,10 +74,10 @@ export const defaultLanguageServiceContext: Partial<LanguageServiceContext> = {
  * ```
  *
  * @example
- * Disable JSON Schema validation
+ * Enable JSON Schema validation (opt-in)
  * ```typescript
  * const diagnostics = await validate(textDocument, {
- *   validationContext: { jsonSchemaValidation: false }
+ *   validationContext: { jsonSchemaValidation: true }
  * });
  * ```
  * @public
@@ -83,9 +87,12 @@ export async function validate(
   context: PartialDeep<LanguageServiceContext> = {},
 ): Promise<Diagnostic[]> {
   const content = textDocument.getText();
-  const isArazzo = (await detectArazzoJSON(content)) || (await detectArazzoYAML(content));
+  // classify with the language service's own detector so the two cannot diverge.
+  // `defaultContentLanguage` is deliberately not passed - it would make arrays,
+  // empty files and plain objects fall back to Arazzo.
+  const { namespace } = await findNamespace(content);
 
-  if (!isArazzo) {
+  if (namespace !== 'arazzo') {
     const lastChar = textDocument.positionAt(content.length);
     return [
       {
