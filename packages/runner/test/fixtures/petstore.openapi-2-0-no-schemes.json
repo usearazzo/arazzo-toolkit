@@ -8,6 +8,19 @@
   "host": "petstore.swagger.io",
   "basePath": "/v2",
   "paths": {
+    "/store/inventory": {
+      "get": {
+        "summary": "Returns pet inventories by status",
+        "description": "Declares no parameters at all, so nothing can carry a request body.",
+        "operationId": "getInventory",
+        "produces": ["application/json"],
+        "responses": {
+          "200": {
+            "description": "successful operation"
+          }
+        }
+      }
+    },
     "/pet/{petId}": {
       "get": {
         "summary": "Find pet by ID",

@@ -292,7 +292,7 @@ class OpenAPIOperationExecutor {
   }
 
   /**
-   * Settles where the request is sent, in place.
+   * Derives where the request is sent, returning the options to build with.
    *
    * swagger-client already selects a declared server, substitutes its variables
    * and resolves relative URLs — the one thing it gets wrong is what to do with
@@ -339,18 +339,20 @@ class OpenAPIOperationExecutor {
     );
     if (isDeclared) return resolved;
 
-    return {
-      ...withoutServer,
-      baseURL: urlUtils.hasProtocol(server)
-        ? server
-        : urlUtils.resolve((resolved.contextUrl as string | undefined) ?? '', server),
-    };
+    const baseURL = urlUtils.hasProtocol(server)
+      ? server
+      : urlUtils.resolve((resolved.contextUrl as string | undefined) ?? '', server);
+
+    // buildRequest concatenates the base and the path verbatim, so a trailing
+    // slash would double up. swagger-client trims one in its own resolution too
+    return { ...withoutServer, baseURL: baseURL.replace(/\/$/, '') };
   }
 
   /**
    * Reconciles the requested body media type with the ones the operation
-   * declares, returning the `Content-Type` to force onto the built request, or
-   * `undefined` when nothing needs forcing.
+   * declares, returning the options to build with. A rewritten
+   * `requestContentType` is what tells `execute` to restore the authored value
+   * onto the header afterwards.
    *
    * swagger-client attaches the body only when `requestContentType` is an exact
    * key of `requestBody.content`, and otherwise drops the body *and* the header
@@ -391,10 +393,23 @@ class OpenAPIOperationExecutor {
     const declared = content.keys() as string[];
     if (declared.includes(requested)) return buildOptions;
 
-    // media type names are case-insensitive, and parameters are not part of the
-    // name, so both are normalized away before matching
+    // media type names are case-insensitive and their parameters are not part of
+    // the name, so both are normalized away before matching
     const baseType = requested.split(';')[0].trim().toLowerCase();
-    const match = declared.find((mediaType) => mediaType.toLowerCase() === baseType);
+    const [type] = baseType.split('/');
+    const covers = (mediaType: string, by: 'exact' | 'subtype' | 'any'): boolean => {
+      const candidate = mediaType.toLowerCase();
+      if (by === 'exact') return candidate === baseType;
+      if (by === 'subtype') return candidate === `${type}/*`;
+      return candidate === '*/*';
+    };
+
+    // a declared range covers a concrete type, so `*/*` (what several generators
+    // emit by default) accepts anything; the most specific declaration wins
+    const match =
+      declared.find((mediaType) => covers(mediaType, 'exact')) ??
+      declared.find((mediaType) => covers(mediaType, 'subtype')) ??
+      declared.find((mediaType) => covers(mediaType, 'any'));
     if (match === undefined) {
       throw new ClientError(
         `Request body media type "${requested}" is not declared by the operation ` +
@@ -424,17 +439,18 @@ class OpenAPIOperationExecutor {
     document: OpenAPIDocument,
     jsonPointer: string,
   ): Record<string, unknown> {
-    if (
-      !isSwaggerElement(document.parseResult.api) ||
-      buildOptions.requestBody === undefined ||
-      !isArrayElement(operation.parameters)
-    ) {
+    if (!isSwaggerElement(document.parseResult.api) || buildOptions.requestBody === undefined) {
       return buildOptions;
     }
 
     const { requestBody, parameters: given, ...rest } = buildOptions;
     const callerParameters = given as Record<string, unknown> | undefined;
-    const parameters = [...operation.parameters.filter(isParameterElement)] as ParameterElement2[];
+    // an operation declaring none leaves `parameters` absent rather than empty,
+    // and that case still has to reach the throw below
+    const declared = operation.parameters;
+    const parameters = (
+      isArrayElement(declared) ? [...declared.filter(isParameterElement)] : []
+    ) as ParameterElement2[];
 
     // the body parameter's name is arbitrary, so the payload wins over a
     // same-named entry the caller supplied
@@ -447,7 +463,14 @@ class OpenAPIOperationExecutor {
     // formData models each field as its own parameter, so the payload's keys
     // are the parameter names; buildRequest reports any that do not match
     const hasForm = parameters.some((parameter) => toValue(parameter.in) === 'formData');
-    if (hasForm && isPlainObject(requestBody)) {
+    if (hasForm) {
+      if (!isPlainObject(requestBody)) {
+        throw new ClientError(
+          'Request body cannot be sent: the OpenAPI 2.0 operation carries it in "formData" ' +
+            'parameters, so the payload must be an object keyed by their names',
+          { operationPath: jsonPointer },
+        );
+      }
       return { ...rest, parameters: { ...callerParameters, ...requestBody } };
     }
 

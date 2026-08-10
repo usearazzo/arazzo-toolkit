@@ -18,7 +18,7 @@ interface OpenAPIOperationRequest {
   method: string;
   headers: Record<string, string>;
   body?: unknown;
-  credentials?: string;
+  credentials?: RequestCredentials;
   signal?: AbortSignal;
   [key: string]: unknown;
 }

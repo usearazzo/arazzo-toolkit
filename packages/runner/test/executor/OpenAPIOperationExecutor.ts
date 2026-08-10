@@ -230,6 +230,40 @@ describe('OpenAPIOperationExecutor', function () {
       assert.strictEqual(requests.length, 0);
     });
 
+    specify('should accept a declared media range covering the requested type', async function () {
+      // `*/*` is what several generators emit by default; treating it as
+      // undeclared would abort a workflow that previously worked.
+      const rangeRegistry = new DocumentRegistry();
+      const rangeDoc = (await rangeRegistry.acquire(
+        path.join(fixturesPath, 'petstore.openapi-media-range.json'),
+      )) as OpenAPIDocument;
+      const rangeLocator = {
+        document: rangeDoc,
+        jsonPointer: rangeDoc.operationIndex.get('addPet'),
+      } as OpenAPIOperationLocator;
+      const { executor, requests } = makeExecutor();
+
+      await executor.execute(rangeLocator, {
+        requestBody: { name: 'fido' },
+        requestContentType: 'application/json',
+      });
+
+      assert.deepEqual(JSON.parse(requests[0].body as string), { name: 'fido' });
+      assert.strictEqual(requests[0].headers['Content-Type'], 'application/json');
+    });
+
+    specify('should not double the slash when a server ends with one', async function () {
+      const { executor, requests } = makeExecutor();
+
+      await executor.execute(locator, {
+        parameters: { status: 'available' },
+        server: 'https://staging.internal.test/api/',
+      });
+
+      assert.include(requests[0].url, 'https://staging.internal.test/api/pet/findByStatus');
+      assert.notInclude(requests[0].url, '//pet');
+    });
+
     specify('should throw ClientError for an undeclared media type', async function () {
       const orderLocator = await locatorNormalizer.normalizeOperationId('placeOrder', entry);
       const { executor, requests } = makeExecutor();
@@ -539,6 +573,28 @@ describe('OpenAPIOperationExecutor', function () {
       // 2.0 declares no requestBody content to match against, so the content
       // type passes straight through to the header rather than being checked.
       assert.strictEqual(requests[0].headers['Content-Type'], 'application/json');
+    });
+
+    specify('should throw when the 2.0 operation declares no parameters at all', async function () {
+      // an operation declaring none leaves `parameters` absent rather than
+      // empty, which must still reach the "nothing can carry it" error.
+      const bareRegistry = new DocumentRegistry();
+      const bareDoc = (await bareRegistry.acquire(
+        path.join(fixturesPath, 'petstore.openapi-2-0-no-schemes.json'),
+      )) as OpenAPIDocument;
+      const bareLocator = {
+        document: bareDoc,
+        jsonPointer: bareDoc.operationIndex.get('getInventory'),
+      } as OpenAPIOperationLocator;
+      const { executor, requests } = makeExecutor();
+
+      const thrown = await rejects(
+        executor.execute(bareLocator, { requestBody: { a: 1 } }),
+        ClientError,
+      );
+
+      assert.match((thrown as ClientError).message, /declares no "body" or "formData" parameter/);
+      assert.strictEqual(requests.length, 0);
     });
 
     specify('should honor a server override, which 2.0 otherwise ignores', async function () {
