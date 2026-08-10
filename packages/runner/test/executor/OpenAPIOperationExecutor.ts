@@ -227,6 +227,8 @@ describe('OpenAPIOperationExecutor', function () {
       );
 
       assert.match((thrown as ClientError).message, /declares no request body content/);
+      // the way out is to drop the content type, so the error has to say so
+      assert.match((thrown as ClientError).message, /Omit the content type/);
       assert.strictEqual(requests.length, 0);
     });
 

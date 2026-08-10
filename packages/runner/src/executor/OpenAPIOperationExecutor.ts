@@ -390,7 +390,7 @@ class OpenAPIOperationExecutor {
     if (!isObjectElement(content)) {
       throw new ClientError(
         `Request body media type "${requested}" cannot be sent: the operation declares ` +
-          'no request body content',
+          'no request body content. Omit the content type to send the payload as-is',
         { operationPath: jsonPointer },
       );
     }
