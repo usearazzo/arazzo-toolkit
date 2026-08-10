@@ -285,9 +285,11 @@ Because the executor builds the request explicitly and holds it, the response ca
 
 A step's `requestBody` works the same against every supported version, including Swagger 2.0, which
 has no request-body concept and carries the payload as a declared `body` or `formData` parameter
-instead. Its `contentType` is matched ignoring media-type parameters, so
-`application/json; charset=utf-8` names a declared `application/json`; one the operation does not
-declare raises a `ClientError` rather than sending an empty body.
+instead. Its `contentType` is matched ignoring case and media-type parameters, and a declared range
+counts as covering a concrete type, so `application/json; charset=utf-8` names a declared
+`application/json` and either names a declared `*/*`. The form media types are the exception, since
+they decide how the body is encoded and so must be declared exactly. A `contentType` matching
+nothing raises a `ClientError` rather than sending an empty or wrongly encoded body.
 
 ### Choosing the server
 

@@ -252,6 +252,31 @@ describe('OpenAPIOperationExecutor', function () {
       assert.strictEqual(requests[0].headers['Content-Type'], 'application/json');
     });
 
+    specify('should refuse to match a form media type against a range', async function () {
+      // buildRequest form-encodes the body only for an exactly declared form
+      // type, so matching one against `*/*` would send JSON under a form header.
+      const rangeRegistry = new DocumentRegistry();
+      const rangeDoc = (await rangeRegistry.acquire(
+        path.join(fixturesPath, 'petstore.openapi-media-range.json'),
+      )) as OpenAPIDocument;
+      const rangeLocator = {
+        document: rangeDoc,
+        jsonPointer: rangeDoc.operationIndex.get('addPet'),
+      } as OpenAPIOperationLocator;
+      const { executor, requests } = makeExecutor();
+
+      const thrown = await rejects(
+        executor.execute(rangeLocator, {
+          requestBody: { name: 'fido' },
+          requestContentType: 'application/x-www-form-urlencoded',
+        }),
+        ClientError,
+      );
+
+      assert.match((thrown as ClientError).message, /must be declared by the operation exactly/);
+      assert.strictEqual(requests.length, 0);
+    });
+
     specify('should not double the slash when a server ends with one', async function () {
       const { executor, requests } = makeExecutor();
 

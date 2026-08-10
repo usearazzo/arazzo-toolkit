@@ -60,10 +60,15 @@ export interface OpenAPIOperationExecuteOptions {
   /**
    * The media type of the request body, sent as the `Content-Type` header (the
    * Arazzo `requestBody.contentType`). Matched against the media types the
-   * operation declares under `requestBody.content`, ignoring any parameters it
-   * carries, so `application/json; charset=utf-8` names a declared
-   * `application/json` and is still sent in full. A media type matching nothing
-   * declared throws rather than sending an empty body.
+   * operation declares under `requestBody.content`, ignoring case and any
+   * parameters it carries, and accepting a declared range (`type/*`, or the
+   * all-media-types range) as covering a concrete type. The authored value is
+   * sent in full whichever declaration it matched.
+   *
+   * The form media types are the exception: `application/x-www-form-urlencoded`
+   * and `multipart/form-data` decide how the body is encoded, so they must be
+   * declared exactly rather than by a range. A media type matching nothing
+   * throws rather than sending an empty or wrongly encoded body.
    */
   readonly requestContentType?: string;
   /**
@@ -404,16 +409,28 @@ class OpenAPIOperationExecutor {
       return candidate === '*/*';
     };
 
-    // a declared range covers a concrete type, so `*/*` (what several generators
-    // emit by default) accepts anything; the most specific declaration wins
+    // a form media type decides how the body is encoded, and buildRequest applies
+    // that encoding only for an exactly declared type. matching one against a
+    // range would put a JSON body behind a form Content-Type
+    const isFormEncoded =
+      baseType === 'application/x-www-form-urlencoded' || baseType === 'multipart/form-data';
+
+    // otherwise a declared range covers a concrete type, so `*/*` (what several
+    // generators emit by default) accepts anything; the most specific wins
+    const exact = declared.find((mediaType) => covers(mediaType, 'exact'));
     const match =
-      declared.find((mediaType) => covers(mediaType, 'exact')) ??
-      declared.find((mediaType) => covers(mediaType, 'subtype')) ??
-      declared.find((mediaType) => covers(mediaType, 'any'));
+      exact ??
+      (isFormEncoded
+        ? undefined
+        : (declared.find((mediaType) => covers(mediaType, 'subtype')) ??
+          declared.find((mediaType) => covers(mediaType, 'any'))));
     if (match === undefined) {
       throw new ClientError(
-        `Request body media type "${requested}" is not declared by the operation ` +
-          `(declared: [${declared.join(', ')}])`,
+        isFormEncoded
+          ? `Request body media type "${requested}" must be declared by the operation exactly, ` +
+              `since it decides how the body is encoded (declared: [${declared.join(', ')}])`
+          : `Request body media type "${requested}" is not declared by the operation ` +
+              `(declared: [${declared.join(', ')}])`,
         { operationPath: jsonPointer },
       );
     }
