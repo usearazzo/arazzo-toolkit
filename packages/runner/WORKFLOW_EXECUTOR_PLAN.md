@@ -40,7 +40,7 @@ spec: 1.0.1, same as StepExecutor.
   operation and re-selects against the fresh response.
 - **Exhaustion fall-through** (open question #5, resolved): honoring "retryLimit
   MUST be exhausted prior to executing subsequent failure actions", an exhausted
-  retry advances to the *next* matching failure action — which may be another
+  retry advances to the _next_ matching failure action — which may be another
   `retry` with its own **independent budget**, or a terminal `end` / `goto`; if
   none remains, the break-default applies. Implemented by having `StepExecutor`
   return **all** matching actions (`matchedActions`, via `ActionResolver.resolveAll`)
@@ -76,20 +76,21 @@ absent), and is scoped to a follow-up:
   - `WorkflowExecutor` holds one `#document`, used for the workflowIndex lookup,
     extraction/normalization, and as the `$components` / `$sourceDescriptions`
     base for every expression it evaluates. Running a foreign workflow means all
-    of those must follow *that* workflow's document, so the document has to
+    of those must follow _that_ workflow's document, so the document has to
     become part of the per-invocation frame rather than instance state.
   - Worse, `StepExecutor` is **injected pre-bound to a document** (the
     collaborator seam from #34). A foreign workflow's steps would resolve their
-    `operationId`s against the *entry* document's `sourceDescriptions` — wrong,
+    `operationId`s against the _entry_ document's `sourceDescriptions` — wrong,
     and silently so. Fixing it means either a per-call document argument on
     `StepExecutor.execute` or injecting a `(document) => StepExecutor` factory —
     a deliberate change to a seam we just settled.
-  - Cycle-detection keys must then become genuinely fully-qualified (document URI
-    + workflowId), as §4c anticipated; today workflowId alone is unambiguous
-    precisely because a run cannot leave its document.
+  - Cycle-detection keys must then become genuinely fully-qualified (the document
+    URI together with the workflowId), as §4c anticipated; today workflowId alone
+    is unambiguous precisely because a run cannot leave its document.
 
   So: its own PR, sequenced after reference-retry or before it, but not folded
   into either.
+
 - **Retry-reference target validation** — we intentionally do NOT validate the
   `stepId` / `workflowId` a reference-retry points at before throwing
   `retry-reference-unsupported`. Rejection is lazy (fire-time only, so an
@@ -98,13 +99,13 @@ absent), and is scoped to a follow-up:
   - a `workflowId` reference may be cross-document (`$sourceDescriptions.<name>.<id>`),
     so validating it needs the deferred cross-doc resolution above — can't be done
     in isolation;
-  - a `stepId` reference *could* be checked cheaply against the current workflow
+  - a `stepId` reference _could_ be checked cheaply against the current workflow
     (reusing `#indexOfStep`, same as `goto`), but validating only that half is a
     lopsided contract, and the author can't act on "valid target, still
     unsupported" anyway.
-  So both land with reference-retry (which reuses the sub-workflow / goto-workflow
-  machinery); until then the single `retry-reference-unsupported` throw is the
-  contract.
+    So both land with reference-retry (which reuses the sub-workflow / goto-workflow
+    machinery); until then the single `retry-reference-unsupported` throw is the
+    contract.
 - **Workflow-level `parameters`** (§7) — not implemented. Unlike actions, this is
   a genuine per-parameter merge (by name+in, step overriding); would follow the
   `defaultActions` pattern with a `StepExecutor` `additionalParameters` arg.
@@ -135,9 +136,11 @@ existing suite.
   The split is the point: sibling calls each get their own frame while all of
   them charge one budget, which is what makes the ceiling hold across the tree
   without giving up immutable call frames.
+
 - **Shared budget across the tree** (issue `#29`, decided: global): the existing
-  `budget` (operation-execution counter) moves into the frame, so one `maxSteps`
-  bounds the *whole* recursion — a sub-workflow spinning on `goto`/`retry` must
+  `budget` (step-attempt counter) moves into the shared run scope, so one
+  `maxSteps`
+  bounds the _whole_ recursion — a sub-workflow spinning on `goto`/`retry` must
   not get a fresh 1000. (libopenapi's is per-invocation — a local in
   `runWorkflow` — leaving a pathological tree unbounded overall; rejected.)
   Attribution is solved by data, not a second counter: the `step-budget` error
@@ -147,8 +150,9 @@ existing suite.
   fully-qualified workflow id; `workflow-cycle` (with `path`) on re-entry,
   `workflow-depth` past `maxWorkflowDepth` (new option, default 32 — matching
   libopenapi's constant, whose two-guard design — active set + depth, `defer`ed
-  cleanup — independently confirms §4c). Push/pop in `try`/`finally` so diamonds
-  and thrown sub-runs don't corrupt the stack.
+  cleanup — independently confirms §4c). Diamonds and thrown sub-runs must not
+  corrupt the stack; as built, the immutable per-call frame gives that for free
+  rather than needing libopenapi's `defer` (see Deviations below).
 - **Nested trace shape** (issue `#31`, decided: nested, NOT libopenapi's flat):
   `StepRunRecord.subWorkflows?: readonly WorkflowExecutionResult[]` — one entry
   per attempt that invoked the sub-workflow, in attempt order (an array because
@@ -158,7 +162,7 @@ existing suite.
   Rationale: nested preserves identity (repeated invocations stay distinct),
   causality (parent step → its sub-run is a property access), and order; a flat
   view is derivable from nested via a trivial helper, never the reverse. Reading
-  libopenapi's source settled it: their sub-run results go into an *internal*
+  libopenapi's source settled it: their sub-run results go into an _internal_
   `state.workflowResults` map (last-write-wins by workflowId) that
   `RunWorkflow` never returns and `StepResult` cannot reference — sub-workflow
   traces are unreachable by their callers entirely. Not a shape to align with.
@@ -179,7 +183,7 @@ existing suite.
   - Outcome mapping: sub `status` `completed`/`ended` → success path, `failed` →
     failure path; onSuccess/onFailure then selected the normal way (incl.
     workflow-level defaults). To keep retry semantics uniform,
-    `#runStepWithRetry` is generalized over an *attempt* callback (operation
+    `#runStepWithRetry` is generalized over an _attempt_ callback (operation
     attempt vs sub-workflow attempt) rather than duplicated — so a `retry` on a
     `workflowId` step just works, charged against the same budget.
 - **`dependsOn`** (§5): before running steps, run each `dependsOn` workflow to
@@ -189,26 +193,26 @@ existing suite.
     workflowId** (consulted for transitive dependencies too); a dependency with
     no entry runs with `{}` — fine for self-contained setup flows, and the only
     honest fallback since the spec gives `dependsOn` no input-mapping mechanism
-    of its own (unlike sub-workflow *steps*, which map inputs via `parameters`).
+    of its own (unlike sub-workflow _steps_, which map inputs via `parameters`).
     Without this channel, any dependency with required inputs is a guaranteed
     failure the caller cannot prevent. To house it, `execute` moves to an
     options-bag signature —
     `execute(workflowId, { inputs, executeOptions, dependencyInputs, runDependencies })`
     — a pre-1.0 reshape done once, which also gives `#28`'s `signal` its
     first-class home instead of reshaping the signature twice.
-    - *Flat keying is sufficient by construction:* memoization means a given
+    - _Flat keying is sufficient by construction:_ memoization means a given
       workflowId runs at most once per `execute`, so there is never a second run
       for a nesting-dependent input set to attach to. That matches the
-      semantics: `dependsOn` declares a *precondition* ("completed before"), and
+      semantics: `dependsOn` declares a _precondition_ ("completed before"), and
       a precondition satisfied twice with different inputs isn't well-defined.
       A workflow genuinely needed multiple times with different inputs is a
       parameterized invocation — the spec's tool for that is a sub-workflow
-      *step* with `parameters`, and docs should say so. (Cross-document
+      _step_ with `parameters`, and docs should say so. (Cross-document
       same-named workflows: keys become fully-qualified when cross-doc support
       lands.)
   - **`runDependencies?: boolean`** (default `true`; a positive flag — an
     earlier `skipDependencies` draft read as a double negative when false):
-    "completed before" doesn't mean *completed by this engine in this run* — a
+    "completed before" doesn't mean _completed by this engine in this run_ — a
     dependency may have been satisfied out-of-band (a previous `execute`,
     yesterday's provisioning), and re-running it can be harmful (duplicate side
     effects). The engine can't detect external satisfaction, so
@@ -223,8 +227,8 @@ existing suite.
     with an empty step trace (it's a runtime failure, not an authoring throw).
   - **Per-run completed set** for dependsOn only: a dependency already completed
     in this run is not re-run (diamond deps would otherwise duplicate HTTP side
-    effects); sub-workflow *step calls* are calls and always run.
-  - *Interpretation note (spec ambiguity, decided):* "MUST be completed before
+    effects); sub-workflow _step calls_ are calls and always run.
+  - _Interpretation note (spec ambiguity, decided):_ "MUST be completed before
     this workflow can be processed" doesn't say whose job that is. libopenapi
     reads it as a **batch-scheduler constraint**: its `RunAll` topologically
     sorts every workflow in the document (each run once, with its own inputs),
@@ -269,6 +273,18 @@ step-level goto-workflow; cross-document workflow refs. Workflow-level
   check, but a sub-workflow step no longer reaches it).
 - New reason `malformed-dependsOn` (present but non-list `dependsOn`, or a
   non-string entry), mirroring `malformed-steps`.
+- A sub-workflow step's `successCriteria` are evaluated too — `successful` is
+  the sub-run not having failed **and** the step's criteria passing. Neither the
+  plan nor §4b said so, and the first implementation dropped them, silently
+  discarding an author's assertion (caught in review). `StepExecutor.evaluateCriteria`
+  went public alongside `selectActions` for the same reason.
+- `dependsOn` prerequisites run _after_ `steps` is validated, so a malformed
+  workflow throws before any prerequisite fires live requests.
+- A `retry` on a sub-workflow step re-runs that workflow's **steps**; its
+  already-completed `dependsOn` prerequisites stay satisfied, since the
+  completed-dependency memo spans the run. Retrying re-runs the work, not the
+  preconditions — the alternative would reintroduce exactly the duplicate side
+  effects the memo exists to prevent.
 
 **Tests:** the §10 list rows covering sub-workflows, cycles (direct, indirect,
 diamond-negative, cross-mechanism), depth, dependsOn ordering + cycle +
@@ -291,7 +307,7 @@ deliberately refused:
 - **mutates** `WorkflowExecutionState` — records each step's resolved `outputs`
   (so later steps read `$steps.x.outputs.y`), sets workflow `outputs`;
 - **interprets the returned `SelectedAction`** — the control flow StepExecutor
-  only *selects* but does not act on: `goto`, `retry`, `end`, and the two path
+  only _selects_ but does not act on: `goto`, `retry`, `end`, and the two path
   defaults;
 - handles **`workflowId` steps** (sub-workflow calls) — the recursion
   `StepExecutor` throws on;
@@ -300,21 +316,25 @@ deliberately refused:
 - resolves workflow `inputs` and applies workflow `outputs`.
 
 Dependency direction is one-way **today**: `WorkflowExecutor → StepExecutor`.
-Sub-workflows are the WorkflowExecutor's *own* recursion (it calls itself), so
+Sub-workflows are the WorkflowExecutor's _own_ recursion (it calls itself), so
 there is no cycle. This holds because StepExecutor deliberately refuses
 `workflowId` steps — it **throws `reason:'workflow-step'`** rather than run a
 workflow — and WorkflowExecutor intercepts those steps before they reach it
 (§4b).
 
 That refusal is a boundary of convenience, not a permanent law. A step whose
-target is `workflowId` *is* a workflow invocation, so a future StepExecutor may
+target is `workflowId` _is_ a workflow invocation, so a future StepExecutor may
 want to execute it directly instead of throwing. When that happens, StepExecutor
 must **not** import `WorkflowExecutor` concretely (that would create a module
 cycle) — it should depend on an injected port, e.g.:
 
 ```ts
 interface SubWorkflowRunner {
-  execute(workflowId: string, inputs?: Record<string, unknown>, executeOptions?: Record<string, unknown>): Promise<WorkflowExecutionResult>;
+  execute(
+    workflowId: string,
+    inputs?: Record<string, unknown>,
+    executeOptions?: Record<string, unknown>,
+  ): Promise<WorkflowExecutionResult>;
 }
 ```
 
@@ -329,30 +349,30 @@ Mirror StepExecutor's option-bag constructor + per-call `execute`.
 
 ```ts
 export interface WorkflowExecutorOptions {
-  readonly document: ArazzoDocument;        // entry doc (source of workflows + $components/$sourceDescriptions)
-  readonly registry: DocumentRegistry;      // loaded source docs
-  readonly stepExecutor: StepExecutor;      // injected per-step engine (as shipped; was clientFactory pre-HTTPClient-seam)
+  readonly document: ArazzoDocument; // entry doc (source of workflows + $components/$sourceDescriptions)
+  readonly registry: DocumentRegistry; // loaded source docs
+  readonly stepExecutor: StepExecutor; // injected per-step engine (as shipped; was clientFactory pre-HTTPClient-seam)
   // tunables with sane defaults:
-  readonly maxSteps?: number;               // runaway-goto/retry guard, global across the whole recursion tree (default 1000)
-  readonly maxWorkflowDepth?: number;       // sub-workflow recursion guard (default 32, matching libopenapi)
-  readonly sleep?: (ms: number) => Promise<void>;  // injectable for retryAfter; default real timer, tests pass a no-op
-  readonly now?: () => number;              // injectable clock for durationMs (PR #3); default Date.now
+  readonly maxSteps?: number; // runaway-goto/retry guard, global across the whole recursion tree (default 1000)
+  readonly maxWorkflowDepth?: number; // sub-workflow recursion guard (default 32, matching libopenapi)
+  readonly sleep?: (ms: number) => Promise<void>; // injectable for retryAfter; default real timer, tests pass a no-op
+  readonly now?: () => number; // injectable clock for durationMs (PR #3); default Date.now
 }
 
 export interface WorkflowExecutionResult {
   readonly workflowId: string;
-  readonly outputs: Record<string, unknown>;        // workflow $outputs, resolved
-  readonly steps: readonly StepRunRecord[];          // trace: what ran, in order, with outcomes
+  readonly outputs: Record<string, unknown>; // workflow $outputs, resolved
+  readonly steps: readonly StepRunRecord[]; // trace: what ran, in order, with outcomes
   readonly status: 'completed' | 'ended' | 'failed'; // ended = an `end` action fired; failed = a step broke-and-returned
   readonly dependencies?: readonly WorkflowExecutionResult[]; // dependsOn runs, in order (PR #3)
-  readonly durationMs?: number;                      // wall-clock for the run, retries/waits included (PR #3)
+  readonly durationMs?: number; // wall-clock for the run, retries/waits included (PR #3)
 }
 
 export interface StepRunRecord {
   readonly stepId: string;
   readonly successful: boolean;
   readonly action: SelectedAction | undefined;
-  readonly attempts: number;   // >1 when retried
+  readonly attempts: number; // >1 when retried
   // nested sub-workflow runs this step's attempts produced, in attempt order —
   // an array because a retried workflowId step runs the sub-workflow once per
   // attempt, and each run is a distinct trace; the last entry is the run the
@@ -366,12 +386,15 @@ class WorkflowExecutor {
   // options-bag signature from PR #3 on (was positional inputs/executeOptions):
   // dependencyInputs feeds implicitly-run dependsOn workflows by workflowId;
   // the bag is also where #28's `signal` will land.
-  execute(workflowId: string, options?: {
-    inputs?: Record<string, unknown>;
-    executeOptions?: Record<string, unknown>;
-    dependencyInputs?: Record<string, Record<string, unknown>>;
-    runDependencies?: boolean;   // default true; false = caller asserts deps are satisfied out-of-band
-  }): Promise<WorkflowExecutionResult>;
+  execute(
+    workflowId: string,
+    options?: {
+      inputs?: Record<string, unknown>;
+      executeOptions?: Record<string, unknown>;
+      dependencyInputs?: Record<string, Record<string, unknown>>;
+      runDependencies?: boolean; // default true; false = caller asserts deps are satisfied out-of-band
+    },
+  ): Promise<WorkflowExecutionResult>;
 }
 ```
 
@@ -379,14 +402,14 @@ Design choices (matching StepExecutor's established conventions):
 
 - **`execute(workflowId, options)`** — caller names the workflow;
   WorkflowExecutor extracts + normalizes it (SRP: extraction/normalization is a
-  detail of running a *named* workflow, unlike StepExecutor where the caller
+  detail of running a _named_ workflow, unlike StepExecutor where the caller
   passed the already-extracted step — here the caller only has an id).
-  - *Open question for review:* symmetry with StepExecutor (which takes a
+  - _Open question for review:_ symmetry with StepExecutor (which takes a
     `step` element) would argue `execute(workflow, inputs)`. But a workflow is
     named by id and the executor must resolve `dependsOn`/sub-workflows by id
     anyway, so id-in is more natural. Leaning id-in.
 - **Returns data, and also owns the state** internally — unlike StepExecutor
-  (which mutates nothing), WorkflowExecutor *is* the mutation owner. It creates
+  (which mutates nothing), WorkflowExecutor _is_ the mutation owner. It creates
   the `WorkflowExecutionState`, threads it through steps, and returns a
   read-only result. State is per-`execute` (per run), created fresh each call.
 - **`executeOptions`** — the same opaque client bag, forwarded verbatim to every
@@ -452,16 +475,18 @@ single writer.
 Spec-quoted semantics:
 
 ### Success (§Success Action Object): types `end`, `goto`
+
 - **no matching onSuccess action** → default: `"the next sequential step shall
-  be executed"` → `{kind:'next'}`.
+be executed"` → `{kind:'next'}`.
 - **`type: end`** → `"The workflow ends, and context returns to the caller with
-  applicable outputs"` → `{kind:'end'}`.
+applicable outputs"` → `{kind:'end'}`.
 - **`type: goto`** with `stepId` (MUST be in current workflow, mutually
   exclusive w/ workflowId) → `{kind:'goto-step', stepId}`.
 - **`type: goto`** with `workflowId` → transfer control to another workflow →
   `{kind:'goto-workflow', workflowId}` (run it, then continue — see note).
 
 ### Failure (§Failure Action Object): types `end`, `retry`, `goto`
+
 - **no matching onFailure action** → default: `"break and return"` →
   `{kind:'break'}` (status: failed).
 - **`type: end`** → `{kind:'end'}`.
@@ -469,11 +494,11 @@ Spec-quoted semantics:
   `runStepWithRetry` (see §6), NOT here — by the time `interpret` sees a
   non-retry action, retries are exhausted or not requested. Semantics:
   `retryLimit` (default 1 if unset) attempts, `retryAfter` seconds delay
-  between; a `retry` action MAY carry `stepId`/`workflowId` to execute *before*
+  between; a `retry` action MAY carry `stepId`/`workflowId` to execute _before_
   retrying (`"the reference is executed and the context is returned, after which
-  the current step is retried"`). `"retryLimit MUST be exhausted prior to
-  executing subsequent failure actions"` — so after exhaustion, we re-evaluate
-  the *remaining* failure actions (the ones after the retry) for the final
+the current step is retried"`). `"retryLimit MUST be exhausted prior to
+executing subsequent failure actions"` — so after exhaustion, we re-evaluate
+  the _remaining_ failure actions (the ones after the retry) for the final
   transition. **This is the subtlest bit — see §6.**
 - **`type: goto`** (stepId/workflowId, mutually exclusive) → same as success
   goto.
@@ -490,7 +515,7 @@ is ambiguous in 1.0.1. Safe initial behavior: treat step-level `goto-workflow`
 as run-sub-workflow-then-continue (like a call), and flag the ambiguity — OR
 throw "unsupported" until clarified. **Recommend: throw `reason:'goto-workflow-
 unsupported'` initially** (mirrors how StepExecutor threw on `workflowId` until
-we were ready), and implement once semantics confirmed. Sub-workflow *calls*
+we were ready), and implement once semantics confirmed. Sub-workflow _calls_
 (step with `workflowId` field, §4-below) are the well-defined recursion path and
 ARE supported.
 
@@ -498,7 +523,7 @@ ARE supported.
 
 A step whose target is `workflowId` (not operationId/operationPath) is a
 sub-workflow invocation — the case StepExecutor throws on
-(`reason:'workflow-step'`). WorkflowExecutor intercepts these *before* calling
+(`reason:'workflow-step'`). WorkflowExecutor intercepts these _before_ calling
 StepExecutor. (If StepExecutor ever stops throwing and runs these itself, it
 does so via the injected `SubWorkflowRunner` port from §1, not a concrete
 `WorkflowExecutor` import — this interception is the current mechanism, not a
@@ -517,14 +542,14 @@ if isStringElement(step.workflowId):
   expression (cross-document) — resolve via the same mechanism the locator
   normalizer uses; initial version MAY support only same-document workflowIds
   and throw on cross-doc (follow-up), matching how we scoped operationId first.
-- **Depth guard** (`maxWorkflowDepth`) bounds *legitimate* nesting depth.
+- **Depth guard** (`maxWorkflowDepth`) bounds _legitimate_ nesting depth.
 
 ## 4c. Recursion / cycle detection (call chain)
 
 The depth guard alone is not enough. A workflow can reference itself through a
 chain of sub-workflow steps — directly (A has a step that calls A) or indirectly
 (A → B → A). This is a **cycle**: it never terminates. Bouncing off
-`maxWorkflowDepth` after N frames would *mask* it as "too deep" and report the
+`maxWorkflowDepth` after N frames would _mask_ it as "too deep" and report the
 wrong cause; a real cycle should be reported as a cycle, at the moment the
 repeated workflow is re-entered — not N frames later.
 
@@ -540,12 +565,12 @@ execute(workflowId, ...):
   finally { callStack.pop() }        # pop on the way out so siblings/diamonds (A→B, A→C→B) are NOT false positives
 ```
 
-- **Cycle vs. depth**: `workflow-cycle` = the *same* workflow is already on the
+- **Cycle vs. depth**: `workflow-cycle` = the _same_ workflow is already on the
   active call stack (guaranteed non-terminating); `workflow-depth` = distinct
   workflows nested past the budget (legitimate, just bounded). Distinct reasons,
   distinct diagnostics. The error carries the offending `path` (the chain
   A → B → A) so the author can see the loop.
-- **Push/pop discipline matters**: a *set* alone would flag a diamond
+- **Push/pop discipline matters**: a _set_ alone would flag a diamond
   (A calls B and C, both of which call D) as a cycle. Popping on unwind means
   only workflows actually on the current active path count — a re-visit that has
   already completed and unwound is fine.
@@ -567,7 +592,7 @@ execute(workflowId, inputs?, executeOptions?): Promise<WorkflowExecutionResult> 
 ```
 
 Rationale — an instance field would be simpler but is a reentrancy footgun: two
-concurrent `execute(...)` calls on the *same* executor instance would share and
+concurrent `execute(...)` calls on the _same_ executor instance would share and
 corrupt one field. A threaded parameter makes each top-level run's stack
 independent by construction, costs nothing, and keeps the recursion self-evident
 at the call site. The `frame` also carries `depth` so `maxWorkflowDepth` and the
@@ -587,7 +612,7 @@ processed."` Values are workflowIds (or `$sourceDescriptions.<name>.<id>`).
   `reason:'dependsOn-cycle'`; a mixed/step-call repeat throws
   `reason:'workflow-cycle'`. (One shared stack, not two — otherwise a loop that
   crosses mechanisms slips through both checks.)
-- ~~*Open question:* are dependsOn outputs shared into the dependent workflow's
+- ~~_Open question:_ are dependsOn outputs shared into the dependent workflow's
   state?~~ **RESOLVED** — run them for their side effects / ordering, do NOT
   merge their outputs into the dependent's own; `state.setWorkflow(id, {outputs})`
   so `$workflows.<id>.outputs` resolves. Inputs, memoization, `runDependencies`,
@@ -605,6 +630,7 @@ Spec: `retryLimit` default 1, `retryAfter` seconds delay, and crucially
 `"retryLimit MUST be exhausted prior to executing subsequent failure actions"`.
 
 Algorithm:
+
 ```
 runStepWithRetry(step, state, opts, workflow):
   attempts = 0
@@ -621,10 +647,10 @@ runStepWithRetry(step, state, opts, workflow):
 ```
 
 Then `interpret` runs on the returned outcome's action for the final transition.
-After exhaustion, per spec we should evaluate the failure actions *after* the
-retry action — this needs care: `ActionResolver` returns the *first* matching
+After exhaustion, per spec we should evaluate the failure actions _after_ the
+retry action — this needs care: `ActionResolver` returns the _first_ matching
 action. To honor "retryLimit exhausted prior to subsequent failure actions", on
-exhaustion we re-run action selection *excluding* the exhausted retry action, or
+exhaustion we re-run action selection _excluding_ the exhausted retry action, or
 fall to the break default. **Flagging as the trickiest detail; propose a focused
 design note + tests before implementing.**
 
@@ -647,12 +673,13 @@ actions).
 
 - Earlier drafts of this plan proposed a by-`name` merge ("same name = override,
   new name = addition, workflow-only names always remain"). **That was rejected.**
-  The spec says a step *overrides* the workflow default, not that the two lists
+  The spec says a step _overrides_ the workflow default, not that the two lists
   union; whole-list override is the simpler, defensible reading and what we
   shipped. If a future spec clarification demands union semantics, revisit — but
   do not reintroduce name-merge speculatively.
 
 How it's wired (as built):
+
 - `StepExecutor.execute` gained an optional 4th arg
   `defaultActions: StepDefaultActions` (`{ onSuccess?, onFailure? }`, the
   workflow-level element lists). `#selectAction` selects from
@@ -669,9 +696,10 @@ How it's wired (as built):
 
 Workflow-level `parameters` remain out of scope for now. Unlike actions, the spec
 intent here is genuinely additive/override at the individual-parameter level:
+
 - **effective parameters** = merge(workflow.parameters, step.parameters) by
   parameter identity (name+in), step overriding.
-  - *Wrinkle:* StepExecutor reads `step.parameters` directly. To feed merged
+  - _Wrinkle:_ StepExecutor reads `step.parameters` directly. To feed merged
     params, either (a) WorkflowExecutor synthesizes a merged step element, or (b)
     StepExecutor gains an optional `additionalParameters` arg. **Prefer (b)** — a
     small, explicit StepExecutor extension mirroring the `defaultActions` arg
@@ -711,6 +739,7 @@ nesting past the budget.
 ## 10. Testing strategy (stub client, deterministic — same as StepExecutor)
 
 Unit suite `test/executor/WorkflowExecutor.ts` with the stub `OpenAPIClient`:
+
 - linear workflow: steps run in order, outputs flow step→step via `$steps`
 - success `goto stepId`: jumps correctly; loop terminates via step-budget guard
   on a deliberate infinite goto (assert it throws `step-budget`)
@@ -741,22 +770,23 @@ multi-step petstore workflow end-to-end.
 ## 11. Suggested PR slicing (keep each reviewable)
 
 Given size, consider 2–3 PRs rather than one:
+
 1. **Core loop + outputs + success/failure defaults + goto-step + end + break**
    (no retry, no sub-workflow) — the backbone.
 2. **Retry semantics** (the subtle §6) — isolated, well-tested.
 3. **Sub-workflow calls + dependsOn** (recursion, depth/cycle guards).
-Cross-document workflow refs and step-level goto-workflow: throw initially, land
-later once semantics confirmed.
+   Cross-document workflow refs and step-level goto-workflow: throw initially, land
+   later once semantics confirmed.
 
 ## Open questions for review (decide before coding)
 
 1. ~~`execute(workflowId, ...)` (id-in) vs `execute(workflow, ...)`
    (element-in)?~~ **RESOLVED: id-in.** Implemented.
 2. Param merge via StepExecutor `additionalParameters` arg (preferred) vs
-   synthesizing a merged step element? *(actions took the `defaultActions`-arg
-   route in §7; params should follow it — still to build.)*
+   synthesizing a merged step element? _(actions took the `defaultActions`-arg
+   route in §7; params should follow it — still to build.)_
 3. Step-level `goto` with `workflowId`: throw-initially (recommended) vs
-   run-and-continue? *(shipped throw-initially: `goto-workflow-unsupported`.)*
+   run-and-continue? _(shipped throw-initially: `goto-workflow-unsupported`.)_
 4. ~~dependsOn output sharing semantics — run-for-ordering only + expose via
    `$workflows`?~~ **RESOLVED (PR #3 scope):** run for ordering/side effects,
    expose via `$workflows.<id>.outputs` (`state.setWorkflow`), no merging into
@@ -765,18 +795,18 @@ later once semantics confirmed.
    "Next: PR #3" above).
 5. ~~Retry-exhaustion "subsequent failure actions" ordering — confirm the
    re-selection approach in §6.~~ **RESOLVED (PR #2):** `StepExecutor` returns
-   *all* matching failure actions (`matchedActions`); the retry loop walks that
+   _all_ matching failure actions (`matchedActions`); the retry loop walks that
    list — retry-while-under-limit (each retry with its own budget), else advance
    to the next matching action, else break-default. No re-evaluating criteria in
    the loop; each attempt re-runs the operation and re-selects against the fresh
    response.
 
 Note on runtime expressions vs. criteria (bit us while fixing fixtures): a value
-in `outputs` / `parameters` / `requestBody` must be a *whole* runtime expression,
+in `outputs` / `parameters` / `requestBody` must be a _whole_ runtime expression,
 where member access is a JSON Pointer fragment (`$response.body#/id`) and array
 length / indexing like `.length` / `[0]` is NOT expressible (needs JSONPath,
 which Arazzo only allows in a criterion `context`, not in a value). A
-`successCriteria` `condition` uses the *separate* simple-criterion grammar, which
+`successCriteria` `condition` uses the _separate_ simple-criterion grammar, which
 DOES support JS-style `.length` / `[0]` / `.field` navigation — it resolves only
 the embedded `$response.body` prefix and does the rest itself. Same-looking text,
 two engines; don't "correct" dotted access inside a condition.

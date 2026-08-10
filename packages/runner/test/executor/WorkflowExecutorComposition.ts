@@ -191,6 +191,26 @@ describe('WorkflowExecutor composition', function () {
       assert.strictEqual(subWorkflowsOf(result.steps[0]).length, 3);
     });
 
+    specify("should apply the calling step's successCriteria to the sub-run", async function () {
+      // the sub-workflow completes, but the step asserts the pet is named Fido
+      // and it is Rex — the step fails, so its onFailure fires.
+      const { executor } = makeExecutor();
+
+      const result = await executor.execute('childCriteriaFail');
+
+      assert.strictEqual(result.status, 'ended');
+      assert.isFalse(result.steps[0].successful);
+      // the sub-workflow itself ran fine; it is the step's assertion that failed.
+      assert.strictEqual(subWorkflowsOf(result.steps[0])[0].status, 'completed');
+
+      // the positive control: the same criterion, satisfied. Without it the case
+      // above would also pass if the expression resolved to undefined, i.e. if
+      // the criterion were evaluated against a context missing the sub-run.
+      const passing = await makeExecutor().executor.execute('childCriteriaPass');
+      assert.strictEqual(passing.status, 'completed');
+      assert.isTrue(passing.steps[0].successful);
+    });
+
     specify('should re-run a retried sub-workflow with the same inputs', async function () {
       // the calling step's parameter reads the sub-workflow's own outputs, which
       // the first attempt records — so resolving inputs per attempt would send a
@@ -421,6 +441,17 @@ describe('WorkflowExecutor composition', function () {
       const error = await captureError(executor.execute('ambiguousStep'));
 
       assert.strictEqual(error.reason, 'ambiguous-target');
+    });
+
+    specify('should reject malformed steps before running prerequisites', async function () {
+      // the prerequisite would make live requests; an authoring error in the
+      // workflow itself must be raised first.
+      const { executor, calls } = makeExecutor();
+
+      const error = await captureError(executor.execute('malformedStepsWithDependency'));
+
+      assert.strictEqual(error.reason, 'malformed-steps');
+      assert.strictEqual(calls.length, 0);
     });
 
     specify('should throw for a present but non-list "dependsOn"', async function () {

@@ -68,6 +68,41 @@ workflows:
           - name: petId
             value: "8"
 
+  # the calling step asserts something about the sub-run that does not hold, so
+  # the step fails even though the sub-workflow itself completed.
+  - workflowId: childCriteriaFail
+    steps:
+      - stepId: child
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "7"
+        successCriteria:
+          - condition: $workflows.fetchPet.outputs.name == 'Fido'
+        onFailure:
+          - name: stop
+            type: end
+
+  # the same assertion, but true — the positive control proving the criterion's
+  # expression really resolves the sub-run's outputs rather than quietly
+  # yielding undefined (which would fail the negative case for the wrong reason).
+  - workflowId: childCriteriaPass
+    steps:
+      - stepId: child
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "7"
+        successCriteria:
+          - condition: $workflows.fetchPet.outputs.name == 'Rex'
+
+  # a malformed "steps" on a workflow that also declares a prerequisite: the
+  # authoring error must be raised before the prerequisite's live side effects.
+  - workflowId: malformedStepsWithDependency
+    dependsOn:
+      - setupA
+    steps: not-a-list
+
   # a child that always fails its criteria (driven by a 500 response). It still
   # resolves outputs — a failed run's outputs are resolved like any other.
   - workflowId: failingChild

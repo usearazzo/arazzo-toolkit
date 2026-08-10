@@ -18,7 +18,7 @@ import ArazzoWorkflowNormalizer from '../normalizer/ArazzoWorkflowNormalizer.ts'
 import OutputResolver from '../resolver/OutputResolver.ts';
 import ParameterResolver from '../resolver/ParameterResolver.ts';
 import WorkflowExecutionState from '../state/WorkflowExecutionState.ts';
-import StepExecutor, { type StepDefaultActions } from './StepExecutor.ts';
+import StepExecutor, { STEP_TARGET_FIELDS, type StepDefaultActions } from './StepExecutor.ts';
 import type { SelectedAction } from '../action/ActionResolver.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
 
@@ -59,6 +59,10 @@ export interface WorkflowExecutorOptions {
    * this many are already in progress throws `reason: 'workflow-depth'`.
    * Bounds *legitimate* (acyclic) nesting; a genuine cycle is caught earlier and
    * separately by `reason: 'workflow-cycle'`. Defaults to 32.
+   *
+   * The count includes the workflow `execute` was called with, so `1` permits
+   * that workflow and forbids all nesting; a value below 1 leaves no room for
+   * even the top-level run.
    */
   readonly maxWorkflowDepth?: number;
   /**
@@ -367,6 +371,11 @@ class WorkflowExecutor {
       onFailure: workflow.failureActions,
     };
 
+    // validated before any prerequisite runs: a malformed `steps` is an
+    // authoring error, and discovering it only after the dependencies have
+    // fired would mean live side effects on the way to a throw.
+    const steps = this.#orderedSteps(workflow, workflowId);
+
     const dependencies = await this.#runDependencies(workflow, workflowId, state, scope, nested);
     if (dependencies.some((dependency) => dependency.status === 'failed')) {
       // a declared prerequisite did not complete, so this workflow cannot be
@@ -376,7 +385,6 @@ class WorkflowExecutor {
       return this.#result(workflowId, workflow, state, [], 'failed', dependencies, startedAt);
     }
 
-    const steps = this.#orderedSteps(workflow, workflowId);
     const trace: StepRunRecord[] = [];
     let index = 0;
     let status: WorkflowExecutionResult['status'] = 'completed';
@@ -493,7 +501,14 @@ class WorkflowExecutor {
     if (frame.depth >= this.#maxWorkflowDepth) {
       throw new ExecutionError(
         `workflow "${workflowId}" nests deeper than the limit of ${this.#maxWorkflowDepth} workflows`,
-        { workflowId, reason: 'workflow-depth' },
+        {
+          workflowId,
+          reason: 'workflow-depth',
+          // the chain that got here, for the same reason the cycle and budget
+          // errors carry one: the leaf that happened to exceed the ceiling is
+          // rarely the workflow whose nesting the author needs to look at.
+          path: [...frame.callStack.map((call) => call.workflowId), workflowId],
+        },
       );
     }
   }
@@ -569,8 +584,11 @@ class WorkflowExecutor {
    * inputs, recording the sub-run under `$workflows`, then resolving the step's
    * own `outputs` and selecting its actions against that updated state. Because
    * both reduce to a {@link StepAttemptOutcome}, `retry` on a sub-workflow step
-   * works exactly as it does on an operation step: each attempt re-runs the
-   * sub-workflow, charged against the same budget.
+   * works as it does on an operation step: each attempt re-runs the sub-workflow
+   * — its steps, that is — charged against the same budget. Prerequisites it
+   * already completed stay satisfied and are not run again, since a completed
+   * `dependsOn` workflow is memoized for the whole run; a retry re-runs the
+   * work, not the preconditions.
    */
   #stepAttempt(
     step: StepElement,
@@ -617,8 +635,13 @@ class WorkflowExecutor {
         this.#evaluate(context, expression),
       );
       // an `end`ed sub-workflow returned to its caller with outputs, so it took
-      // the success path like a completed one; only `failed` is a failure.
-      const successful = result.status !== 'failed';
+      // the success path like a completed one; only `failed` is a failure. The
+      // step's own `successCriteria` still apply on top — they are the author's
+      // assertion about this step, and dropping them because the step happens to
+      // target a workflow would silently discard it. They see no `$response`,
+      // but do see the sub-run's outputs through `$workflows`.
+      const successful =
+        result.status !== 'failed' && this.#stepExecutor.evaluateCriteria(step, context);
       const matchedActions = this.#stepExecutor.selectActions(
         step,
         successful,
@@ -639,12 +662,17 @@ class WorkflowExecutor {
    * that cannot exist.
    */
   #subWorkflowId(step: StepElement, stepId: string, workflowId: string): string {
-    // a step names its target once: declaring an operation alongside a workflow
-    // is malformed and has no defined resolution. StepExecutor makes the same
-    // check, but a sub-workflow step never reaches it.
-    if (isStringElement(step.operationId) || isStringElement(step.operationPath)) {
+    // a step names its target once: declaring any other target alongside a
+    // workflow is malformed and has no defined resolution. StepExecutor makes
+    // the same check, but a sub-workflow step never reaches it — so both read
+    // the one list of target fields, and a target added to the specification
+    // cannot be rejected by one and silently accepted by the other.
+    const conflicting = STEP_TARGET_FIELDS.filter(
+      (field) => field !== 'workflowId' && isStringElement(step[field]),
+    );
+    if (conflicting.length > 0) {
       throw new ExecutionError(
-        `step "${stepId}" in workflow "${workflowId}" declares a workflowId alongside an operation (mutually exclusive)`,
+        `step "${stepId}" in workflow "${workflowId}" declares a workflowId alongside ${conflicting.join(', ')} (mutually exclusive)`,
         { stepId, workflowId, reason: 'ambiguous-target' },
       );
     }
