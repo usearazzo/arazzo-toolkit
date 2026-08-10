@@ -78,10 +78,12 @@ describe('WorkflowExecutor', function () {
   const makeStepExecutor = (
     sequence: readonly CannedResponse[],
     calls: OpenAPIOperationRequest[],
+    onCall: () => void = () => {},
   ): StepExecutor => {
     const httpClient: HTTPClient = async (request) => {
       const canned = sequence[Math.min(calls.length, sequence.length - 1)];
       calls.push(request);
+      onCall();
       return new Response(JSON.stringify(canned.body), {
         status: canned.status,
         statusText: canned.statusText,
@@ -104,23 +106,30 @@ describe('WorkflowExecutor', function () {
    */
   const makeExecutor = (
     responses: CannedResponse | readonly CannedResponse[] = okResponse,
-    options: { maxSteps?: number } = {},
+    options: { maxSteps?: number; tickMs?: number } = {},
   ): {
     executor: WorkflowExecutor;
     calls: OpenAPIOperationRequest[];
     sleeps: number[];
   } => {
+    const { tickMs = 0, ...executorOptions } = options;
     const sequence = Array.isArray(responses) ? responses : [responses as CannedResponse];
     const calls: OpenAPIOperationRequest[] = [];
     const sleeps: number[] = [];
+    // a fake clock the stub transport advances by `tickMs` per request, so
+    // durations are exactly the work done rather than real elapsed time.
+    let time = 0;
     const executor = new WorkflowExecutor({
       document: entry,
       registry,
-      stepExecutor: makeStepExecutor(sequence, calls),
+      stepExecutor: makeStepExecutor(sequence, calls, () => {
+        time += tickMs;
+      }),
       sleep: async (ms) => {
         sleeps.push(ms);
       },
-      ...options,
+      now: () => time,
+      ...executorOptions,
     });
     return { executor, calls, sleeps };
   };
@@ -129,7 +138,7 @@ describe('WorkflowExecutor', function () {
     specify('should run steps in list order and flow outputs step to step', async function () {
       const { executor, calls } = makeExecutor();
 
-      const result = await executor.execute('linear', { status: 'available' });
+      const result = await executor.execute('linear', { inputs: { status: 'available' } });
 
       assert.strictEqual(result.workflowId, 'linear');
       assert.strictEqual(result.status, 'completed');
@@ -156,6 +165,35 @@ describe('WorkflowExecutor', function () {
       assert.deepEqual(result.steps, []);
       assert.strictEqual(calls.length, 0);
       assert.deepEqual(result.outputs, {});
+    });
+  });
+
+  context('timing', function () {
+    specify('should record the elapsed time of the run and of each step', async function () {
+      // the fake clock advances 100ms per request, so a two-step run is 100ms
+      // per step and 200ms overall.
+      const { executor } = makeExecutor(okResponse, { tickMs: 100 });
+
+      const result = await executor.execute('linear', { inputs: { status: 'available' } });
+
+      assert.deepEqual(
+        result.steps.map((step) => step.durationMs),
+        [100, 100],
+      );
+      assert.strictEqual(result.durationMs, 200);
+    });
+
+    specify('should cover every attempt of a retried step, waits included', async function () {
+      // fails twice then succeeds: 3 requests at 100ms, all charged to the one
+      // step record.
+      const { executor } = makeExecutor([serverErrorResponse, serverErrorResponse, okResponse], {
+        tickMs: 100,
+      });
+
+      const result = await executor.execute('retryThenSucceed');
+
+      assert.strictEqual(result.steps[0].attempts, 3);
+      assert.strictEqual(result.steps[0].durationMs, 300);
     });
   });
 
@@ -189,11 +227,7 @@ describe('WorkflowExecutor', function () {
     specify('should bound an infinite goto by the step budget', async function () {
       const { executor } = makeExecutor(okResponse, { maxSteps: 5 });
 
-      await rejects(
-        executor.execute('infiniteGoto'),
-        ExecutionError,
-        /budget of 5 operation executions/,
-      );
+      await rejects(executor.execute('infiniteGoto'), ExecutionError, /budget of 5 step attempts/);
     });
   });
 
@@ -426,7 +460,7 @@ describe('WorkflowExecutor', function () {
       await rejects(
         executor.execute('retryExhaustedThenBreak'),
         ExecutionError,
-        /budget of 2 operation executions/,
+        /budget of 2 step attempts/,
       );
     });
 
@@ -517,7 +551,7 @@ describe('WorkflowExecutor', function () {
         stepExecutor: makeStepExecutor([okResponse], calls),
       });
 
-      const result = await executor.execute('linear', { status: 'available' });
+      const result = await executor.execute('linear', { inputs: { status: 'available' } });
 
       assert.strictEqual(result.status, 'completed');
       assert.strictEqual(calls.length, 2);
@@ -552,16 +586,6 @@ describe('WorkflowExecutor', function () {
         executor.execute('retryWithReference'),
         ExecutionError,
         /carries a stepId\/workflowId reference; not supported yet/,
-      );
-    });
-
-    specify('should throw for a sub-workflow (workflowId) step', async function () {
-      const { executor } = makeExecutor();
-
-      await rejects(
-        executor.execute('subWorkflowStep'),
-        ExecutionError,
-        /targets a sub-workflow; not supported yet/,
       );
     });
   });

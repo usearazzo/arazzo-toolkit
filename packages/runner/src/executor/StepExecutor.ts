@@ -224,7 +224,7 @@ class StepExecutor {
     const outputs = this.#outputResolver.resolve(step.outputs, (expression) =>
       this.#evaluate(postContext, expression),
     );
-    const matchedActions = this.#selectActions(step, successful, postContext, defaultActions);
+    const matchedActions = this.selectActions(step, successful, postContext, defaultActions);
 
     return { stepId, response, successful, outputs, action: matchedActions[0], matchedActions };
   }
@@ -302,8 +302,14 @@ class StepExecutor {
    * The full matching list (not just the first) is returned so the caller can
    * honor "retryLimit exhausted prior to subsequent failure actions"; the common
    * caller simply takes the first.
+   *
+   * Public because selecting a step's actions is meaningful beyond running one:
+   * the workflow executor selects them for a step targeting a `workflowId`, which
+   * it runs itself and which therefore never reaches
+   * {@link StepExecutor.execute}. Keeping one implementation keeps the
+   * override/fallback rules from drifting apart.
    */
-  #selectActions(
+  selectActions(
     step: StepElement,
     successful: boolean,
     context: RuntimeExpressionContext,

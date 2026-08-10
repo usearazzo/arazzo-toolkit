@@ -317,12 +317,6 @@ workflows:
             retryLimit: 2
             stepId: doomed
 
-  # a sub-workflow (workflowId) step — not yet supported.
-  - workflowId: subWorkflowStep
-    steps:
-      - stepId: callSub
-        workflowId: linear
-
   # the step declares no onFailure, so it inherits the workflow-level
   # failureActions (end). Driven by a 500 so the step fails.
   - workflowId: inheritsFailureActions
