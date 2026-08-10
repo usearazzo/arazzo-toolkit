@@ -19,6 +19,7 @@ import WorkflowExecutionState from '../state/WorkflowExecutionState.ts';
 import StepExecutor, { STEP_TARGET_FIELDS, type StepDefaultActions } from './StepExecutor.ts';
 import StepRetryRunner, { type StepAttemptOutcome } from './StepRetryRunner.ts';
 import WorkflowCallStack, { type WorkflowCallVia } from './WorkflowCallStack.ts';
+import StepTransitionInterpreter from './StepTransitionInterpreter.ts';
 import type { SelectedAction } from '../action/ActionResolver.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
 
@@ -176,21 +177,6 @@ export interface WorkflowExecutionResult {
 }
 
 /**
- * The control-flow transition selected for a step outcome — how the loop
- * advances after interpreting the step's {@link SelectedAction}.
- *
- * `next` runs the following step (the success default, or a matched `goto` that
- * targets the next step); `goto` jumps to a step by id within the current
- * workflow; `end` stops the run with `status: ended`; `break` stops with
- * `status: failed` (the failure default).
- */
-type Transition =
-  | { readonly kind: 'next' }
-  | { readonly kind: 'goto'; readonly stepId: string }
-  | { readonly kind: 'end' }
-  | { readonly kind: 'break' };
-
-/**
  * The state shared by every workflow invocation of a single
  * {@link WorkflowExecutor.execute} call — the caller's per-run options plus the
  * two mutable ledgers that must span the whole call tree.
@@ -275,6 +261,7 @@ class WorkflowExecutor {
   readonly #parameterResolver = new ParameterResolver();
   readonly #stepExecutor: StepExecutor;
   readonly #retryRunner: StepRetryRunner;
+  readonly #interpreter = new StepTransitionInterpreter();
 
   constructor(options: WorkflowExecutorOptions) {
     this.#document = options.document;
@@ -395,11 +382,14 @@ class WorkflowExecutor {
         ...(subWorkflows.length > 0 ? { subWorkflows } : {}),
       });
 
-      const transition = this.#interpret(action, outcome.successful, workflowId, stepId);
+      const transition = this.#interpreter.interpret(action, outcome.successful, {
+        workflowId,
+        stepId,
+      });
       if (transition.kind === 'next') {
         index += 1;
       } else if (transition.kind === 'goto') {
-        index = this.#indexOfStep(steps, transition.stepId, workflowId);
+        index = this.#interpreter.indexOfStep(steps, transition.stepId, workflowId);
       } else if (transition.kind === 'end') {
         status = 'ended';
         break;
@@ -682,71 +672,6 @@ class WorkflowExecutor {
       }
       return step;
     });
-  }
-
-  /**
-   * Interprets the terminal action a step resolved to into the loop's next
-   * transition.
-   *
-   * With no matching action, applies the path default: the next sequential step
-   * on success, break-and-return on failure. A `goto` targeting a `stepId` jumps
-   * within the current workflow. `retry` never reaches here — it is consumed by
-   * {@link StepRetryRunner}, which returns only the terminal
-   * action a retry chain resolves to. `goto` targeting a `workflowId` is not yet
-   * supported and throws.
-   */
-  #interpret(
-    action: SelectedAction | undefined,
-    successful: boolean,
-    workflowId: string,
-    stepId: string,
-  ): Transition {
-    if (action === undefined) {
-      // path default: next step on success, break-and-return on failure.
-      return successful ? { kind: 'next' } : { kind: 'break' };
-    }
-
-    const type = toValue(action.type) as string;
-    if (type === 'end') {
-      return { kind: 'end' };
-    }
-    if (type === 'goto') {
-      if (isStringElement(action.workflowId)) {
-        throw new ExecutionError(
-          `action on step "${stepId}" in workflow "${workflowId}" gotos a workflowId; not supported yet`,
-          { stepId, workflowId, reason: 'goto-workflow-unsupported' },
-        );
-      }
-      if (isStringElement(action.stepId)) {
-        return { kind: 'goto', stepId: toValue(action.stepId) as string };
-      }
-      throw new ExecutionError(
-        `goto action on step "${stepId}" in workflow "${workflowId}" has neither stepId nor workflowId`,
-        { stepId, workflowId, reason: 'goto-target-missing' },
-      );
-    }
-
-    // an unknown action type is malformed input, not a defined control flow.
-    // (`retry` is settled by the retry runner and never arrives here.)
-    throw new ExecutionError(
-      `action on step "${stepId}" in workflow "${workflowId}" has unsupported type "${type}"`,
-      { stepId, workflowId, reason: 'unknown-action-type' },
-    );
-  }
-
-  /**
-   * The index of the `goto` target step within the current workflow; a target
-   * that names no step in this workflow is an authoring error.
-   */
-  #indexOfStep(steps: readonly StepElement[], stepId: string, workflowId: string): number {
-    const index = steps.findIndex((step) => (toValue(step.stepId) as string) === stepId);
-    if (index === -1) {
-      throw new ExecutionError(
-        `goto target step "${stepId}" not found in workflow "${workflowId}"`,
-        { stepId, workflowId, reason: 'goto-target-not-found' },
-      );
-    }
-    return index;
   }
 
   /**
