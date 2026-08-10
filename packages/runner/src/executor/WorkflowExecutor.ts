@@ -1,11 +1,9 @@
 import { toValue } from '@speclynx/apidom-core';
-import { isArrayElement, isNumberElement, isStringElement } from '@speclynx/apidom-datamodel';
+import { isArrayElement, isStringElement } from '@speclynx/apidom-datamodel';
 import {
   isStepElement,
-  isFailureActionElement,
   type WorkflowElement,
   type StepElement,
-  type FailureActionElement,
 } from '@speclynx/apidom-ns-arazzo-1';
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
@@ -19,6 +17,8 @@ import OutputResolver from '../resolver/OutputResolver.ts';
 import ParameterResolver from '../resolver/ParameterResolver.ts';
 import WorkflowExecutionState from '../state/WorkflowExecutionState.ts';
 import StepExecutor, { STEP_TARGET_FIELDS, type StepDefaultActions } from './StepExecutor.ts';
+import StepRetryRunner, { type StepAttemptOutcome } from './StepRetryRunner.ts';
+import WorkflowCallStack, { type WorkflowCallVia } from './WorkflowCallStack.ts';
 import type { SelectedAction } from '../action/ActionResolver.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
 
@@ -191,32 +191,6 @@ type Transition =
   | { readonly kind: 'break' };
 
 /**
- * How a workflow invocation was entered. Recorded per call-stack frame so a
- * detected loop can be named for the mechanism that formed it: a repeat reached
- * purely through `dependsOn` edges is a `dependsOn-cycle`, one involving a
- * sub-workflow step call is a `workflow-cycle`.
- */
-type CallVia = 'root' | 'step' | 'dependsOn';
-
-/**
- * One workflow invocation in progress, as recorded on the call stack.
- */
-interface CallFrame {
-  readonly workflowId: string;
-  readonly via: CallVia;
-}
-
-/**
- * The position of a workflow invocation within the call tree: which workflows
- * are in progress above it, and how deep it sits. Rebuilt (never mutated) for
- * each nested call, so unwinding is implicit and reentrancy-safe.
- */
-interface RunFrame {
-  readonly callStack: readonly CallFrame[];
-  readonly depth: number;
-}
-
-/**
  * The state shared by every workflow invocation of a single
  * {@link WorkflowExecutor.execute} call — the caller's per-run options plus the
  * two mutable ledgers that must span the whole call tree.
@@ -238,17 +212,22 @@ interface RunScope {
 }
 
 /**
- * What one attempt at a step produced. Both kinds of step reduce to this: an
- * operation step (delegated to {@link StepExecutor}, whose richer result
- * satisfies this shape) and a sub-workflow step (synthesized from the sub-run's
- * outcome), so the retry loop drives them identically.
+ * One workflow invocation in progress: the values fixed for a single `#run` that
+ * travel together into everything it delegates to.
  */
-interface StepAttemptOutcome {
-  readonly stepId: string;
-  readonly successful: boolean;
-  readonly outputs: Record<string, unknown>;
-  readonly action: SelectedAction | undefined;
-  readonly matchedActions: readonly SelectedAction[];
+interface WorkflowInvocation {
+  readonly workflowId: string;
+  readonly state: WorkflowExecutionState;
+  /**
+   * The workflow-level default actions every step falls back to when it declares
+   * no `onSuccess` / `onFailure` of its own.
+   */
+  readonly defaultActions: StepDefaultActions;
+  /**
+   * The chain of workflows in progress, this one included — extended for each
+   * workflow this invocation calls or depends on.
+   */
+  readonly callStack: WorkflowCallStack;
 }
 
 /**
@@ -283,24 +262,19 @@ interface StepAttemptOutcome {
 class WorkflowExecutor {
   static readonly #DEFAULT_MAX_STEPS = 1000;
   static readonly #DEFAULT_MAX_WORKFLOW_DEPTH = 32;
-  static readonly #DEFAULT_RETRY_LIMIT = 1;
-  static readonly #DEFAULT_SLEEP = (ms: number): Promise<void> =>
-    new Promise((resolve) => {
-      setTimeout(resolve, ms);
-    });
   static readonly #DEFAULT_NOW = (): number => Date.now();
 
   readonly #document: ArazzoDocument;
   readonly #registry: DocumentRegistry;
   readonly #maxSteps: number;
   readonly #maxWorkflowDepth: number;
-  readonly #sleep: (ms: number) => Promise<void>;
   readonly #now: () => number;
   readonly #extractor = new ArazzoWorkflowExtractor();
   readonly #normalizer = new ArazzoWorkflowNormalizer();
   readonly #outputResolver = new OutputResolver();
   readonly #parameterResolver = new ParameterResolver();
   readonly #stepExecutor: StepExecutor;
+  readonly #retryRunner: StepRetryRunner;
 
   constructor(options: WorkflowExecutorOptions) {
     this.#document = options.document;
@@ -308,9 +282,9 @@ class WorkflowExecutor {
     this.#maxSteps = options.maxSteps ?? WorkflowExecutor.#DEFAULT_MAX_STEPS;
     this.#maxWorkflowDepth =
       options.maxWorkflowDepth ?? WorkflowExecutor.#DEFAULT_MAX_WORKFLOW_DEPTH;
-    this.#sleep = options.sleep ?? WorkflowExecutor.#DEFAULT_SLEEP;
     this.#now = options.now ?? WorkflowExecutor.#DEFAULT_NOW;
     this.#stepExecutor = options.stepExecutor;
+    this.#retryRunner = new StepRetryRunner({ sleep: options.sleep });
   }
 
   /**
@@ -335,40 +309,43 @@ class WorkflowExecutor {
       budget: { spent: 0 },
       dependencyRuns: new Map(),
     };
-    return this.#run(workflowId, options.inputs ?? {}, scope, { callStack: [], depth: 0 }, 'root');
+    return this.#run(
+      workflowId,
+      options.inputs ?? {},
+      scope,
+      new WorkflowCallStack({ maxDepth: this.#maxWorkflowDepth }),
+      'root',
+    );
   }
 
   /**
    * Runs one workflow invocation — the recursive worker every entry point funnels
    * through: the public {@link WorkflowExecutor.execute}, a sub-workflow step,
-   * and a `dependsOn` prerequisite alike, each passing the frame extended with
-   * its own call.
+   * and a `dependsOn` prerequisite alike, each entering the caller's call stack
+   * with its own edge.
    */
   async #run(
     workflowId: WorkflowId,
     inputs: Record<string, unknown>,
     scope: RunScope,
-    frame: RunFrame,
-    via: CallVia,
+    callStack: WorkflowCallStack,
+    via: WorkflowCallVia,
   ): Promise<WorkflowExecutionResult> {
     const startedAt = this.#now();
-    this.#guardCall(workflowId, via, frame);
-    // the frame is rebuilt rather than mutated, so this call's entry unwinds
-    // implicitly on return: a throw cannot leave a stale entry behind, and
-    // sibling calls (a diamond — A calling B and C, both calling D) each see
-    // only their own chain, so a completed-and-unwound revisit is never a cycle.
-    const nested: RunFrame = {
-      callStack: [...frame.callStack, { workflowId, via }],
-      depth: frame.depth + 1,
-    };
+    // entering yields a new stack rather than mutating the caller's, so leaving is
+    // implicit — and a cycle or over-deep nesting throws here, before any of this
+    // workflow's own work begins.
+    const nested = callStack.enter(workflowId, via);
 
     const workflow = await this.#resolveWorkflow(workflowId);
     const state = new WorkflowExecutionState({ inputs });
-    // the workflow-level default actions every step falls back to when it
-    // declares no onSuccess / onFailure of its own (resolved once per run).
-    const defaultActions: StepDefaultActions = {
-      onSuccess: workflow.successActions,
-      onFailure: workflow.failureActions,
+    const invocation: WorkflowInvocation = {
+      workflowId,
+      state,
+      // the workflow-level defaults every step falls back to when it declares no
+      // onSuccess / onFailure of its own, resolved once for the run.
+      defaultActions: { onSuccess: workflow.successActions, onFailure: workflow.failureActions },
+      callStack: nested,
     };
 
     // validated before any prerequisite runs: a malformed `steps` is an
@@ -376,7 +353,7 @@ class WorkflowExecutor {
     // fired would mean live side effects on the way to a throw.
     const steps = this.#orderedSteps(workflow, workflowId);
 
-    const dependencies = await this.#runDependencies(workflow, workflowId, state, scope, nested);
+    const dependencies = await this.#runDependencies(workflow, invocation, scope);
     if (dependencies.some((dependency) => dependency.status === 'failed')) {
       // a declared prerequisite did not complete, so this workflow cannot be
       // processed. That is a runtime failure like any failing step — a `failed`
@@ -396,27 +373,18 @@ class WorkflowExecutor {
       // the sub-workflow runs this step produces — one per attempt, so a retried
       // sub-workflow step keeps every attempt's trace rather than only the last.
       const subWorkflows: WorkflowExecutionResult[] = [];
-      const attempt = this.#stepAttempt(
-        step,
-        stepId,
-        workflowId,
-        state,
-        defaultActions,
-        scope,
-        nested,
-        subWorkflows,
-      );
+      const attempt = this.#stepAttempt(step, stepId, invocation, scope, subWorkflows);
 
-      // run the step, honoring any retry actions internally; `action` is the
-      // terminal action after retries are exhausted (retry itself never leaves
-      // this call), and `attempts` is how many times the step ran.
-      const { outcome, action, attempts } = await this.#runStepWithRetry(
-        attempt,
-        workflowId,
+      // the retry runner settles any `retry` actions, so `action` is the terminal
+      // action a retry chain resolved to and `attempts` is how many times the step
+      // ran. Charging the run budget per attempt is handed to it as
+      // `beforeAttempt`, which is what bounds a runaway retry as well as a runaway
+      // goto loop or sub-workflow tree.
+      const { outcome, action, attempts } = await this.#retryRunner.run(attempt, {
         stepId,
-        scope,
-        nested,
-      );
+        workflowId,
+        beforeAttempt: () => this.#chargeBudget(scope, invocation, stepId),
+      });
       state.setStepOutputs(outcome.stepId, outcome.outputs);
       trace.push({
         stepId: outcome.stepId,
@@ -469,48 +437,26 @@ class WorkflowExecutor {
   }
 
   /**
-   * Rejects a workflow invocation that cannot legitimately proceed: one already
-   * in progress on the current call chain (a cycle), or one nested past the depth
-   * ceiling.
+   * Charges one step attempt to the run-wide budget, throwing when it is spent.
    *
-   * The cycle check comes first deliberately. A self-referential chain would
-   * eventually trip the depth guard too, but only after exhausting the whole
-   * budget of frames and then reporting the wrong cause — a cycle is reported as
-   * a cycle, at the moment the workflow is re-entered, carrying the offending
-   * chain as `path`.
+   * This is what bounds a runaway `retry`, a runaway `goto` loop, and a runaway
+   * tree of sub-workflow calls alike. The budget spans the whole call tree, so a
+   * sub-workflow cannot start afresh; the error carries the chain in progress,
+   * because the leaf that happened to spend the last unit is rarely the workflow
+   * that is looping.
    */
-  #guardCall(workflowId: WorkflowId, via: CallVia, frame: RunFrame): void {
-    const repeated = frame.callStack.findIndex((call) => call.workflowId === workflowId);
-    if (repeated !== -1) {
-      const path = [...frame.callStack.map((call) => call.workflowId), workflowId];
-      // name the loop for the mechanism that formed it: every edge closing the
-      // cycle being a `dependsOn` edge makes it a dependency cycle, while any
-      // sub-workflow step call in the loop makes it a call cycle. One shared
-      // stack detects both, so a loop crossing the two mechanisms cannot slip
-      // between them.
-      const closingEdges = [...frame.callStack.slice(repeated + 1).map((call) => call.via), via];
-      const reason = closingEdges.every((edge) => edge === 'dependsOn')
-        ? 'dependsOn-cycle'
-        : 'workflow-cycle';
-      throw new ExecutionError(
-        `workflow "${workflowId}" is already in progress; its call chain forms a cycle (${path.join(' -> ')})`,
-        { workflowId, reason, path },
-      );
-    }
+  #chargeBudget(scope: RunScope, invocation: WorkflowInvocation, stepId: string): void {
+    if (++scope.budget.spent <= this.#maxSteps) return;
 
-    if (frame.depth >= this.#maxWorkflowDepth) {
-      throw new ExecutionError(
-        `workflow "${workflowId}" nests deeper than the limit of ${this.#maxWorkflowDepth} workflows`,
-        {
-          workflowId,
-          reason: 'workflow-depth',
-          // the chain that got here, for the same reason the cycle and budget
-          // errors carry one: the leaf that happened to exceed the ceiling is
-          // rarely the workflow whose nesting the author needs to look at.
-          path: [...frame.callStack.map((call) => call.workflowId), workflowId],
-        },
-      );
-    }
+    throw new ExecutionError(
+      `workflow "${invocation.workflowId}" exceeded its budget of ${this.#maxSteps} step attempts (a goto loop, excessive retries, or runaway sub-workflow calls)`,
+      {
+        workflowId: invocation.workflowId,
+        stepId,
+        reason: 'step-budget',
+        path: invocation.callStack.path,
+      },
+    );
   }
 
   /**
@@ -526,11 +472,10 @@ class WorkflowExecutor {
    */
   async #runDependencies(
     workflow: WorkflowElement,
-    workflowId: string,
-    state: WorkflowExecutionState,
+    invocation: WorkflowInvocation,
     scope: RunScope,
-    frame: RunFrame,
   ): Promise<WorkflowExecutionResult[]> {
+    const { workflowId, state, callStack } = invocation;
     if (!scope.runDependencies || !workflow.hasKey('dependsOn')) return [];
 
     const dependsOn = workflow.dependsOn;
@@ -558,7 +503,8 @@ class WorkflowExecutor {
       // dependency) must not duplicate its live side effects. Every dependent
       // still reports and reads that one run.
       const memoized = scope.dependencyRuns.get(dependencyId);
-      const result = memoized ?? (await this.#run(dependencyId, inputs, scope, frame, 'dependsOn'));
+      const result =
+        memoized ?? (await this.#run(dependencyId, inputs, scope, callStack, 'dependsOn'));
       results.push(result);
       // recorded whether or not it completed: a failed prerequisite still
       // resolved (possibly partial) outputs, and the parent resolves its own
@@ -593,13 +539,11 @@ class WorkflowExecutor {
   #stepAttempt(
     step: StepElement,
     stepId: string,
-    workflowId: string,
-    state: WorkflowExecutionState,
-    defaultActions: StepDefaultActions,
+    invocation: WorkflowInvocation,
     scope: RunScope,
-    frame: RunFrame,
     subWorkflows: WorkflowExecutionResult[],
   ): () => Promise<StepAttemptOutcome> {
+    const { workflowId, state, defaultActions, callStack } = invocation;
     if (!isStringElement(step.workflowId)) {
       return () => this.#stepExecutor.execute(step, state, scope.executeOptions, defaultActions);
     }
@@ -623,7 +567,7 @@ class WorkflowExecutor {
     );
 
     return async () => {
-      const result = await this.#run(subWorkflowId, inputs, scope, frame, 'step');
+      const result = await this.#run(subWorkflowId, inputs, scope, callStack, 'step');
       subWorkflows.push(result);
       state.setWorkflow(subWorkflowId, { inputs, outputs: result.outputs });
 
@@ -747,7 +691,7 @@ class WorkflowExecutor {
    * With no matching action, applies the path default: the next sequential step
    * on success, break-and-return on failure. A `goto` targeting a `stepId` jumps
    * within the current workflow. `retry` never reaches here — it is consumed by
-   * {@link WorkflowExecutor.#runStepWithRetry}, which returns only the terminal
+   * {@link StepRetryRunner}, which returns only the terminal
    * action a retry chain resolves to. `goto` targeting a `workflowId` is not yet
    * supported and throws.
    */
@@ -783,147 +727,11 @@ class WorkflowExecutor {
     }
 
     // an unknown action type is malformed input, not a defined control flow.
-    // (`retry` is resolved away in #runStepWithRetry and never arrives here.)
+    // (`retry` is settled by the retry runner and never arrives here.)
     throw new ExecutionError(
       `action on step "${stepId}" in workflow "${workflowId}" has unsupported type "${type}"`,
       { stepId, workflowId, reason: 'unknown-action-type' },
     );
-  }
-
-  /**
-   * Runs a step, applying its `retry` failure actions before returning a
-   * terminal outcome.
-   *
-   * On success (or an immediate non-retry failure) the step runs once. On a
-   * failure whose first matching action is a `retry`, the step is re-run up to
-   * that action's `retryLimit` (default 1) with a `retryAfter`-second delay
-   * between attempts. Per spec — "retryLimit MUST be exhausted prior to executing
-   * subsequent failure actions" — an exhausted retry falls through to the *next*
-   * matching failure action of the latest attempt, which may itself be another
-   * `retry` with its own independent budget, or a terminal `end` / `goto`. Each
-   * attempt re-runs the step and re-selects against the fresh outcome.
-   *
-   * Returns the last attempt's `outcome`, the resolved terminal `action` (never a
-   * `retry`; `undefined` when nothing terminal matched, so the loop applies the
-   * path default), and the number of `attempts` made.
-   */
-  async #runStepWithRetry(
-    attempt: () => Promise<StepAttemptOutcome>,
-    workflowId: string,
-    stepId: string,
-    scope: RunScope,
-    frame: RunFrame,
-  ): Promise<{
-    outcome: StepAttemptOutcome;
-    action: SelectedAction | undefined;
-    attempts: number;
-  }> {
-    // attempts already spent on each retry action, keyed by the action element.
-    // The element is the correct identity here: re-running the step returns the
-    // same element instances (the workflow is normalized once and `onFailure`'s
-    // getter returns its stored children — nothing re-refracts per call), and
-    // keying by the element survives the criteria re-filtering that varies
-    // `matchedActions` between attempts (position within that filtered list is
-    // NOT stable when a response change drops an earlier action). So each retry
-    // in a chain keeps its own independent budget across re-runs.
-    const retriesSpent = new Map<SelectedAction, number>();
-    let attempts = 0;
-
-    for (;;) {
-      // charge the run-wide budget per attempt — this is what bounds a runaway
-      // retry, a runaway goto loop, and a runaway tree of sub-workflow calls
-      // alike, rather than an unbounded spin. The budget spans the whole call
-      // tree, so a sub-workflow cannot start afresh.
-      if (++scope.budget.spent > this.#maxSteps) {
-        throw new ExecutionError(
-          `workflow "${workflowId}" exceeded its budget of ${this.#maxSteps} step attempts (a goto loop, excessive retries, or runaway sub-workflow calls)`,
-          {
-            workflowId,
-            stepId,
-            reason: 'step-budget',
-            path: [...frame.callStack.map((call) => call.workflowId)],
-          },
-        );
-      }
-
-      const outcome = await attempt();
-      attempts += 1;
-
-      if (outcome.successful) {
-        return { outcome, action: outcome.action, attempts };
-      }
-
-      // walk the matching failure actions: fire the first retry that still has
-      // budget, else fall through to the first terminal (non-retry) action.
-      let fired = false;
-      let terminal: SelectedAction | undefined;
-      for (const action of outcome.matchedActions) {
-        if (!this.#isRetry(action)) {
-          terminal = action;
-          break;
-        }
-        const spent = retriesSpent.get(action) ?? 0;
-        if (spent >= this.#retryLimit(action)) continue; // exhausted — try the next action
-
-        this.#rejectRetryReference(action, stepId, workflowId);
-        retriesSpent.set(action, spent + 1);
-        // only sleep for a real, positive delay — skip the event-loop yield of
-        // sleep(0) for immediate retries, and never hand a custom sleep a
-        // zero/negative/NaN value.
-        const delayMs = this.#retryAfterMs(action);
-        if (delayMs > 0) await this.#sleep(delayMs);
-        fired = true;
-        break;
-      }
-
-      if (fired) continue; // re-run the step
-      return { outcome, action: terminal, attempts };
-    }
-  }
-
-  /**
-   * Whether a matched action is a `retry` failure action (narrowing it to
-   * {@link FailureActionElement} so `retryLimit` / `retryAfter` are accessible).
-   */
-  #isRetry(action: SelectedAction): action is FailureActionElement {
-    return isFailureActionElement(action) && (toValue(action.type) as string) === 'retry';
-  }
-
-  /**
-   * A `retry` action's attempt budget — its `retryLimit`, or the default of 1
-   * when unset or non-numeric.
-   */
-  #retryLimit(action: FailureActionElement): number {
-    return isNumberElement(action.retryLimit)
-      ? (toValue(action.retryLimit) as number)
-      : WorkflowExecutor.#DEFAULT_RETRY_LIMIT;
-  }
-
-  /**
-   * The delay before a retry, in milliseconds — the action's `retryAfter`
-   * (seconds) converted. `0` when unset, non-numeric, or not a finite positive
-   * value (a negative or `NaN` `retryAfter` means "no wait", never a bad value
-   * handed to `sleep`).
-   */
-  #retryAfterMs(action: FailureActionElement): number {
-    if (!isNumberElement(action.retryAfter)) return 0;
-    const ms = (toValue(action.retryAfter) as number) * 1000;
-    return Number.isFinite(ms) && ms > 0 ? ms : 0;
-  }
-
-  /**
-   * Rejects a `retry` action that carries a `stepId` / `workflowId` reference to
-   * execute before retrying — a defined feature ("the reference is executed and
-   * the context is returned, after which the current step is retried") that is
-   * not yet supported, so it throws rather than silently ignoring the reference.
-   */
-  #rejectRetryReference(action: FailureActionElement, stepId: string, workflowId: string): void {
-    if (isStringElement(action.stepId) || isStringElement(action.workflowId)) {
-      throw new ExecutionError(
-        `retry action on step "${stepId}" in workflow "${workflowId}" carries a stepId/workflowId reference; not supported yet`,
-        { stepId, workflowId, reason: 'retry-reference-unsupported' },
-      );
-    }
   }
 
   /**
