@@ -9,7 +9,7 @@ import {
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
 import type DocumentRegistry from '../registry/DocumentRegistry.ts';
-import type { OpenAPIOperationExecuteOptions } from '../client/OpenAPIClient.ts';
+import type { OpenAPIOperationExecuteOptions } from './OpenAPIOperationExecutor.ts';
 import type OpenAPIOperationResponse from '../client/OpenAPIOperationResponse.ts';
 import type {
   RuntimeExpressionContext,
@@ -154,10 +154,10 @@ class StepExecutor {
   /**
    * Executes the step against the given run state, returning its outcome.
    *
-   * `executeOptions` is an opaque bag of client-specific execute options passed
-   * through to the client (e.g. a swagger client's `contextUrl` base URL for a
-   * relative server, or an `AbortSignal`). The Arazzo-derived options
-   * (`operationId`, `parameters`, `requestBody`) always take precedence over it.
+   * `executeOptions` is an opaque bag passed through to the operation executor
+   * (e.g. a `server` to run the step against, or an `AbortSignal`). The
+   * Arazzo-derived options (`operationId`, `parameters`, `requestBody`) always
+   * take precedence over it.
    *
    * `defaultActions` are the workflow-level `successActions` / `failureActions`
    * the step falls back to when it declares no `onSuccess` / `onFailure` of its

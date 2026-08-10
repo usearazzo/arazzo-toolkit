@@ -9,10 +9,9 @@ import {
   WorkflowExecutor,
   StepExecutor,
   OpenAPIOperationExecutor,
-  OpenAPIClient,
-  OpenAPIOperationResponse,
   ExecutionError,
-  type OpenAPIOperationExecuteOptions,
+  type HTTPClient,
+  type OpenAPIOperationRequest,
 } from '../../src/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,55 +19,24 @@ const fixturesPath = path.join(__dirname, '..', 'fixtures');
 const entryPath = path.join(fixturesPath, 'workflow-control-flow.arazzo.yaml');
 
 /**
- * A stub client that records the execute options it receives and returns canned
- * responses in sequence — deterministic, no network. Call N gets `sequence[N]`;
- * once the list is exhausted every further call repeats the last entry, so a
- * single-element sequence is a constant response and a longer one drives "fails
- * twice, then succeeds".
+ * A canned response recipe the stub transport materializes into a fresh WHATWG
+ * Response per call (a Response body is single-use, so each call needs its own).
  */
-class StubClient extends OpenAPIClient {
-  constructor(
-    document: ConstructorParameters<typeof OpenAPIClient>[0],
-    readonly sequence: readonly ConstructorParameters<typeof OpenAPIOperationResponse>[0][],
-    readonly calls: OpenAPIOperationExecuteOptions[],
-  ) {
-    super(document);
-  }
-
-  async execute(options: OpenAPIOperationExecuteOptions): Promise<OpenAPIOperationResponse> {
-    const canned = this.sequence[Math.min(this.calls.length, this.sequence.length - 1)];
-    this.calls.push(options);
-    return new OpenAPIOperationResponse(canned);
-  }
-}
-
-type CannedResponse = ConstructorParameters<typeof OpenAPIOperationResponse>[0];
+type CannedResponse = { status: number; statusText: string; body: unknown };
 
 const okResponse: CannedResponse = {
-  ok: true,
-  url: 'x',
   status: 200,
   statusText: 'OK',
-  headers: {},
-  text: '',
   body: { id: 7, name: 'Rex' },
 };
 const serverErrorResponse: CannedResponse = {
-  ok: false,
-  url: 'x',
   status: 500,
   statusText: 'Internal Server Error',
-  headers: {},
-  text: '',
   body: {},
 };
 const serviceUnavailableResponse: CannedResponse = {
-  ok: false,
-  url: 'x',
   status: 503,
   statusText: 'Service Unavailable',
-  headers: {},
-  text: '',
   body: {},
 };
 
@@ -101,24 +69,35 @@ describe('WorkflowExecutor', function () {
   });
 
   /**
-   * Builds a step executor whose stub client returns `sequence` responses in
-   * order, recording the client calls (in execution order) into `calls`.
+   * Builds a step executor whose stub transport returns `sequence` responses in
+   * order, recording the sent requests (in execution order) into `calls`.
+   * Call N gets `sequence[N]`; once the list is exhausted every further call
+   * repeats the last entry, so a single-element sequence is a constant response
+   * and a longer one drives "fails twice, then succeeds".
    */
   const makeStepExecutor = (
     sequence: readonly CannedResponse[],
-    calls: OpenAPIOperationExecuteOptions[],
-  ): StepExecutor =>
-    new StepExecutor({
+    calls: OpenAPIOperationRequest[],
+  ): StepExecutor => {
+    const httpClient: HTTPClient = async (request) => {
+      const canned = sequence[Math.min(calls.length, sequence.length - 1)];
+      calls.push(request);
+      return new Response(JSON.stringify(canned.body), {
+        status: canned.status,
+        statusText: canned.statusText,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+    return new StepExecutor({
       document: entry,
       registry,
-      operationExecutor: new OpenAPIOperationExecutor({
-        clientFactory: (document) => new StubClient(document, sequence, calls),
-      }),
+      operationExecutor: new OpenAPIOperationExecutor({ httpClient }),
     });
+  };
 
   /**
-   * Builds a workflow executor whose client returns `responses` in sequence,
-   * exposing the recorded client `calls` and the `sleeps` its (no-op) retry
+   * Builds a workflow executor whose transport returns `responses` in sequence,
+   * exposing the recorded requests as `calls` and the `sleeps` its (no-op) retry
    * timer was asked to wait — so retry behavior is deterministic and `retryAfter`
    * timing is assertable without real waiting. A single response is a constant;
    * a longer sequence drives retry ("fails twice, then succeeds").
@@ -128,11 +107,11 @@ describe('WorkflowExecutor', function () {
     options: { maxSteps?: number } = {},
   ): {
     executor: WorkflowExecutor;
-    calls: OpenAPIOperationExecuteOptions[];
+    calls: OpenAPIOperationRequest[];
     sleeps: number[];
   } => {
     const sequence = Array.isArray(responses) ? responses : [responses as CannedResponse];
-    const calls: OpenAPIOperationExecuteOptions[] = [];
+    const calls: OpenAPIOperationRequest[] = [];
     const sleeps: number[] = [];
     const executor = new WorkflowExecutor({
       document: entry,
@@ -160,9 +139,10 @@ describe('WorkflowExecutor', function () {
         ['findPets', 'getPet'],
       );
       assert.isTrue(result.steps.every((step) => step.successful));
-      // getPet's petId parameter came from findPets' resolved output.
+      // getPet's petId parameter came from findPets' resolved output and was
+      // serialized into the second request's URL.
       assert.strictEqual(calls.length, 2);
-      assert.deepEqual(calls[1].parameters, { petId: 7 });
+      assert.include(calls[1].url, '/pet/7');
       // workflow outputs resolved against the final state.
       assert.deepEqual(result.outputs, { name: 'Rex', id: 7 });
     });
@@ -530,7 +510,7 @@ describe('WorkflowExecutor', function () {
 
   context('step executor injection', function () {
     specify('should delegate steps to the injected stepExecutor', async function () {
-      const calls: OpenAPIOperationExecuteOptions[] = [];
+      const calls: OpenAPIOperationRequest[] = [];
       const executor = new WorkflowExecutor({
         document: entry,
         registry,

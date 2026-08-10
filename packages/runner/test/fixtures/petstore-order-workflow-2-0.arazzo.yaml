@@ -14,3 +14,8 @@ workflows:
         operationId: getPetById
       - stepId: placeOrder
         operationId: placeOrder
+        requestBody:
+          contentType: application/json
+          payload:
+            petId: 7
+            quantity: 1

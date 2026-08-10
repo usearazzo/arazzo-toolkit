@@ -18,6 +18,9 @@
   },
   "type": "module",
   "sideEffects": false,
+  "engines": {
+    "node": ">=20.10.0"
+  },
   "unpkg": "./dist/arazzo-parser.browser.min.js",
   "main": "./src/index.cjs",
   "exports": {

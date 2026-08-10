@@ -10,10 +10,9 @@ import {
   StepExecutor,
   OpenAPIOperationExecutor,
   WorkflowExecutionState,
-  OpenAPIClient,
-  OpenAPIOperationResponse,
   ExecutionError,
-  type OpenAPIOperationExecuteOptions,
+  type HTTPClient,
+  type OpenAPIOperationRequest,
 } from '../../src/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -21,45 +20,18 @@ const fixturesPath = path.join(__dirname, '..', 'fixtures');
 const entryPath = path.join(fixturesPath, 'petstore-order-workflow.arazzo.yaml');
 
 /**
- * A stub client that records the execute options it receives and returns a
- * canned response — deterministic, no network.
+ * Creates a canned JSON response the stub transport resolves with.
  */
-class StubClient extends OpenAPIClient {
-  readonly calls: OpenAPIOperationExecuteOptions[] = [];
+const jsonResponse = (body: unknown, init: ResponseInit = {}): Response =>
+  new Response(JSON.stringify(body), {
+    status: 200,
+    statusText: 'OK',
+    headers: { 'content-type': 'application/json' },
+    ...init,
+  });
 
-  constructor(
-    document: ConstructorParameters<typeof OpenAPIClient>[0],
-    readonly canned: ConstructorParameters<typeof OpenAPIOperationResponse>[0],
-  ) {
-    super(document);
-  }
-
-  async execute(options: OpenAPIOperationExecuteOptions): Promise<OpenAPIOperationResponse> {
-    this.calls.push(options);
-    return new OpenAPIOperationResponse(this.canned);
-  }
-}
-
-type CannedResponse = ConstructorParameters<typeof OpenAPIOperationResponse>[0];
-
-const okResponse: CannedResponse = {
-  ok: true,
-  url: 'x',
-  status: 200,
-  statusText: 'OK',
-  headers: {},
-  text: '',
-  body: [{ id: 7 }],
-};
-const notFoundResponse: CannedResponse = {
-  ok: false,
-  url: 'x',
-  status: 404,
-  statusText: 'Not Found',
-  headers: {},
-  text: '',
-  body: {},
-};
+const okResponse = () => jsonResponse([{ id: 7 }]);
+const notFoundResponse = () => jsonResponse({}, { status: 404, statusText: 'Not Found' });
 
 /**
  * Asserts a promise rejects with the given error type and message — a local
@@ -91,18 +63,16 @@ describe('StepExecutor', function () {
   });
 
   const makeExecutor = (
-    canned: CannedResponse,
-  ): { executor: StepExecutor; clients: StubClient[] } => {
-    const clients: StubClient[] = [];
-    const operationExecutor = new OpenAPIOperationExecutor({
-      clientFactory: (document) => {
-        const client = new StubClient(document, canned);
-        clients.push(client);
-        return client;
-      },
-    });
+    respond: () => Response = okResponse,
+  ): { executor: StepExecutor; requests: OpenAPIOperationRequest[] } => {
+    const requests: OpenAPIOperationRequest[] = [];
+    const httpClient: HTTPClient = async (request) => {
+      requests.push(request);
+      return respond();
+    };
+    const operationExecutor = new OpenAPIOperationExecutor({ httpClient });
     const executor = new StepExecutor({ document: entry, registry, operationExecutor });
-    return { executor, clients };
+    return { executor, requests };
   };
 
   const state = () => new WorkflowExecutionState({ inputs: { preferredPetStatus: 'available' } });
@@ -114,18 +84,18 @@ describe('StepExecutor', function () {
         operationId: 'findPetsByStatus',
         parameters: [{ name: 'status', in: 'query', value: '$inputs.preferredPetStatus' }],
       }) as StepElement;
-      const { executor, clients } = makeExecutor(okResponse);
+      const { executor, requests } = makeExecutor();
 
       const result = await executor.execute(step, state());
 
       assert.strictEqual(result.stepId, 'findPets');
       assert.strictEqual(result.response.status, 200);
-      assert.strictEqual(clients.length, 1);
-      // the resolved parameter reached the client.
-      assert.deepEqual(clients[0].calls[0].parameters, { status: 'available' });
-      // a plain operationId is normalized to the operation's JSON Pointer.
-      assert.strictEqual(clients[0].calls[0].operationPath, '/paths/~1pet~1findByStatus/get');
-      assert.isUndefined(clients[0].calls[0].operationId);
+      assert.strictEqual(requests.length, 1);
+      // the resolved parameter reached the wire: the operation was located from
+      // the plain operationId and the request built for it.
+      assert.include(requests[0].url, '/pet/findByStatus');
+      assert.include(requests[0].url, 'status=available');
+      assert.strictEqual(requests[0].method, 'GET');
     });
 
     specify(
@@ -136,15 +106,14 @@ describe('StepExecutor', function () {
           operationId: '$sourceDescriptions.petstoreAPI.findPetsByStatus',
           parameters: [{ name: 'status', in: 'query', value: 'available' }],
         }) as StepElement;
-        const { executor, clients } = makeExecutor(okResponse);
+        const { executor, requests } = makeExecutor();
 
         const result = await executor.execute(step, state());
 
         assert.strictEqual(result.response.status, 200);
-        // the raw expression is normalized to the operation's JSON Pointer, not
-        // forwarded to the client verbatim.
-        assert.strictEqual(clients[0].calls[0].operationPath, '/paths/~1pet~1findByStatus/get');
-        assert.isUndefined(clients[0].calls[0].operationId);
+        // the raw expression is normalized to the operation's location, not
+        // forwarded verbatim.
+        assert.include(requests[0].url, '/pet/findByStatus');
       },
     );
 
@@ -154,26 +123,24 @@ describe('StepExecutor', function () {
         operationPath: '{$sourceDescriptions.petstoreAPI.url}#/paths/~1pet~1findByStatus/get',
         parameters: [{ name: 'status', in: 'query', value: 'available' }],
       }) as StepElement;
-      const { executor, clients } = makeExecutor(okResponse);
+      const { executor, requests } = makeExecutor();
 
       const result = await executor.execute(step, state());
 
       assert.strictEqual(result.response.status, 200);
-      // the client receives the JSON Pointer selector, not an operationId.
-      assert.strictEqual(clients[0].calls[0].operationPath, '/paths/~1pet~1findByStatus/get');
-      assert.isUndefined(clients[0].calls[0].operationId);
+      assert.include(requests[0].url, '/pet/findByStatus');
     });
 
     specify('should throw for an operationId found in no source description', async function () {
       const step = refractStep({ stepId: 's', operationId: 'noSuchOperation' }) as StepElement;
-      const { executor } = makeExecutor(okResponse);
+      const { executor } = makeExecutor();
 
       await rejects(executor.execute(step, state()));
     });
 
     specify('should throw ExecutionError for a step with no operation target', async function () {
       const step = refractStep({ stepId: 's' }) as StepElement;
-      const { executor } = makeExecutor(okResponse);
+      const { executor } = makeExecutor();
 
       await rejects(
         executor.execute(step, state()),
@@ -184,7 +151,7 @@ describe('StepExecutor', function () {
 
     specify('should throw ExecutionError for a workflowId step', async function () {
       const step = refractStep({ stepId: 's', workflowId: 'other' }) as StepElement;
-      const { executor } = makeExecutor(okResponse);
+      const { executor } = makeExecutor();
 
       await rejects(executor.execute(step, state()), ExecutionError, /workflow executor/);
     });
@@ -195,7 +162,7 @@ describe('StepExecutor', function () {
         operationId: 'findPetsByStatus',
         workflowId: 'other',
       }) as StepElement;
-      const { executor } = makeExecutor(okResponse);
+      const { executor } = makeExecutor();
 
       await rejects(executor.execute(step, state()), ExecutionError, /mutually exclusive/);
     });
@@ -208,13 +175,18 @@ describe('StepExecutor', function () {
         operationId: 'placeOrder',
         requestBody: { contentType: 'application/json', payload: { petId: 42, quantity: 1 } },
       }) as StepElement;
-      const { executor, clients } = makeExecutor(okResponse);
+      const { executor, requests } = makeExecutor();
 
       await executor.execute(step, state());
 
-      const call = clients[0].calls[0];
-      assert.deepEqual(call.requestBody, { petId: 42, quantity: 1 });
-      assert.strictEqual(call.requestContentType, 'application/json');
+      assert.strictEqual(requests[0].method, 'POST');
+      // the resolved payload is built into the request and JSON-encoded before
+      // it reaches the transport.
+      assert.deepEqual(JSON.parse(requests[0].body as string), { petId: 42, quantity: 1 });
+      assert.match(
+        requests[0].headers['Content-Type'] ?? requests[0].headers['content-type'],
+        /application\/json/,
+      );
     });
 
     specify('should be successful when successCriteria pass', async function () {
@@ -225,7 +197,7 @@ describe('StepExecutor', function () {
         successCriteria: [{ condition: '$statusCode == 200' }],
         outputs: { pets: '$response.body', status: '$statusCode' },
       }) as StepElement;
-      const { executor } = makeExecutor(okResponse);
+      const { executor } = makeExecutor();
 
       const result = await executor.execute(step, state());
 
@@ -235,15 +207,6 @@ describe('StepExecutor', function () {
     });
 
     specify('should expose the sent request via $url / $method / $request', async function () {
-      const withRequest: CannedResponse = {
-        ...okResponse,
-        request: {
-          url: 'https://petstore3.swagger.io/api/v3/pet/findByStatus?status=available',
-          method: 'GET',
-          headers: { accept: 'application/json' },
-          body: undefined,
-        },
-      };
       const step = refractStep({
         stepId: 'findPets',
         operationId: 'findPetsByStatus',
@@ -251,17 +214,18 @@ describe('StepExecutor', function () {
         successCriteria: [{ condition: "$method == 'GET'" }],
         outputs: { calledUrl: '$url', verb: '$method', accept: '$request.header.accept' },
       }) as StepElement;
-      const { executor } = makeExecutor(withRequest);
+      const { executor, requests } = makeExecutor();
 
       const result = await executor.execute(step, state());
 
       assert.isTrue(result.successful);
-      assert.strictEqual(
-        result.outputs.calledUrl,
-        'https://petstore3.swagger.io/api/v3/pet/findByStatus?status=available',
-      );
+      // the outputs reflect the request that was actually built and sent.
+      assert.strictEqual(result.outputs.calledUrl, requests[0].url);
+      assert.include(result.outputs.calledUrl as string, 'status=available');
       assert.strictEqual(result.outputs.verb, 'GET');
-      assert.strictEqual(result.outputs.accept, 'application/json');
+      // buildRequest derives the accept header from the operation's response
+      // media types.
+      assert.include(result.outputs.accept as string, 'application/json');
     });
 
     specify('should not be successful when a successCriterion fails', async function () {
@@ -302,7 +266,7 @@ describe('StepExecutor', function () {
           operationId: 'findPetsByStatus',
           parameters: [{ name: 'status', in: 'query', value: 'available' }],
         }) as StepElement;
-        const { executor, clients } = makeExecutor(okResponse);
+        const { executor, requests } = makeExecutor();
 
         await executor.execute(step, state(), {
           contextUrl: 'https://example.com',
@@ -310,16 +274,46 @@ describe('StepExecutor', function () {
           operationPath: '/paths/~1hijacked/get',
         });
 
-        const call = clients[0].calls[0] as OpenAPIOperationExecuteOptions & {
-          contextUrl?: string;
-        };
-        assert.strictEqual(call.contextUrl, 'https://example.com');
-        // the Arazzo-derived operationPath wins: the operationPath passthrough is
-        // overridden and the operationId passthrough is cleared, so executeOptions
-        // cannot hijack the target.
-        assert.strictEqual(call.operationPath, '/paths/~1pet~1findByStatus/get');
-        assert.isUndefined(call.operationId);
+        // the opaque contextUrl passthrough shaped the request URL, while the
+        // Arazzo-derived operation target won: the operationId/operationPath
+        // passthroughs could not hijack the operation.
+        assert.include(requests[0].url, 'https://example.com');
+        assert.include(requests[0].url, '/pet/findByStatus');
       },
     );
+  });
+
+  context('given a Swagger 2.0 source description', function () {
+    specify("should send a step's request body to a 2.0 operation", async function () {
+      // Arazzo expresses a payload only as `requestBody` — its parameter `in`
+      // has no `body` value — so a step against a Swagger 2.0 source
+      // description reaches the wire only if the operation executor routes the
+      // payload to the declared body parameter.
+      const registry2 = new DocumentRegistry();
+      const entry2 = await registry2.acquireEntryDocument(
+        path.join(fixturesPath, 'petstore-order-workflow-2-0.arazzo.yaml'),
+      );
+      const requests: OpenAPIOperationRequest[] = [];
+      const httpClient: HTTPClient = async (request) => {
+        requests.push(request);
+        return okResponse();
+      };
+      const executor = new StepExecutor({
+        document: entry2,
+        registry: registry2,
+        operationExecutor: new OpenAPIOperationExecutor({ httpClient }),
+      });
+
+      const step = refractStep({
+        stepId: 'placeOrder',
+        operationId: 'placeOrder',
+        requestBody: { contentType: 'application/json', payload: { petId: 7, quantity: 1 } },
+      }) as StepElement;
+
+      const result = await executor.execute(step, new WorkflowExecutionState({ inputs: {} }));
+
+      assert.isTrue(result.successful);
+      assert.deepEqual(JSON.parse(requests[0].body as string), { petId: 7, quantity: 1 });
+    });
   });
 });
