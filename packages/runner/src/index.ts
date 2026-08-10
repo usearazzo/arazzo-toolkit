@@ -52,14 +52,14 @@ export { default as OpenAPI30DocumentAssembler } from './assembler/OpenAPI30Docu
 export { default as OpenAPI31DocumentAssembler } from './assembler/OpenAPI31DocumentAssembler.ts';
 
 /* Clients */
-export { default as OpenAPIClient } from './client/OpenAPIClient.ts';
-export type { OpenAPIOperationExecuteOptions } from './client/OpenAPIClient.ts';
+export type { default as HTTPClient } from './client/HTTPClient.ts';
+export { default as httpClientFetch } from './client/HTTPClientFetch.ts';
+export type { default as OpenAPIOperationRequest } from './client/OpenAPIOperationRequest.ts';
 export {
   default as OpenAPIOperationResponse,
   type OpenAPIOperationRequestInfo,
 } from './client/OpenAPIOperationResponse.ts';
-export { default as OpenAPIClientSwagger } from './client/OpenAPIClientSwagger.ts';
-export type { SwaggerOpenAPIOperationExecuteOptions } from './client/OpenAPIClientSwagger.ts';
+export { default as OpenAPIOperationResponseNormalizer } from './client/OpenAPIOperationResponseNormalizer.ts';
 
 /* Runtime Expressions */
 export { default as RuntimeExpressionEvaluator } from './expression/RuntimeExpressionEvaluator.ts';
@@ -119,8 +119,9 @@ export type {
 export { default as OpenAPIOperationExecutor } from './executor/OpenAPIOperationExecutor.ts';
 export type {
   OpenAPIOperationExecutorOptions,
+  OpenAPIOperationExecuteOptions,
   OpenAPIOperationExecuteOptionsBag,
-  OpenAPIClientFactory,
+  RequestInterceptor,
 } from './executor/OpenAPIOperationExecutor.ts';
 export { default as OpenAPIOperationLocatorNormalizer } from './executor/OpenAPIOperationLocatorNormalizer.ts';
 export type { OpenAPIOperationLocator } from './executor/OpenAPIOperationLocatorNormalizer.ts';

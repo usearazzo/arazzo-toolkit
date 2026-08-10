@@ -1,10 +1,17 @@
 # @usearazzo/runner
 
 > [!WARNING]
-> This package is under heavy development and is not yet published to npm. It is developed within the [`arazzo-toolkit`](https://github.com/usearazzo/arazzo-toolkit) monorepo and will be publicly installable once its API stabilizes; until then, APIs may change without notice.
+> This package is under heavy development and is not yet published to npm. It is
+> developed within the [`arazzo-toolkit`](https://github.com/usearazzo/arazzo-toolkit) monorepo and
+> will be publicly installable once its API stabilizes; until then, APIs may change without notice.
 
-`@usearazzo/runner` executes [Arazzo Specification](https://spec.openapis.org/arazzo/latest.html) workflows against live APIs described by [OpenAPI Specification](https://spec.openapis.org/oas/latest.html) source descriptions.
-It builds on [SpecLynx ApiDOM](https://github.com/speclynx/apidom) data models and reuses the loading, resolution, and normalization primitives shared across [`@usearazzo/parser`](https://www.npmjs.com/package/@usearazzo/parser) and [`@usearazzo/resolver`](https://www.npmjs.com/package/@usearazzo/resolver).
+`@usearazzo/runner` executes [Arazzo Specification](https://spec.openapis.org/arazzo/latest.html)
+workflows against live APIs described by
+[OpenAPI Specification](https://spec.openapis.org/oas/latest.html) source descriptions. It builds on
+[SpecLynx ApiDOM](https://github.com/speclynx/apidom) data models and reuses the loading,
+resolution, and normalization primitives shared across
+[`@usearazzo/parser`](https://www.npmjs.com/package/@usearazzo/parser) and
+[`@usearazzo/resolver`](https://www.npmjs.com/package/@usearazzo/resolver).
 
 **Supported Arazzo versions:**
 
@@ -19,12 +26,18 @@ It builds on [SpecLynx ApiDOM](https://github.com/speclynx/apidom) data models a
 
 ## Architecture
 
-Running an Arazzo workflow is a pipeline of small, single-responsibility building blocks organized into four main components:
+Running an Arazzo workflow is a pipeline of small, single-responsibility building blocks organized
+into four main components:
 
-- **`DocumentRegistry`** — loads and caches the Arazzo entry document and its OpenAPI source descriptions, so each is fetched and parsed once.
-- **`WorkflowExecutor`** — iterates a workflow's steps, owns the run state, and interprets control-flow actions (`goto`, `retry`, `end`).
-- **`StepExecutor`** — runs a single Arazzo step: locates its operation, resolves inputs, evaluates criteria and outputs, and selects the next action.
-- **`OpenAPIOperationExecutor`** — runs a single OpenAPI operation and returns its raw response; the Arazzo-agnostic seam between the runner and any `OpenAPIClient`.
+- **`DocumentRegistry`**: loads and caches the Arazzo entry document and its OpenAPI source
+  descriptions, so each is fetched and parsed once.
+- **`WorkflowExecutor`**: iterates a workflow's steps, owns the run state, and interprets
+  control-flow actions (`goto`, `retry`, `end`).
+- **`StepExecutor`**: runs a single Arazzo step: locates its operation, resolves inputs, evaluates
+  criteria and outputs, and selects the next action.
+- **`OpenAPIOperationExecutor`**: runs a single OpenAPI operation: builds the HTTP request
+  (parameter serialization, securities, server resolution), sends it through the pluggable
+  `HTTPClient` transport, and normalizes the raw response into the runner's response model.
 
 ```mermaid
 flowchart TD
@@ -32,12 +45,12 @@ flowchart TD
 
     WF["WorkflowExecutor<br/>iterate steps · own state · control flow"]
     Step["StepExecutor<br/>run one Arazzo step"]
-    Op["OpenAPIOperationExecutor<br/>run one OpenAPI operation"]
-    Client["OpenAPIClient<br/>execute against the live API"]
+    Op["OpenAPIOperationExecutor<br/>build request · normalize response"]
+    HTTP["HTTPClient<br/>send the built request (fetch by default)"]
 
     WF -->|"execute step"| Step
     Step -->|"execute OpenAPI operation"| Op
-    Op -->|"execute HTTP request"| Client
+    Op -->|"send HTTP request"| HTTP
 
     Registry -.->|documents| WF
     Registry -.->|documents| Step
@@ -49,15 +62,17 @@ flowchart TD
     classDef neutral fill:#424143,stroke:#231F20,color:#fff;
 
     class WF,Step arazzo;
-    class Op,Client openapi;
+    class Op,HTTP openapi;
     class Registry neutral;
 ```
 
-Each layer reads run state but never mutates it — the `WorkflowExecutor` is the single writer that records outputs and interprets the returned control-flow action.
+Each layer reads run state but never mutates it. The `WorkflowExecutor` is the single writer that
+records outputs and interprets the returned control-flow action.
 
 ## `DocumentRegistry`
 
-Loads and caches Arazzo and OpenAPI documents, so a source description referenced by many steps is fetched and parsed once.
+Loads and caches Arazzo and OpenAPI documents, so a source description referenced by many steps is
+fetched and parsed once.
 
 ```js
 import { DocumentRegistry } from '@usearazzo/runner';
@@ -79,11 +94,20 @@ registry.clear(); // drop cached documents to reclaim memory
 ## `WorkflowExecutor`
 
 > [!NOTE]
-> Under active development. The backbone below works today; sub-workflow calls, `dependsOn`, and step-level `goto` to a workflow are not yet implemented and throw `ExecutionError` rather than behaving incorrectly (see [Not yet supported](#not-yet-supported)).
+> Under active development. The backbone below works today; sub-workflow calls, `dependsOn`,
+> and step-level `goto` to a workflow are not yet implemented and throw `ExecutionError` rather than
+> behaving incorrectly (see [Not yet supported](#not-yet-supported)).
 
-`WorkflowExecutor` is the stateful orchestrator that runs a whole workflow. It iterates a workflow's steps in list order, calling `StepExecutor` per step, and owns the run state (a `WorkflowExecutionState`) that accumulates each step's outputs so later steps can read `$steps.*.outputs`. It interprets the control-flow actions `StepExecutor` only _selects_ — advancing to the next step, jumping via `goto`, or stopping on `end` / the failure break-default — supplies each step the workflow-level default `successActions` / `failureActions`, and resolves the workflow's `outputs` against the final state.
+`WorkflowExecutor` is the stateful orchestrator that runs a whole workflow. It iterates a workflow's
+steps in list order, calling `StepExecutor` per step, and owns the run state (a
+`WorkflowExecutionState`) that accumulates each step's outputs so later steps can read
+`$steps.*.outputs`. It interprets the control-flow actions `StepExecutor` only _selects_ (advancing
+to the next step, jumping via `goto`, or stopping on `end` or the failure break-default), supplies
+each step the workflow-level default `successActions` / `failureActions`, and resolves the
+workflow's `outputs` against the final state.
 
-Give it the entry document, registry, and a `StepExecutor` once; call `execute` per run with a `workflowId` and its `inputs`:
+Give it the entry document, registry, and a `StepExecutor` once; call `execute` per run with a
+`workflowId` and its `inputs`:
 
 ```js
 import {
@@ -91,7 +115,6 @@ import {
   OpenAPIOperationExecutor,
   StepExecutor,
   WorkflowExecutor,
-  OpenAPIClientSwagger,
 } from '@usearazzo/runner';
 
 const registry = new DocumentRegistry();
@@ -101,68 +124,102 @@ const arazzoDoc = await registry.acquireEntryDocument(
 
 // compose the engines bottom-up: operation executor → step executor → workflow
 // executor. Each takes its collaborator rather than building one, so a stub
-// drops in for tests at any layer.
-const operationExecutor = new OpenAPIOperationExecutor({
-  clientFactory: (document) => new OpenAPIClientSwagger(document),
-});
+// drops in for tests at any layer. The operation executor sends requests
+// through global fetch by default; pass { httpClient } to swap the transport.
+const operationExecutor = new OpenAPIOperationExecutor();
 const stepExecutor = new StepExecutor({ document: arazzoDoc, registry, operationExecutor });
 const executor = new WorkflowExecutor({ document: arazzoDoc, registry, stepExecutor });
 
-const result = await executor.execute(
-  'authenticateAndOrderPet',
-  { username: 'user1', password: 'secret', preferredPetStatus: 'available' },
-  { contextUrl: 'https://petstore3.swagger.io' },
-);
+const result = await executor.execute('authenticateAndOrderPet', {
+  username: 'user1',
+  password: 'secret',
+  preferredPetStatus: 'available',
+});
 
 console.log(result.status); // 'completed' | 'ended' | 'failed'
 console.log(result.outputs); // workflow $outputs, resolved against final state
 console.log(result.steps); // trace: each step's id, success, and selected action, in run order
 ```
 
-The run state is created fresh per `execute` call and owned internally; the returned `result` is read-only. Every layer takes its collaborator rather than building one — `WorkflowExecutor` takes a `StepExecutor`, which takes an `OpenAPIOperationExecutor`, which takes the client factory — so each stays agnostic to how the layer beneath it reaches the live API, and a deterministic stub drops in for tests at any level.
+The run state is created fresh per `execute` call and owned internally; the returned `result` is
+read-only. Every layer takes its collaborator rather than building one: `WorkflowExecutor` takes a
+`StepExecutor`, which takes an `OpenAPIOperationExecutor`, which takes the `httpClient` transport.
+Each therefore stays agnostic to how the layer beneath it reaches the live API, and a deterministic
+stub drops in for tests at any level.
 
 ### Control flow
 
 After each step, the selected `onSuccess` / `onFailure` action determines what happens next:
 
-- **no matching action** — success falls through to the next step; failure _breaks and returns_ (`status: 'failed'`);
-- **`end`** — stops the run early with `status: 'ended'`, returning the outputs accumulated so far;
-- **`goto` a `stepId`** — jumps to that step within the current workflow;
-- **`retry`** — re-runs the step's operation up to the action's `retryLimit` (default `1`), waiting `retryAfter` seconds between attempts. Per spec, `retryLimit` is exhausted _before_ subsequent failure actions run, so an exhausted `retry` falls through to the next matching failure action — which may be another `retry` with its own independent budget, or a terminal `end` / `goto`; if none remains, the break-default applies. Each step's `attempts` count is surfaced in the result trace.
+- **no matching action**: success falls through to the next step; failure _breaks and returns_
+  (`status: 'failed'`);
+- **`end`**: stops the run early with `status: 'ended'`, returning the outputs accumulated so far;
+- **`goto` a `stepId`**: jumps to that step within the current workflow;
+- **`retry`**: re-runs the step's operation up to the action's `retryLimit` (default `1`), waiting
+  `retryAfter` seconds between attempts. Per spec, `retryLimit` is exhausted _before_ subsequent
+  failure actions run, so an exhausted `retry` falls through to the next matching failure action,
+  which may be another `retry` with its own independent budget or a terminal `end` or `goto`. If
+  none remains, the break-default applies. Each step's `attempts` count is surfaced in the result
+  trace.
 
-A runaway `goto` loop **or** a runaway `retry` is bounded by `maxSteps` (default `1000`), which counts every operation execution — each step attempt, including retries — and throws `ExecutionError` (`reason: 'step-budget'`) when exceeded. The `retryAfter` delay uses an injectable `sleep` (`WorkflowExecutorOptions.sleep`, default a real timer) so tests can run without waiting.
+A runaway `goto` loop **or** a runaway `retry` is bounded by `maxSteps` (default `1000`), which
+counts every operation execution (each step attempt, including retries) and throws `ExecutionError`
+(`reason: 'step-budget'`) when exceeded. The `retryAfter` delay uses an injectable `sleep`
+(`WorkflowExecutorOptions.sleep`, default a real timer) so tests can run without waiting.
 
 ### Workflow-level default actions
 
-A workflow's `successActions` / `failureActions` apply to every step as a **default**. A step that declares its own `onSuccess` / `onFailure` **overrides** the corresponding workflow list wholesale — there is no per-action merge, and success and failure fall back independently (a step may override only its failure actions and still inherit the workflow's success actions).
+A workflow's `successActions` / `failureActions` apply to every step as a **default**. A step that
+declares its own `onSuccess` / `onFailure` **overrides** the corresponding workflow list wholesale.
+There is no per-action merge, and success and failure fall back independently (a step may override
+only its failure actions and still inherit the workflow's success actions).
 
 ### Authoring errors vs. failed runs
 
-Same split as `StepExecutor`: a step whose `successCriteria` go unmet with no redirecting action is a normal `status: 'failed'` result, **not** a throw. Only authoring errors throw `ExecutionError` — an unknown `workflowId` (`workflow-not-found`), a `goto` to a step that does not exist (`goto-target-not-found`), a `goto` naming neither `stepId` nor `workflowId` (`goto-target-missing`), an action of an unknown `type` (`unknown-action-type`), a present but malformed `steps` (`malformed-steps`), or the step-budget overflow above (`step-budget`).
+Same split as `StepExecutor`: a step whose `successCriteria` go unmet with no redirecting action is
+a normal `status: 'failed'` result, **not** a throw. Only authoring errors throw `ExecutionError`:
+an unknown `workflowId` (`workflow-not-found`), a `goto` to a step that does not exist
+(`goto-target-not-found`), a `goto` naming neither `stepId` nor `workflowId`
+(`goto-target-missing`), an action of an unknown `type` (`unknown-action-type`), a present but
+malformed `steps` (`malformed-steps`), or the step-budget overflow above (`step-budget`).
 
 ### Not yet supported
 
-These land in later work. Each throws `ExecutionError` (with the noted `reason`) rather than behaving incorrectly — except workflow-level `parameters`, which is simply not read yet:
+These land in later work. Each throws `ExecutionError` (with the noted `reason`) rather than
+behaving incorrectly, except workflow-level `parameters`, which is simply not read yet:
 
-- **sub-workflow steps** — a step targeting a `workflowId`, i.e. calling another workflow (`reason: 'workflow-step-unsupported'`). Recursion, sub-workflow cycle detection, and a nesting-depth guard land with this;
-- **`dependsOn`** — running the workflows a workflow depends on before its own steps;
+- **sub-workflow steps**: a step targeting a `workflowId`, i.e. calling another workflow
+  (`reason: 'workflow-step-unsupported'`). Recursion, sub-workflow cycle detection, and a
+  nesting-depth guard land with this;
+- **`dependsOn`**: running the workflows a workflow depends on before its own steps;
 - **step-level `goto` to a `workflowId`** (`reason: 'goto-workflow-unsupported'`);
-- **a `retry` carrying a `stepId` / `workflowId` reference** to run before retrying (`reason: 'retry-reference-unsupported'`);
-- **cross-document workflow references** — a `workflowId` / `dependsOn` naming a workflow in another document via `$sourceDescriptions.<name>.<workflowId>` (`reason: 'cross-document-workflow-unsupported'`); same-document only for now;
-- **workflow-level `parameters`** — a workflow's `parameters` applied to all its steps (they are not read yet).
+- **a `retry` carrying a `stepId` / `workflowId` reference** to run before retrying
+  (`reason: 'retry-reference-unsupported'`);
+- **cross-document workflow references**: a `workflowId` / `dependsOn` naming a workflow in another
+  document via `$sourceDescriptions.<name>.<workflowId>`
+  (`reason: 'cross-document-workflow-unsupported'`); same-document only for now;
+- **workflow-level `parameters`**: a workflow's `parameters` applied to all its steps (they are not
+  read yet).
 
 ## `StepExecutor`
 
-Executes a single Arazzo step that invokes an OpenAPI operation, returning its outcome. It orchestrates the full per-step pipeline:
+Executes a single Arazzo step that invokes an OpenAPI operation, returning its outcome. It
+orchestrates the full per-step pipeline:
 
 1. locate the step's operation (`operationId` or `operationPath`);
-2. resolve the step's `parameters` and `requestBody` against the pre-request context (`$inputs`, `$steps.*.outputs`, …);
+2. resolve the step's `parameters` and `requestBody` against the pre-request context (`$inputs`,
+   `$steps.*.outputs`, …);
 3. delegate the call to `OpenAPIOperationExecutor`;
-4. evaluate `successCriteria`, resolve `outputs`, and select the `onSuccess` / `onFailure` action against the post-request context (`$statusCode`, `$response.*`, `$request.*`, `$url`, `$method`).
+4. evaluate `successCriteria`, resolve `outputs`, and select the `onSuccess` / `onFailure` action
+   against the post-request context (`$statusCode`, `$response.*`, `$request.*`, `$url`, `$method`).
 
-`StepExecutor` **reads run state and mutates nothing** — it returns the resolved outputs and the selected action for the caller to record and interpret. A step targeting a `workflowId` (a sub-workflow) is not an operation step and throws; running sub-workflows is the `WorkflowExecutor`'s concern.
+`StepExecutor` **reads run state and mutates nothing**: it returns the resolved outputs and the
+selected action for the caller to record and interpret. A step targeting a `workflowId` (a
+sub-workflow) is not an operation step and throws; running sub-workflows is the `WorkflowExecutor`'s
+concern.
 
-It delegates the located operation to an injected `OpenAPIOperationExecutor` (below) rather than building one, so it stays agnostic to the operation pipeline and HTTP stack:
+It delegates the located operation to an injected `OpenAPIOperationExecutor` (below) rather than
+building one, so it stays agnostic to the operation pipeline and HTTP stack:
 
 ```js
 import {
@@ -172,7 +229,6 @@ import {
   WorkflowExecutionState,
   OpenAPIOperationExecutor,
   StepExecutor,
-  OpenAPIClientSwagger,
 } from '@usearazzo/runner';
 
 const registry = new DocumentRegistry();
@@ -184,17 +240,13 @@ const arazzoDoc = await registry.acquireEntryDocument(
 const workflow = new ArazzoWorkflowExtractor().extract(arazzoDoc, 'authenticateAndOrderPet');
 const step = new ArazzoStepExtractor().extract(workflow, 'findAvailablePets');
 
-const operationExecutor = new OpenAPIOperationExecutor({
-  clientFactory: (document) => new OpenAPIClientSwagger(document),
-});
+const operationExecutor = new OpenAPIOperationExecutor();
 const executor = new StepExecutor({ document: arazzoDoc, registry, operationExecutor });
 
 // run state carries $inputs and accumulates $steps.*.outputs across a run.
 const state = new WorkflowExecutionState({ inputs: { preferredPetStatus: 'available' } });
 
-const outcome = await executor.execute(step, state, {
-  contextUrl: 'https://petstore3.swagger.io',
-});
+const outcome = await executor.execute(step, state);
 
 console.log(outcome.successful); // true when every successCriterion passed
 console.log(outcome.outputs); // resolved step outputs, keyed by name
@@ -208,44 +260,171 @@ state.setStepOutputs(outcome.stepId, outcome.outputs);
 
 The two are deliberately distinct:
 
-- A **received response with unmet criteria** is a normal outcome — `successful: false`, no throw.
-- **Malformed input** throws an `ExecutionError` (a step with no operation target, more than one mutually-exclusive target, a `workflowId` step, or an operation that cannot be located).
+- A **received response with unmet criteria** is a normal outcome: `successful: false`, no throw.
+- **Malformed input** throws an `ExecutionError` (a step with no operation target, more than one
+  mutually-exclusive target, a `workflowId` step, or an operation that cannot be located).
 
 ## `OpenAPIOperationExecutor`
 
-Executes a single OpenAPI operation and returns its raw response. It is **Arazzo-agnostic**: it neither locates the operation nor resolves runtime expressions. Given a canonical locator (`{ document, jsonPointer }`) it extracts the operation from its owning document, normalizes it, assembles a minimal standalone OpenAPI document containing just that operation, builds a client for the assembled document, and executes it.
+Executes a single OpenAPI operation and returns its normalized response. It is **Arazzo-agnostic**:
+it neither locates the operation nor resolves runtime expressions. Given a canonical locator
+(`{ document, jsonPointer }`) it runs a three-stage pipeline:
 
-`OpenAPIOperationExecutor` is the seam between the runner and any OpenAPI client implementation. It builds its client through the injected `clientFactory`, so a different HTTP stack (or a deterministic stub in tests) can be dropped in without touching the runner.
+1. **build**: extracts the operation from its owning document, normalizes it, assembles a minimal
+   standalone OpenAPI document containing just that operation, and builds the HTTP request from it:
+   parameter serialization (style/explode), security application, and server resolution, across
+   OpenAPI 2.0 through 3.1;
+2. **send**: hands the built request to the pluggable `httpClient` transport (global fetch by
+   default);
+3. **normalize**: deserializes the raw WHATWG `Response` by content type into the runner's
+   `OpenAPIOperationResponse`, the model runtime expressions and criteria see.
 
-Because it is Arazzo-agnostic, it can be used **standalone** — with only an OpenAPI document and an `operationId`, no Arazzo workflow involved. The operation index on the loaded document maps an `operationId` to its JSON Pointer, which is all a locator needs:
+Because the executor builds the request explicitly and holds it, the response carries the request
+**as actually sent** (`response.request`): final URL, method, headers, and serialized body. That way
+`$url` / `$method` / `$request.*` are evaluated against reality, not intent.
+
+A step's `requestBody` works the same against every supported version, including Swagger 2.0, which
+has no request-body concept and carries the payload as a declared `body` or `formData` parameter
+instead. Its `contentType` is matched ignoring media-type parameters, so
+`application/json; charset=utf-8` names a declared `application/json`; one the operation does not
+declare raises a `ClientError` rather than sending an empty body.
+
+### Choosing the server
+
+By default the request goes to the first server the operation declares (for Swagger 2.0, the
+document's `schemes` + `host` + `basePath`), with a relative server resolved against the URL the
+document itself was loaded from. That covers the common case with no options at all.
+
+**`server`** changes where it goes, and does double duty:
 
 ```js
-import {
-  DocumentRegistry,
-  OpenAPIOperationExecutor,
-  OpenAPIClientSwagger,
-} from '@usearazzo/runner';
+// selection: the value matches a declared server, so its variable defaults
+// come along and only the ones you name are overridden
+await executor.execute(locator, {
+  server: 'https://{region}.example.com/{basePath}', // the raw template, as declared
+  serverVariables: { region: 'us' }, // basePath keeps its declared default
+});
+
+// override: the value matches nothing declared, so it simply is the base URL
+await executor.execute(locator, { server: 'https://staging.internal.test/api' });
+```
+
+There is deliberately **no silent fallback**: a `server` matching nothing declared is never quietly
+swapped for the first declared one. The URL you name is the URL that gets called, so a typo fails
+loudly at the network rather than succeeding against the wrong host. An override replaces the
+declared base path along with the host, so include it (`…/api/v3`) if the API expects one.
+Overriding works on Swagger 2.0 too; selection and `serverVariables` are 3.x-only, since 2.0 has no
+server list and no URL templates.
+
+Relative servers resolve against the URL the document was loaded from, which the executor already
+knows, so a document fetched from `https://petstore3.swagger.io/api/v3/openapi.json` declaring
+`servers: [{ url: '/api/v3' }]` needs no configuration at all. For a document loaded from disk, give
+`server` an absolute URL.
+
+### The `HTTPClient` seam
+
+The transport is the extension point, and its contract is deliberately minimal: a function from the
+built request to a WHATWG `Response`. The default, exported as `httpClientFetch`, is global fetch in
+one line (`(request) => fetch(request.url, request)`) and is used when no `httpClient` is given:
+
+```js
+import { fetch, Agent } from 'undici';
+import { OpenAPIOperationExecutor } from '@usearazzo/runner';
+
+// the default transport, no configuration needed
+const executor = new OpenAPIOperationExecutor();
+
+// any HTTP stack drops in with a few lines: here undici with a dispatcher the
+// global fetch cannot take (connection-pool tuning, a proxy, client certificates)
+const dispatcher = new Agent({ connections: 128, keepAliveTimeout: 60_000 });
+
+const pooledExecutor = new OpenAPIOperationExecutor({
+  httpClient: (request) => fetch(request.url, { ...request, dispatcher }),
+});
+
+// or serve canned responses in a test: no network, no interception hooks
+const offlineExecutor = new OpenAPIOperationExecutor({
+  httpClient: async () =>
+    new Response('[{"id":1,"status":"available"}]', {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }),
+});
+```
+
+`httpClientFetch` is exported so a transport that only wants to add behavior around the network call
+can delegate to it rather than re-implement fetch.
+
+The contract:
+
+- resolve with a `Response` for **every** HTTP status: a non-2xx is a valid Arazzo outcome judged by
+  a step's `successCriteria`, never an error;
+- throw only on genuine transport failure: the executor wraps it as a `ClientError` carrying the
+  original error as `cause`;
+- honor `request.signal` when present.
+
+Response normalization runs on the executor's side of the seam for every client, so `$response.body`
+semantics stay identical no matter which transport is plugged in.
+
+### Request decoration (and authentication)
+
+Arazzo is auth-agnostic (a workflow document says nothing about credentials), so the runner does not
+model authentication either. Credentials are applied by decorating the outgoing request with a
+`requestInterceptor`, which runs after the request is built and before it is sent, may be
+synchronous or asynchronous, and may mutate the request or return (or resolve with) a replacement:
+
+```js
+const executor = new OpenAPIOperationExecutor({
+  requestInterceptor: async (request) => {
+    request.headers.Authorization = `Bearer ${await acquireToken()}`;
+  },
+});
+```
+
+A per-call `requestInterceptor` can also ride in the execute options bag; it runs after the
+executor-level one.
+
+Because the interceptor sets headers directly, it works regardless of how (or whether) the OpenAPI
+document declares its security schemes. If you'd rather have credentials applied _from_ those
+declarations, placed in the header, query, or cookie each scheme prescribes, `buildRequest`'s
+`securities` option still passes through the execute options bag untouched; it is simply not part of
+the typed surface.
+
+Decoration via the interceptor, rather than inside a custom `httpClient`, is what makes the edits
+part of the request record: the executor captures `response.request` (which feeds `$request.*` and
+the trace) after the interceptors run and before the transport is called, so transport-side changes
+are deliberately invisible to it.
+
+### Standalone use
+
+Because it is Arazzo-agnostic, the executor can be used **standalone**: with only an OpenAPI
+document and an `operationId`, no Arazzo workflow involved. The operation index on the loaded
+document maps an `operationId` to its JSON Pointer, which is all a locator needs:
+
+```js
+import { DocumentRegistry, OpenAPIOperationExecutor } from '@usearazzo/runner';
 
 const registry = new DocumentRegistry();
 const openapiDoc = await registry.acquire('https://petstore3.swagger.io/api/v3/openapi.json');
 
 // build a canonical { document, jsonPointer } locator straight from the OpenAPI
-// document — the operation index resolves an operationId to its JSON Pointer.
+// document; the operation index resolves an operationId to its JSON Pointer.
 const locator = {
   document: openapiDoc,
   jsonPointer: openapiDoc.operationIndex.get('findPetsByStatus'),
 };
 
-const executor = new OpenAPIOperationExecutor({
-  clientFactory: (document) => new OpenAPIClientSwagger(document),
-});
+const executor = new OpenAPIOperationExecutor();
 
-const response = await executor.execute(locator, {
-  parameters: { status: 'available' },
-  contextUrl: 'https://petstore3.swagger.io', // base URL for the operation's relative server
-});
+// the operation's relative server resolves against the URL the document was
+// loaded from, so there is nothing to configure.
+const response = await executor.execute(locator, { parameters: { status: 'available' } });
 
 console.log(response.status, response.body);
+console.log(response.request.url); // the URL as actually sent
 ```
 
-A non-2xx response is returned as data, not thrown — whether it counts as success is judged (by a step's `successCriteria`) one level up. Malformed input (an unlocatable operation, an unsupported OpenAPI version) throws, as do genuine transport failures surfaced by the client (`OpenAPIClientSwagger` raises a `ClientError` when no response comes back at all).
+A non-2xx response is returned as data, not thrown; whether it counts as success is judged one level
+up, by a step's `successCriteria`. Everything else throws with a named reason: malformed input (an
+unlocatable operation, an unsupported OpenAPI version), a request that cannot be built (e.g. a
+missing required parameter), and transport failures. The latter two arrive as `ClientError`.

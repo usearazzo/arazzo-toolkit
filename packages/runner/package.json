@@ -18,6 +18,9 @@
   },
   "type": "module",
   "sideEffects": false,
+  "engines": {
+    "node": ">=20.10.0"
+  },
   "unpkg": "./dist/arazzo-runner.browser.min.js",
   "main": "./src/index.cjs",
   "exports": {
@@ -68,6 +71,7 @@
     "@xmldom/xmldom": "^0.9.10",
     "fontoxpath": "^3.34.0",
     "ramda": "^0.32.0",
+    "ramda-adjunct": "^6.1.0",
     "type-fest": "^5.4.4"
   },
   "files": [
