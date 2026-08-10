@@ -127,6 +127,9 @@ describe('WorkflowExecutor', function () {
       }),
       sleep: async (ms) => {
         sleeps.push(ms);
+        // the fake timer advances the fake clock, so a duration that includes a
+        // retry wait is distinguishable from one that excludes it.
+        time += ms;
       },
       now: () => time,
       ...executorOptions,
@@ -184,16 +187,20 @@ describe('WorkflowExecutor', function () {
     });
 
     specify('should cover every attempt of a retried step, waits included', async function () {
-      // fails twice then succeeds: 3 requests at 100ms, all charged to the one
-      // step record.
-      const { executor } = makeExecutor([serverErrorResponse, serverErrorResponse, okResponse], {
-        tickMs: 100,
-      });
+      // fails twice then succeeds: 3 requests at 100ms plus the two 2s retryAfter
+      // waits, all charged to the one step record.
+      const { executor, sleeps } = makeExecutor(
+        [serverErrorResponse, serverErrorResponse, okResponse],
+        { tickMs: 100 },
+      );
 
       const result = await executor.execute('retryThenSucceed');
 
       assert.strictEqual(result.steps[0].attempts, 3);
-      assert.strictEqual(result.steps[0].durationMs, 300);
+      // the waits are the bulk of it — excluding them would leave just 300.
+      assert.deepEqual(sleeps, [2000, 2000]);
+      assert.strictEqual(result.steps[0].durationMs, 4300);
+      assert.strictEqual(result.durationMs, 4300);
     });
   });
 

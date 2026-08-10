@@ -123,9 +123,18 @@ existing suite.
 
 **Delivered:**
 
-- `execute` delegates to a private `#run(workflowId, inputs, executeOptions, frame)`
-  per §4c; `frame = { callStack, depth, budget }` threaded per run (never on the
-  instance — reentrancy).
+- `execute` delegates to a private `#run(workflowId, inputs, scope, frame, via)`
+  per §4c, with two threaded values rather than one (never on the instance —
+  reentrancy):
+  - `frame = { callStack, depth }` — the **per-call** position in the call tree,
+    an immutable value rebuilt for each nested call, so unwinding is implicit;
+  - `scope` — the **per-run** state every invocation in the tree shares: the
+    caller's options plus the two mutable ledgers that must span it, `budget`
+    and the completed-dependency map.
+
+  The split is the point: sibling calls each get their own frame while all of
+  them charge one budget, which is what makes the ceiling hold across the tree
+  without giving up immutable call frames.
 - **Shared budget across the tree** (issue `#29`, decided: global): the existing
   `budget` (operation-execution counter) moves into the frame, so one `maxSteps`
   bounds the *whole* recursion — a sub-workflow spinning on `goto`/`retry` must

@@ -545,10 +545,16 @@ class WorkflowExecutor {
       const memoized = scope.dependencyRuns.get(dependencyId);
       const result = memoized ?? (await this.#run(dependencyId, inputs, scope, frame, 'dependsOn'));
       results.push(result);
+      // recorded whether or not it completed: a failed prerequisite still
+      // resolved (possibly partial) outputs, and the parent resolves its own
+      // outputs against this state on its way out, so `$workflows.{id}` is
+      // uniformly readable for every dependency that ran.
+      state.setWorkflow(dependencyId, { inputs, outputs: result.outputs });
       if (result.status === 'failed') return results;
 
+      // only a *completed* dependency is remembered as satisfied — a failure must
+      // never let a later dependent skip running it.
       scope.dependencyRuns.set(dependencyId, result);
-      state.setWorkflow(dependencyId, { inputs, outputs: result.outputs });
     }
     return results;
   }
@@ -581,15 +587,24 @@ class WorkflowExecutor {
     }
 
     const subWorkflowId = this.#subWorkflowId(step, stepId, workflowId);
-    return async () => {
-      // the sub-workflow's inputs come from the step's parameters, mapped by
-      // name — a workflowId step's parameters carry no `in`, being inputs to a
-      // workflow rather than parts of a request.
-      const preContext = state.toContext();
-      const inputs = this.#parameterResolver.resolve(step.parameters, (expression) =>
-        this.#evaluate(preContext, expression),
-      );
+    // the sub-workflow's inputs come from the step's parameters, mapped by name —
+    // a workflowId step's parameters carry no `in`, being inputs to a workflow
+    // rather than parts of a request.
+    //
+    // Resolved once here, against the state as the step is entered, rather than
+    // per attempt: a retry re-runs *this* invocation of the step, so it must
+    // re-run it with the inputs it was invoked with. Resolving inside the attempt
+    // would read a state that each attempt has already written its own
+    // `$workflows.{subWorkflowId}` into, so a parameter reading that entry would
+    // drift from one attempt to the next. An operation step's parameters are
+    // likewise identical across attempts — there, because nothing mutates the
+    // state mid-retry.
+    const preContext = state.toContext();
+    const inputs = this.#parameterResolver.resolve(step.parameters, (expression) =>
+      this.#evaluate(preContext, expression),
+    );
 
+    return async () => {
       const result = await this.#run(subWorkflowId, inputs, scope, frame, 'step');
       subWorkflows.push(result);
       state.setWorkflow(subWorkflowId, { inputs, outputs: result.outputs });

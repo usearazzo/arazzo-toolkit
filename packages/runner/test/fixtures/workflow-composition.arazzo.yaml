@@ -68,13 +68,55 @@ workflows:
           - name: petId
             value: "8"
 
-  # a child that always fails its criteria (driven by a 500 response).
+  # a child that always fails its criteria (driven by a 500 response). It still
+  # resolves outputs — a failed run's outputs are resolved like any other.
   - workflowId: failingChild
     steps:
       - stepId: doomed
         operationId: getInventory
         successCriteria:
           - condition: $statusCode == 200
+        outputs:
+          status: $statusCode
+    outputs:
+      status: $steps.doomed.outputs.status
+
+  # a child that fails, echoing back the input it was given so each attempt's
+  # inputs are observable, and offering an output the caller's parameter reads.
+  - workflowId: echoFailing
+    inputs:
+      type: object
+      properties:
+        status:
+          type: string
+    steps:
+      - stepId: only
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          echoed: $inputs.status
+          nextStatus: sold
+    outputs:
+      echoed: $steps.only.outputs.echoed
+      nextStatus: $steps.only.outputs.nextStatus
+
+  # the calling step's parameter reads the sub-workflow's own recorded outputs,
+  # which the first attempt writes. Resolving inputs per attempt would therefore
+  # hand the retry a different status ("sold") than the first attempt got
+  # (nothing recorded yet); a retry re-runs the step as it was entered, so both
+  # attempts must see the inputs resolved before the first one.
+  - workflowId: retriesChildStableInputs
+    steps:
+      - stepId: child
+        workflowId: echoFailing
+        parameters:
+          - name: status
+            value: $workflows.echoFailing.outputs.nextStatus
+        onFailure:
+          - name: tryAgain
+            type: retry
+            retryLimit: 1
 
   # a failing sub-workflow takes the step's failure path: the retry re-runs the
   # whole child, once per attempt.
@@ -250,6 +292,8 @@ workflows:
           - name: petId
             in: path
             value: "7"
+    outputs:
+      fromFailed: $workflows.failingChild.outputs.status
 
   # a cycle formed purely by dependsOn edges.
   - workflowId: depCycleA

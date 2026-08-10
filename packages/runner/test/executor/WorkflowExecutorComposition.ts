@@ -191,6 +191,25 @@ describe('WorkflowExecutor composition', function () {
       assert.strictEqual(subWorkflowsOf(result.steps[0]).length, 3);
     });
 
+    specify('should re-run a retried sub-workflow with the same inputs', async function () {
+      // the calling step's parameter reads the sub-workflow's own outputs, which
+      // the first attempt records — so resolving inputs per attempt would send a
+      // different status the second time round.
+      const { executor, calls } = makeExecutor(serverErrorResponse);
+
+      const result = await executor.execute('retriesChildStableInputs');
+
+      assert.strictEqual(result.steps[0].attempts, 2);
+      assert.strictEqual(calls.length, 2);
+      // each attempt echoes the input it ran with: both saw the inputs resolved
+      // before the first attempt, so the retry did not pick up "sold" from the
+      // outputs the first attempt recorded.
+      assert.deepEqual(
+        subWorkflowsOf(result.steps[0]).map((run) => run.outputs.echoed),
+        [undefined, undefined],
+      );
+    });
+
     specify('should charge sub-workflow attempts to the one shared budget', async function () {
       // three workflows one step deep: a per-invocation budget of 2 would let
       // this pass, a shared one must not.
@@ -337,6 +356,9 @@ describe('WorkflowExecutor composition', function () {
       assert.deepEqual(result.steps, []);
       assert.strictEqual(calls.length, 1);
       assert.strictEqual(dependenciesOf(result)[0].status, 'failed');
+      // the failed prerequisite is still recorded, so the failing parent's own
+      // outputs can read what it did resolve — uniform with a completed one.
+      assert.strictEqual(result.outputs.fromFailed, 500);
     });
 
     specify('should skip prerequisites when runDependencies is false', async function () {
