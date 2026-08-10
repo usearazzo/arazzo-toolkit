@@ -1,5 +1,5 @@
 import { assert } from 'chai';
-import { StepOnFailureElement, refractFailureAction } from '@speclynx/apidom-ns-arazzo-1';
+import { refractFailureAction, isFailureActionElement } from '@speclynx/apidom-ns-arazzo-1';
 
 import {
   StepRetryRunner,
@@ -16,9 +16,10 @@ describe('StepRetryRunner', function () {
    * refracted the same way `ActionResolver` hands them over.
    */
   const matched = (...actions: unknown[]): readonly SelectedAction[] =>
-    [
-      ...new StepOnFailureElement(actions.map((action) => refractFailureAction(action))),
-    ] as readonly SelectedAction[];
+    // filtered through the namespace predicate rather than cast: it narrows to
+    // the element type the runner expects and doubles as a check that each
+    // action actually refracted.
+    actions.map((action) => refractFailureAction(action)).filter(isFailureActionElement);
 
   /**
    * A step whose attempts follow `outcomes` — each entry says whether that
