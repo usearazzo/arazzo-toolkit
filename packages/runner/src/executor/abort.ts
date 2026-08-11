@@ -30,12 +30,24 @@ export interface AbortContext {
  * Duck-typed rather than `instanceof AbortSignal`: the bag is the caller's, and
  * a signal made in another realm (a worker, a test harness, a polyfill) must
  * still cancel the run.
+ *
+ * The whole surface the runner uses is required, not just `aborted`: what comes
+ * back is subscribed to as well as read (the abortable retry wait), so admitting
+ * a bare `{ aborted: false }` would trade a wrong-but-working run for a
+ * `TypeError` thrown from inside a `retryAfter` delay. Anything short of that
+ * surface is treated as no signal at all — the bag is open, and a value the
+ * runner cannot drive is not a cancellation.
  * @internal
  */
 export const readAbortSignal = (options: Record<string, unknown>): AbortSignal | undefined => {
-  const signal = options.signal;
+  const signal = options.signal as AbortSignal | undefined;
   if (typeof signal !== 'object' || signal === null) return undefined;
-  return typeof (signal as AbortSignal).aborted === 'boolean' ? (signal as AbortSignal) : undefined;
+
+  const usable =
+    typeof signal.aborted === 'boolean' &&
+    typeof signal.addEventListener === 'function' &&
+    typeof signal.removeEventListener === 'function';
+  return usable ? signal : undefined;
 };
 
 /**

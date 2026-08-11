@@ -713,6 +713,21 @@ describe('WorkflowExecutor', function () {
       assert.strictEqual(calls.length, 1);
     });
 
+    specify('should ignore a bag value that is not a usable signal', async function () {
+      // the bag is open, so anything may be under `signal`. A value the runner
+      // cannot subscribe to is not a cancellation: taking it for one would
+      // trade a working run for a TypeError thrown from inside a retry wait.
+      const { executor, calls } = makeExecutor();
+
+      const result = await executor.execute('linear', {
+        inputs: { status: 'available' },
+        executeOptions: { signal: { aborted: true } },
+      });
+
+      assert.strictEqual(result.status, 'completed');
+      assert.strictEqual(calls.length, 2);
+    });
+
     specify('should take precedence over a signal smuggled in executeOptions', async function () {
       const { executor, calls } = makeExecutor();
       const stale = new AbortController();
