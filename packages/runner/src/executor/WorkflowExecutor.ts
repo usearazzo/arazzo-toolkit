@@ -360,17 +360,21 @@ class WorkflowExecutor {
       // the sub-workflow runs this step produces — one per attempt, so a retried
       // sub-workflow step keeps every attempt's trace rather than only the last.
       const subWorkflows: WorkflowExecutionResult[] = [];
-      const attempt = this.#stepAttempt(step, stepId, invocation, scope, subWorkflows);
+      const runAttempt = this.#stepAttempt(step, stepId, invocation, scope, subWorkflows);
+      // the budget is charged inside the attempt itself, so the retry runner
+      // needs no notion of one: whatever re-invokes the step pays for it, and a
+      // spent budget throws before the step runs again.
+      const attempt = async (): Promise<StepAttemptOutcome> => {
+        this.#chargeBudget(scope, invocation, stepId);
+        return runAttempt();
+      };
 
       // the retry runner settles any `retry` actions, so `action` is the terminal
       // action a retry chain resolved to and `attempts` is how many times the step
-      // ran. Charging the run budget per attempt is handed to it as
-      // `beforeAttempt`, which is what bounds a runaway retry as well as a runaway
-      // goto loop or sub-workflow tree.
+      // ran.
       const { outcome, action, attempts } = await this.#retryRunner.run(attempt, {
         stepId,
         workflowId,
-        beforeAttempt: () => this.#chargeBudget(scope, invocation, stepId),
       });
       state.setStepOutputs(outcome.stepId, outcome.outputs);
       trace.push({

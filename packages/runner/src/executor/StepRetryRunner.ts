@@ -56,18 +56,12 @@ export interface StepRetryRunnerOptions {
 }
 
 /**
- * Which step is being run, and what the caller wants done before each attempt.
+ * Which step is being run — carried for diagnostics only.
  * @public
  */
 export interface StepRetryRunContext {
   readonly stepId: string;
   readonly workflowId: string;
-  /**
-   * Invoked before every attempt, including the first. Throwing from it aborts
-   * the step — this is how a caller charges (and enforces) a run budget without
-   * the retry runner knowing what a budget is.
-   */
-  readonly beforeAttempt?: () => void;
 }
 
 /**
@@ -85,7 +79,10 @@ export interface StepRetryRunContext {
  *
  * It is agnostic about what a step *is*: the caller supplies a thunk that runs one
  * attempt and returns its {@link StepAttemptOutcome}, which is what lets an
- * operation step and a sub-workflow step retry through identical machinery.
+ * operation step and a sub-workflow step retry through identical machinery. That
+ * thunk is also where a caller puts anything it wants done per attempt — charging
+ * a run budget, say — so this class needs no notion of one; a thunk that throws
+ * ends the step there, without further attempts.
  * @public
  */
 class StepRetryRunner {
@@ -121,8 +118,6 @@ class StepRetryRunner {
     let attempts = 0;
 
     for (;;) {
-      context.beforeAttempt?.();
-
       const outcome = await attempt();
       attempts += 1;
 

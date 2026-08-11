@@ -280,6 +280,25 @@ step-level goto-workflow; cross-document workflow refs. Workflow-level
   went public alongside `selectActions` for the same reason.
 - `dependsOn` prerequisites run _after_ `steps` is validated, so a malformed
   workflow throws before any prerequisite fires live requests.
+- Three collaborators were extracted from `WorkflowExecutor` after the feature
+  landed, on the line "rule systems out, orchestration in" — the executor keeps
+  the loop, the recursion and state writing, and delegates the three rule
+  systems that each have their own vocabulary. Together they took it from 944
+  lines (485 code) to ~700 (~340), and bought 35 tests for rules previously
+  reachable only by authoring a YAML fixture and driving it through a stub
+  transport:
+  - `StepRetryRunner` — the retry algorithm (per-action budgets keyed by element
+    identity, exhaustion fall-through, `retryAfter`). Driven by an attempt thunk,
+    so it knows nothing of steps; a caller charging a run budget does it inside
+    that thunk, so it knows nothing of budgets either.
+  - `WorkflowCallStack` — the chain of in-progress workflows as an immutable
+    value guarding its own invariants, so cycle and depth rules sit with the data
+    they constrain and unwinding needs no `try`/`finally`.
+  - `StepTransitionInterpreter` — §4's Success/Failure Action semantics as a pure
+    mapping from action to transition. The weakest of the three on its own terms
+    (no state, no invariant, and a module-level function would have given the
+    same testability); kept as a class because step-level goto-workflow lands
+    exactly here and will need a sub-workflow runner to delegate to.
 - A `retry` on a sub-workflow step re-runs that workflow's **steps**; its
   already-completed `dependsOn` prerequisites stay satisfied, since the
   completed-dependency memo spans the run. Retrying re-runs the work, not the

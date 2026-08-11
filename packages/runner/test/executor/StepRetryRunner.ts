@@ -194,54 +194,33 @@ describe('StepRetryRunner', function () {
     });
   });
 
-  context('beforeAttempt', function () {
-    specify('should run before every attempt, the first included', async function () {
+  context('an attempt that throws', function () {
+    specify('should propagate the error and stop retrying', function () {
+      // whatever the caller does per attempt — charging a run budget, say — it
+      // does inside the thunk, so a throw from there ends the step rather than
+      // being retried around.
       const { runner } = makeRunner();
-      const target = step([
-        {
-          successful: false,
-          matchedActions: matched({ name: 'again', type: 'retry', retryLimit: 2 }),
-        },
-      ]);
-      let charged = 0;
-
-      const result = await runner.run(target.attempt, {
-        ...runContext,
-        beforeAttempt: () => {
-          charged += 1;
-        },
-      });
-
-      assert.strictEqual(charged, result.attempts);
-      assert.strictEqual(charged, 3);
-    });
-
-    specify('should abort the step when it throws', async function () {
-      const { runner } = makeRunner();
+      const spent = new Error('budget spent');
+      let allowed = 2;
       const target = step([
         {
           successful: false,
           matchedActions: matched({ name: 'again', type: 'retry', retryLimit: 99 }),
         },
       ]);
-      const budget = new Error('budget spent');
-      let attemptsAllowed = 2;
+      const attempt = async (): Promise<StepAttemptOutcome> => {
+        if (allowed-- <= 0) throw spent;
+        return target.attempt();
+      };
 
-      let caught: unknown;
-      try {
-        await runner.run(target.attempt, {
-          ...runContext,
-          beforeAttempt: () => {
-            if (attemptsAllowed-- <= 0) throw budget;
-          },
-        });
-      } catch (error) {
-        caught = error;
-      }
-
-      assert.strictEqual(caught, budget);
-      // it stopped where the caller said, rather than running to retryLimit.
-      assert.strictEqual(target.calls, 2);
+      return runner.run(attempt, runContext).then(
+        () => assert.fail('expected the error to propagate'),
+        (error: unknown) => {
+          assert.strictEqual(error, spent);
+          // it stopped where the thunk said, not at retryLimit.
+          assert.strictEqual(target.calls, 2);
+        },
+      );
     });
   });
 
