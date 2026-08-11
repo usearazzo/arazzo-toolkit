@@ -1,10 +1,12 @@
 # WorkflowExecutor — implementation plan
 
-Status: partially implemented. The backbone landed in PR `#290` (branch
-`runner-workflow-executor`); the sections below are the full design, with an
-implementation-status summary next. Grounds on the merged StepExecutor (`#279`)
-and the Arazzo 1.0.1 spec (control-flow semantics quoted inline below). Target
-spec: 1.0.1, same as StepExecutor.
+Status: the design below is implemented, across three PRs — the backbone
+(`#290`), retry (`#2`), and sub-workflow steps + `dependsOn` (`#3`). §0 tracks
+what shipped, what deliberately still throws, and **what to build next**;
+the numbered sections after it are the design and its spec citations, kept
+because the reasoning outlives the code. Grounds on the merged StepExecutor
+(`#279`) and the Arazzo 1.0.1 spec (control-flow semantics quoted inline below).
+Target spec: 1.0.1, same as StepExecutor.
 
 ## 0. Implementation status
 
@@ -52,65 +54,6 @@ spec: 1.0.1, same as StepExecutor.
   (retries included), so it bounds a runaway `retry` as well as a runaway `goto`
   — previously it only counted outer step entries, leaving retry unbounded. For
   retry-free workflows the count is unchanged (attempts == entries).
-
-### Not yet implemented / missing
-
-Each currently **throws `ExecutionError`** rather than misbehaving (or is simply
-absent), and is scoped to a follow-up:
-
-- **`retry` with a `stepId` / `workflowId` reference** (§6) — "the reference is
-  executed and the context is returned, after which the current step is retried".
-  Throws `reason: 'retry-reference-unsupported'`; lands with sub-workflow / goto
-  support since it reuses that machinery.
-- **Step-level `goto` to a `workflowId`** (§4 note) — throws
-  `reason: 'goto-workflow-unsupported'`; land once one-way-vs-return semantics
-  are confirmed.
-- **Cross-document workflow refs** — `$sourceDescriptions.<name>.<workflowId>`
-  for sub-workflows / `dependsOn` throws `cross-document-workflow-unsupported`
-  (as of PR #3; same-document only). The parsing and loading halves already
-  exist — `ArazzoDocumentRegistryProvider` loads Arazzo source documents, and
-  `OpenAPIOperationLocatorNormalizer` already parses
-  `$sourceDescriptions.<name>.<reference>` and acquires the named source. **The
-  blocker is document scoping in the executors**, and it is a design change, not
-  a lookup:
-  - `WorkflowExecutor` holds one `#document`, used for the workflowIndex lookup,
-    extraction/normalization, and as the `$components` / `$sourceDescriptions`
-    base for every expression it evaluates. Running a foreign workflow means all
-    of those must follow _that_ workflow's document, so the document has to
-    become part of the per-invocation frame rather than instance state.
-  - Worse, `StepExecutor` is **injected pre-bound to a document** (the
-    collaborator seam from #34). A foreign workflow's steps would resolve their
-    `operationId`s against the _entry_ document's `sourceDescriptions` — wrong,
-    and silently so. Fixing it means either a per-call document argument on
-    `StepExecutor.execute` or injecting a `(document) => StepExecutor` factory —
-    a deliberate change to a seam we just settled.
-  - Cycle-detection keys must then become genuinely fully-qualified (the document
-    URI together with the workflowId), as §4c anticipated; today workflowId alone
-    is unambiguous precisely because a run cannot leave its document.
-
-  So: its own PR, sequenced after reference-retry or before it, but not folded
-  into either.
-
-- **Retry-reference target validation** — we intentionally do NOT validate the
-  `stepId` / `workflowId` a reference-retry points at before throwing
-  `retry-reference-unsupported`. Rejection is lazy (fire-time only, so an
-  unreachable reference-retry never fails an otherwise-valid run), and validating
-  the target belongs with the feature that consumes it, not its rejection:
-  - a `workflowId` reference may be cross-document (`$sourceDescriptions.<name>.<id>`),
-    so validating it needs the deferred cross-doc resolution above — can't be done
-    in isolation;
-  - a `stepId` reference _could_ be checked cheaply against the current workflow
-    (reusing `#indexOfStep`, same as `goto`), but validating only that half is a
-    lopsided contract, and the author can't act on "valid target, still
-    unsupported" anyway.
-    So both land with reference-retry (which reuses the sub-workflow / goto-workflow
-    machinery); until then the single `retry-reference-unsupported` throw is the
-    contract.
-- **Workflow-level `parameters`** (§7) — not implemented. Unlike actions, this is
-  a genuine per-parameter merge (by name+in, step overriding); would follow the
-  `defaultActions` pattern with a `StepExecutor` `additionalParameters` arg.
-- **e2e suite** (§10) — only the deterministic stub unit suite exists; a real
-  multi-step petstore run end-to-end is a separate opt-in follow-up.
 
 ### Shipped (PR `#3` — sub-workflow steps + dependsOn)
 
@@ -322,6 +265,120 @@ calling the same sub-workflow yield two distinct nested results, a retried
 asserted exactly via an injected `now`; `dependencyInputs` feeds a dependency
 (and a transitive one), `runDependencies: false` runs no deps and leaves
 `$workflows.<depId>` unresolved.
+
+### Not yet implemented / missing
+
+Each currently **throws `ExecutionError`** rather than misbehaving (or is simply
+absent), and is scoped to a follow-up:
+
+- **`retry` with a `stepId` / `workflowId` reference** (§6) — "the reference is
+  executed and the context is returned, after which the current step is retried".
+  Throws `reason: 'retry-reference-unsupported'`; lands with sub-workflow / goto
+  support since it reuses that machinery.
+- **Step-level `goto` to a `workflowId`** (§4 note) — throws
+  `reason: 'goto-workflow-unsupported'`; land once one-way-vs-return semantics
+  are confirmed.
+- **Cross-document workflow refs** — `$sourceDescriptions.<name>.<workflowId>`
+  for sub-workflows / `dependsOn` throws `cross-document-workflow-unsupported`
+  (as of PR #3; same-document only). The parsing and loading halves already
+  exist — `ArazzoDocumentRegistryProvider` loads Arazzo source documents, and
+  `OpenAPIOperationLocatorNormalizer` already parses
+  `$sourceDescriptions.<name>.<reference>` and acquires the named source. **The
+  blocker is document scoping in the executors**, and it is a design change, not
+  a lookup:
+  - `WorkflowExecutor` holds one `#document`, used for the workflowIndex lookup,
+    extraction/normalization, and as the `$components` / `$sourceDescriptions`
+    base for every expression it evaluates. Running a foreign workflow means all
+    of those must follow _that_ workflow's document, so the document has to
+    become part of the per-invocation frame rather than instance state.
+  - Worse, `StepExecutor` is **injected pre-bound to a document** (the
+    collaborator seam from #34). A foreign workflow's steps would resolve their
+    `operationId`s against the _entry_ document's `sourceDescriptions` — wrong,
+    and silently so. Fixing it means either a per-call document argument on
+    `StepExecutor.execute` or injecting a `(document) => StepExecutor` factory —
+    a deliberate change to a seam we just settled.
+  - Cycle-detection keys must then become genuinely fully-qualified (the document
+    URI together with the workflowId), as §4c anticipated; today workflowId alone
+    is unambiguous precisely because a run cannot leave its document.
+
+  So: its own PR, sequenced after reference-retry or before it, but not folded
+  into either.
+
+- **Retry-reference target validation** — we intentionally do NOT validate the
+  `stepId` / `workflowId` a reference-retry points at before throwing
+  `retry-reference-unsupported`. Rejection is lazy (fire-time only, so an
+  unreachable reference-retry never fails an otherwise-valid run), and validating
+  the target belongs with the feature that consumes it, not its rejection:
+  - a `workflowId` reference may be cross-document (`$sourceDescriptions.<name>.<id>`),
+    so validating it needs the deferred cross-doc resolution above — can't be done
+    in isolation;
+  - a `stepId` reference _could_ be checked cheaply against the current workflow
+    (reusing `#indexOfStep`, same as `goto`), but validating only that half is a
+    lopsided contract, and the author can't act on "valid target, still
+    unsupported" anyway.
+    So both land with reference-retry (which reuses the sub-workflow / goto-workflow
+    machinery); until then the single `retry-reference-unsupported` throw is the
+    contract.
+- **Workflow-level `parameters`** (§7) — not implemented. Unlike actions, this is
+  a genuine per-parameter merge (by name+in, step overriding); would follow the
+  `defaultActions` pattern with a `StepExecutor` `additionalParameters` arg.
+- **e2e suite** (§10) — only the deterministic stub unit suite exists; a real
+  multi-step petstore run end-to-end is a separate opt-in follow-up.
+
+### Next — what to build, and what each decision costs
+
+Everything above is done. This is the queue, ordered by what it would cost to do
+later rather than by appetite, so the sequencing argument is visible and can be
+overruled.
+
+**1. Cancellation / `AbortSignal` (issue `#28`).** The between-steps and
+between-retries check points, and making the retry `sleep` abortable, live in the
+loop that PR `#3` restructured — so this is cheapest while that restructure is
+fresh, and it slots into the per-call options bag PR `#3` introduced rather than
+needing its own. Also a prerequisite for any resume-from-checkpoint or durable
+runtime embedding. Needs one decision: the error and trace shape of an aborted
+run (`reason: 'aborted'` fits the named-reason discipline; what the partial trace
+contains is open).
+
+**2. Reference-retry.** A `retry` carrying a `stepId` / `workflowId` to run before
+retrying; currently `retry-reference-unsupported`. Small, and it reuses the
+sub-workflow machinery that just landed. The deferred target validation lands with
+it. One ambiguity to settle: "the reference is executed and the context is
+returned, after which the current step is retried" does not say whether the
+reference runs once per attempt or once per retry chain.
+
+**3. Step-level `goto` to a `workflowId`.** Confirmed a must-have. Blocked on
+semantics rather than on code: 1.0.1 calls `goto` "a one-way transfer of workflow
+control", which is ambiguous inside a running workflow (does control return?).
+Worth settling as a question to the specification maintainers before building,
+since guessing wrong is expensive to unwind. Expected shape: another `Transition`
+kind the executor acts on, leaving the interpreter pure (see
+`StepTransitionInterpreter`).
+
+**4. Cross-document workflow references.** The largest, because it is a design
+change rather than a lookup — the document must move into the per-invocation
+frame, and `StepExecutor`, injected pre-bound to one document, needs either a
+per-call document argument or a `(document) => StepExecutor` factory. Full
+analysis under "Cross-document workflow refs" above. Doing `#28` and
+reference-retry first costs nothing here; doing this first would make both of
+them rebase around a changed collaborator seam.
+
+**Independent of that order:** workflow-level `parameters` (open question #2), the
+opt-in e2e petstore suite (§10), issue `#35` (per-source-description `server` /
+`serverVariables`), issue `#36` (request provenance for `RequestInterceptor`), and
+an `executeAll()` for libopenapi-style batch semantics (§5's interpretation note).
+
+**Loose ends worth not losing:**
+
+- A pre-1.0 **API surface review**: PR `#3` established "internal" as a category
+  by unexporting three collaborators, but applied it only to those three. The
+  same question — published building block, or internal decomposition? — is
+  unasked for most of the barrel.
+- `StepAttemptOutcome` lives in `StepRetryRunner` while being produced by
+  `StepExecutor` and consumed by the executor's loop; its home is arbitrary and
+  is the one type placement worth revisiting.
+- The duplicated `#evaluate` runtime-expression bridge, identical in
+  `StepExecutor` and `WorkflowExecutor`, with nothing keeping the two in step.
 
 ## 1. Purpose & boundary
 
