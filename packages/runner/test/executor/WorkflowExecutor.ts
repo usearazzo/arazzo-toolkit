@@ -666,6 +666,57 @@ describe('WorkflowExecutor', function () {
       assert.deepEqual(sleeps, [2000]);
     });
 
+    specify('should not resolve a run abandoned during its last step', async function () {
+      // the transport here ignores the signal, which the HTTPClient contract
+      // permits — so the final step succeeds and no further boundary follows it.
+      // Without a closing check the run would hand back outputs the caller had
+      // already withdrawn from, and only for transports that ignore the signal.
+      const controller = new AbortController();
+      const { executor, calls } = makeExecutor(okResponse, {
+        onCall: () => {
+          if (calls.length === 2) controller.abort();
+        },
+      });
+
+      const error = await captureError(
+        executor.execute('linear', { inputs: { status: 'available' }, signal: controller.signal }),
+      );
+
+      assert.strictEqual(error.reason, 'aborted');
+      assert.strictEqual(error.workflowId, 'linear');
+      // both steps did run — this is the boundary after the last one.
+      assert.strictEqual(calls.length, 2);
+    });
+
+    specify('should name the workflow and chain for an abort mid-request', async function () {
+      // a transport that honors the signal rejects the request it was told to
+      // drop. StepExecutor turns that into the abort, but knows only the step;
+      // the run must still report which workflow, and the chain it sat in.
+      const controller = new AbortController();
+      const httpClient: HTTPClient = async () => {
+        controller.abort();
+        throw new DOMException('This operation was aborted', 'AbortError');
+      };
+      const executor = new WorkflowExecutor({
+        document: entry,
+        registry,
+        stepExecutor: new StepExecutor({
+          document: entry,
+          registry,
+          operationExecutor: new OpenAPIOperationExecutor({ httpClient }),
+        }),
+      });
+
+      const error = await captureError(
+        executor.execute('linear', { inputs: { status: 'available' }, signal: controller.signal }),
+      );
+
+      assert.strictEqual(error.reason, 'aborted');
+      assert.strictEqual(error.workflowId, 'linear');
+      assert.strictEqual(error.stepId, 'findPets');
+      assert.deepEqual(error.path, ['linear']);
+    });
+
     specify('should carry the abort reason as the error cause', async function () {
       const { executor } = makeExecutor();
       const controller = new AbortController();

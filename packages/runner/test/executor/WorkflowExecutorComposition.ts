@@ -457,9 +457,11 @@ describe('WorkflowExecutor composition', function () {
   });
 
   context('cancellation across the call tree', function () {
-    specify('should stop before the next prerequisite when aborted', async function () {
-      // aborted while setupA's only request is in flight: setupB must not be
-      // entered at all, and the dependent's own step never runs.
+    specify('should stop the prerequisite chain where the abort landed', async function () {
+      // aborted while setupA's only request is in flight. setupA is the deepest
+      // frame in progress, so its own closing boundary reports the run — naming
+      // where the run *was*, not the setupB it was about to enter. Neither
+      // setupB nor the dependent's own step runs.
       const controller = new AbortController();
       const { executor, calls } = makeExecutor(okResponse, {
         onCall: () => controller.abort(),
@@ -470,15 +472,17 @@ describe('WorkflowExecutor composition', function () {
       );
 
       assert.strictEqual(error.reason, 'aborted');
-      assert.strictEqual(error.workflowId, 'setupB');
+      assert.strictEqual(error.workflowId, 'setupA');
       // the chain, not just the leaf: the caller asked for `dependent`.
-      assert.deepEqual(error.path, ['dependent', 'setupB']);
+      assert.deepEqual(error.path, ['dependent', 'setupA']);
       assert.strictEqual(calls.length, 1);
     });
 
-    specify('should stop before the next sub-workflow call when aborted', async function () {
-      // two steps call the same child; the abort lands during the first call, so
-      // the second step is never attempted and the child runs once.
+    specify('should stop a sub-workflow tree where the abort landed', async function () {
+      // two steps call the same child; the abort lands during the first call.
+      // The sub-run stops at its own closing boundary and the calling step names
+      // it — `first`, the step that was in progress, not the `second` that never
+      // began. The child runs once.
       const controller = new AbortController();
       const { executor, calls } = makeExecutor(okResponse, {
         onCall: () => controller.abort(),
@@ -490,7 +494,7 @@ describe('WorkflowExecutor composition', function () {
 
       assert.strictEqual(error.reason, 'aborted');
       assert.strictEqual(error.workflowId, 'callsChildTwice');
-      assert.strictEqual(error.stepId, 'second');
+      assert.strictEqual(error.stepId, 'first');
       assert.strictEqual(calls.length, 1);
     });
   });

@@ -165,10 +165,10 @@ class StepExecutor {
    * take precedence over it.
    *
    * A `signal` in that bag is honored here and not only at the transport: an
-   * already-aborted signal throws `reason: 'aborted'` instead of sending a
-   * request that would be cancelled on the wire — which would surface as a
-   * transport {@link ClientError} and be judged by `successCriteria` as if the
-   * API had refused.
+   * already-aborted signal throws `reason: 'aborted'` instead of issuing a
+   * request nobody is waiting for, whose wire-level cancellation would surface
+   * as a transport {@link ClientError} — a request that failed on its own terms
+   * — rather than as the withdrawal it is.
    *
    * `defaultActions` are the workflow-level `successActions` / `failureActions`
    * the step falls back to when it declares no `onSuccess` / `onFailure` of its

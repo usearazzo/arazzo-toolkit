@@ -352,7 +352,8 @@ The two are deliberately distinct:
   mutually-exclusive target, a `workflowId` step, or an operation that cannot be located).
 - A **cancelled run** throws too (`reason: 'aborted'`): an `AbortSignal` passed as `signal` in the
   execute options is checked before the request is dispatched, so an already-aborted run does not
-  send a request whose wire-level cancellation would then be judged like a refusal from the API.
+  issue a request nobody is waiting for — and a request the transport drops mid-flight is reported
+  as the cancellation rather than as the `ClientError` a request failing on its own terms raises.
 
 ## `OpenAPIOperationExecutor`
 

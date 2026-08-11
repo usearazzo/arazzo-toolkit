@@ -287,8 +287,15 @@ refused.
   when both are given. Read at the run boundary rather than at each dispatch,
   the pre-option idiom cancels a whole run instead of half of one.
 - Observed at every boundary in the call tree: entering a workflow (so a
-  sub-workflow call or the next `dependsOn` prerequisite is not started), and
-  before every step attempt. The per-attempt check rides the same seam as the
+  sub-workflow call or the next `dependsOn` prerequisite is not started), before
+  every step attempt, and on the way out of a workflow — nothing follows the
+  last step, so without that closing check a run abandoned while it was in
+  flight would resolve as though the caller had waited for it, and only under a
+  transport that ignores the signal. The error names where the run _was_ rather
+  than where it was heading: the deepest frame in progress reports it, and a
+  cancellation surfacing from inside a step is re-raised by the calling
+  workflow, which adds the workflowId and call chain the step executor has no
+  way to know. The per-attempt check rides the same seam as the
   budget charge, inside the thunk handed to `StepRetryRunner`, so it covers the
   boundary between two steps and between two attempts of one step alike.
 - `StepRetryRunner`'s `sleep` takes the signal (`(ms, signal?)`); the default
@@ -303,8 +310,9 @@ refused.
 - `StepExecutor` honors a `signal` in its execute options on its own account,
   checked immediately **before dispatch** rather than on entry: locating the
   operation and resolving the expressions are awaited, so an entry-only check
-  would still send a request that the transport then cancels — surfacing as a
-  transport `ClientError` and being judged like a refusal from the API.
+  would still issue a request nobody is waiting for, whose wire-level
+  cancellation surfaces as a transport `ClientError` rather than as the
+  withdrawal it is.
 - A request the transport drops mid-flight is reported as the abort, not as the
   `ClientError` reserved for a request that failed on its own terms: a
   signal-honoring transport (fetch, axios, undici) rejects what it was told to
@@ -335,7 +343,7 @@ transport's job, and the `HTTPClient` contract already asks for it ("honor
 `request.signal` when present"). A transport that ignores it costs one in-flight
 request; the run still stops at the next boundary.
 
-**Tests:** 17, across four suites. `WorkflowExecutor`: a pre-aborted signal
+**Tests:** 21, across four suites. `WorkflowExecutor`: a pre-aborted signal
 starts nothing (`path: ['linear']`, zero calls), an abort mid-request stops at
 the next step, an abort stops between two retry attempts (the injected sleep,
 which ignores the signal, still waited once), `cause` carries the abort reason,

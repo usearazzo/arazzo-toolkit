@@ -442,7 +442,9 @@ class WorkflowExecutor {
       // a declared prerequisite did not complete, so this workflow cannot be
       // processed. That is a runtime failure like any failing step — a `failed`
       // result carrying the dependency trace, not a throw — and none of its own
-      // steps run.
+      // steps run. Unless the run was cancelled, in which case the prerequisite
+      // did not fail on its own terms either.
+      throwIfAborted(scope.signal, { workflowId, callStack: nested });
       return this.#result(workflowId, workflow, state, [], 'failed', dependencies, startedAt);
     }
 
@@ -467,7 +469,17 @@ class WorkflowExecutor {
       const attempt = async (): Promise<StepAttemptOutcome> => {
         throwIfAborted(scope.signal, { workflowId, stepId, callStack: nested });
         this.#chargeBudget(scope, invocation, stepId);
-        return runAttempt();
+        try {
+          return await runAttempt();
+        } catch (error: unknown) {
+          // a cancellation noticed inside the step knows only which step it was
+          // — StepExecutor is handed no workflow and no call chain. Naming them
+          // here, where they are known, keeps the abort raised mid-request (the
+          // likeliest moment, since requests dominate a run's wall time) as
+          // informative as one raised between two attempts.
+          throwIfAborted(scope.signal, { workflowId, stepId, callStack: nested });
+          throw error;
+        }
       };
 
       // the retry runner settles any `retry` actions, so `action` is the terminal
@@ -504,6 +516,14 @@ class WorkflowExecutor {
         break;
       }
     }
+
+    // the closing boundary. Nothing follows the last step, so without a check
+    // here a run abandoned while that step was in flight would resolve as though
+    // the caller had waited for it — and whether it did would depend on the
+    // transport, since one honoring the signal fails the request instead.
+    // Cancellation must not be the one outcome that reads differently for the
+    // last step than for every step before it.
+    throwIfAborted(scope.signal, { workflowId, callStack: nested });
 
     return this.#result(workflowId, workflow, state, trace, status, dependencies, startedAt);
   }

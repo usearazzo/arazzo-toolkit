@@ -303,7 +303,7 @@ describe('StepExecutor', function () {
           /run aborted before step "findPets"/,
         );
         // nothing reached the transport: an aborted signal must not become a
-        // cancelled request judged like a refusal from the API.
+        // request issued only to be cancelled on the wire.
         assert.strictEqual(requests.length, 0);
       },
     );
