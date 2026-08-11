@@ -47,9 +47,9 @@ export interface StepTransitionContext {
  * - **`goto` a `workflowId`** — a transfer of control to another workflow, whose
  *   one-way-versus-return semantics are ambiguous in 1.0.1, so it is rejected
  *   rather than guessed at. This is where that support lands once the semantics
- *   are settled, and it is the reason this is a class rather than a bare
- *   function: transferring control needs a sub-workflow runner to delegate to,
- *   so the shape has somewhere to put one.
+ *   are settled: most likely as another `Transition` kind, leaving the running of
+ *   the target to the executor, since running workflows is orchestration rather
+ *   than policy.
  * - **anything else** — malformed input rather than a defined control flow.
  *   `retry` is the one action that never arrives here: it is settled by
  *   {@link StepRetryRunner}, which yields only the terminal action a retry chain

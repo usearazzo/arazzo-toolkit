@@ -295,10 +295,15 @@ step-level goto-workflow; cross-document workflow refs. Workflow-level
     value guarding its own invariants, so cycle and depth rules sit with the data
     they constrain and unwinding needs no `try`/`finally`.
   - `StepTransitionInterpreter` — §4's Success/Failure Action semantics as a pure
-    mapping from action to transition. The weakest of the three on its own terms
-    (no state, no invariant, and a module-level function would have given the
-    same testability); kept as a class because step-level goto-workflow lands
-    exactly here and will need a sub-workflow runner to delegate to.
+    mapping from action to transition. The weakest of the three on its own terms:
+    no state and no invariant to protect, and a module-level exported function
+    would have given the same testability. Kept as a class for consistency with
+    its two siblings and with the package's other stateless collaborators
+    (`ActionResolver`, `OutputResolver`, `CriterionEvaluator`), not out of
+    necessity — step-level goto-workflow lands in this code, but under
+    "policies out, orchestration in" it should arrive as another `Transition`
+    kind that the executor acts on, which a function would serve equally well.
+    Downgrading it to one later is a small change that keeps its tests.
 - A `retry` on a sub-workflow step re-runs that workflow's **steps**; its
   already-completed `dependsOn` prerequisites stay satisfied, since the
   completed-dependency memo spans the run. Retrying re-runs the work, not the
