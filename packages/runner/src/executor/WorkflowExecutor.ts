@@ -722,7 +722,7 @@ class WorkflowExecutor {
     // likewise identical across attempts — there, because nothing mutates the
     // state mid-retry.
     const preContext = state.toContext();
-    const inputs = this.#parameterResolver.resolve(step.parameters, (expression) =>
+    const inputs = this.#parameterResolver.resolveWorkflowInputs(step.parameters, (expression) =>
       this.#evaluate(preContext, expression),
     );
 

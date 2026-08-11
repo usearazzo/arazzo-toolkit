@@ -142,7 +142,9 @@ describe('ArazzoWorkflowNormalizer', function () {
     specify('should treat an absent location as its own identity', async function () {
       // a workflowId step's parameters are workflow inputs and carry no `in`, so
       // name alone decides there — while an `in`-carrying parameter of the same
-      // name remains a separate one.
+      // name remains a separate one. (The inherited input-shaped `token` is
+      // also inapplicable to this operation step — either way it must not
+      // displace the header one.)
       const [step] = await inherit(
         [
           { name: 'token', value: 'inherited-input' },
@@ -154,6 +156,68 @@ describe('ArazzoWorkflowNormalizer', function () {
       assert.deepEqual(step, [
         { name: 'token', value: 'own-input' },
         { name: 'token', in: 'header', value: 'inherited-header' },
+      ]);
+    });
+
+    specify(
+      'should not inherit an input-shaped parameter into an operation step',
+      async function () {
+        // a parameter without `in` is a workflow-input mapping; it names no
+        // request location, and planting it bare in an operation step's map
+        // would let it outrank the step's own qualified values (the client
+        // consults bare names first). The `in`-carrying sibling still arrives.
+        const [step] = await inherit(
+          [
+            { name: 'petId', value: '7' },
+            { name: 'status', in: 'query', value: 'available' },
+          ],
+          { stepId: 'a' },
+        );
+
+        assert.deepEqual(step, [{ name: 'status', in: 'query', value: 'available' }]);
+      },
+    );
+
+    specify(
+      'should leave a step untouched when nothing applicable remains to inherit',
+      async function () {
+        const [step] = await inherit([{ name: 'petId', value: '7' }], { stepId: 'a' });
+
+        assert.isUndefined(step);
+      },
+    );
+
+    specify('should inherit an input-shaped parameter into a workflowId step', async function () {
+      // for a step targeting a workflowId, "all parameters map to workflow
+      // inputs" — the input-shaped parameter is exactly what such a step
+      // consumes.
+      const workflow = refractWorkflow({
+        workflowId: 'w',
+        parameters: [{ name: 'petId', value: '7' }],
+        steps: [{ stepId: 'a', workflowId: 'other' }],
+      }) as WorkflowElement;
+
+      const normalized = await normalizer.normalize(workflow, entryDoc);
+
+      assert.deepEqual((toValue(normalized.steps) as { parameters?: unknown }[])[0].parameters, [
+        { name: 'petId', value: '7' },
+      ]);
+    });
+
+    specify('should still inherit a malformed location into an operation step', async function () {
+      // `in: 1` is not a location, but unlike an absent one it is an
+      // authoring error — carried across so the resolver reports it loudly
+      // rather than erased here, which would leave nothing to report.
+      const workflow = refractWorkflow({
+        workflowId: 'w',
+        parameters: [{ name: 'x', in: 1, value: 'v' }],
+        steps: [{ stepId: 'a', operationId: 'getInventory' }],
+      }) as WorkflowElement;
+
+      const normalized = await normalizer.normalize(workflow, entryDoc);
+
+      assert.deepEqual((toValue(normalized.steps) as { parameters?: unknown }[])[0].parameters, [
+        { name: 'x', in: 1, value: 'v' },
       ]);
     });
 

@@ -63,7 +63,13 @@ describe('StepExecutor', function () {
     // the resolver acquires the source description on demand — no pre-load.
   });
 
-  const makeExecutor = (
+  /**
+   * Builds a step executor for the given entry document, wired to a stub
+   * transport that records every request and resolves with a canned response.
+   */
+  const makeExecutorFor = (
+    document: ArazzoDocument,
+    documentRegistry: DocumentRegistry,
     respond: () => Response = okResponse,
   ): { executor: StepExecutor; requests: OpenAPIOperationRequest[] } => {
     const requests: OpenAPIOperationRequest[] = [];
@@ -72,9 +78,14 @@ describe('StepExecutor', function () {
       return respond();
     };
     const operationExecutor = new OpenAPIOperationExecutor({ httpClient });
-    const executor = new StepExecutor({ document: entry, registry, operationExecutor });
+    const executor = new StepExecutor({ document, registry: documentRegistry, operationExecutor });
     return { executor, requests };
   };
+
+  const makeExecutor = (
+    respond: () => Response = okResponse,
+  ): { executor: StepExecutor; requests: OpenAPIOperationRequest[] } =>
+    makeExecutorFor(entry, registry, respond);
 
   const state = () => new WorkflowExecutionState({ inputs: { preferredPetStatus: 'available' } });
 
@@ -400,19 +411,7 @@ describe('StepExecutor', function () {
     const makeDualExecutor = (): {
       executor: StepExecutor;
       requests: OpenAPIOperationRequest[];
-    } => {
-      const requests: OpenAPIOperationRequest[] = [];
-      const httpClient: HTTPClient = async (request) => {
-        requests.push(request);
-        return okResponse();
-      };
-      const executor = new StepExecutor({
-        document: dualEntry,
-        registry: dualRegistry,
-        operationExecutor: new OpenAPIOperationExecutor({ httpClient }),
-      });
-      return { executor, requests };
-    };
+    } => makeExecutorFor(dualEntry, dualRegistry);
 
     specify('should send both same-named parameters, each to its own place', async function () {
       // a parameter is unique by (name, in), so the operation legally declares
@@ -459,25 +458,22 @@ describe('StepExecutor', function () {
   });
 
   context('given a Swagger 2.0 source description', function () {
+    let registry2: DocumentRegistry;
+    let entry2: ArazzoDocument;
+
+    before(async function () {
+      registry2 = new DocumentRegistry();
+      entry2 = await registry2.acquireEntryDocument(
+        path.join(fixturesPath, 'petstore-order-workflow-2-0.arazzo.yaml'),
+      );
+    });
+
     specify("should send a step's request body to a 2.0 operation", async function () {
       // Arazzo expresses a payload only as `requestBody` — its parameter `in`
       // has no `body` value — so a step against a Swagger 2.0 source
       // description reaches the wire only if the operation executor routes the
       // payload to the declared body parameter.
-      const registry2 = new DocumentRegistry();
-      const entry2 = await registry2.acquireEntryDocument(
-        path.join(fixturesPath, 'petstore-order-workflow-2-0.arazzo.yaml'),
-      );
-      const requests: OpenAPIOperationRequest[] = [];
-      const httpClient: HTTPClient = async (request) => {
-        requests.push(request);
-        return okResponse();
-      };
-      const executor = new StepExecutor({
-        document: entry2,
-        registry: registry2,
-        operationExecutor: new OpenAPIOperationExecutor({ httpClient }),
-      });
+      const { executor, requests } = makeExecutorFor(entry2, registry2);
 
       const step = refractStep({
         stepId: 'placeOrder',
@@ -492,26 +488,13 @@ describe('StepExecutor', function () {
     });
 
     specify(
-      "should mix a step's qualified parameters with the adapted body parameter",
+      "should deliver a step's parameters alongside the adapted body parameter",
       async function () {
-        // the 2.0 body adaptation merges the payload under the declared body
-        // parameter's *bare* name, while the step's own parameters travel under
-        // '{in}.{name}' keys — the client accepts both shapes in one map, which
-        // this pins rather than leaves to luck.
-        const registry2 = new DocumentRegistry();
-        const entry2 = await registry2.acquireEntryDocument(
-          path.join(fixturesPath, 'petstore-order-workflow-2-0.arazzo.yaml'),
-        );
-        const requests: OpenAPIOperationRequest[] = [];
-        const httpClient: HTTPClient = async (request) => {
-          requests.push(request);
-          return okResponse();
-        };
-        const executor = new StepExecutor({
-          document: entry2,
-          registry: registry2,
-          operationExecutor: new OpenAPIOperationExecutor({ httpClient }),
-        });
+        // the 2.0 body adaptation delivers the payload under the declared body
+        // parameter's qualified 'body.{name}' key, next to the step's own
+        // '{in}.{name}' keys — one uniform shape, so a payload key cannot
+        // capture a same-named parameter in another location.
+        const { executor, requests } = makeExecutorFor(entry2, registry2);
 
         const step = refractStep({
           stepId: 'updateOrder',

@@ -16,6 +16,7 @@ import {
 import type { PartialDeep } from 'type-fest';
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
+import { parameterLocation } from '../document/parameter-location.ts';
 import NormalizationError from '../errors/NormalizationError.ts';
 import { providerOptionsOverride as arazzoProviderOptions } from '../registry/providers/ArazzoDocumentRegistryProvider.ts';
 
@@ -32,27 +33,20 @@ export type ArazzoWorkflowNormalizerOptions = PartialDeep<ApiDOMReferenceOptions
 const normalizerOptionsOverride = mergeOptions(arazzoProviderOptions as ApiDOMReferenceOptions, {});
 
 /**
- * Whether two Parameter Objects name the same location.
+ * Whether two Parameter Objects name the same location, read through the
+ * shared {@link parameterLocation} primitive.
  *
  * Absent on both sides is a match — that is the `workflowId` step case, where
- * parameters are workflow inputs with no location to pair the name with.
- * Otherwise both must be strings: a location that is present but not a string
- * (`in: 1`) is not a location, so two parameters carrying one are no more "the
- * same parameter" than two unnamed entries are, and deduplicating them would
- * drop authored content the same way.
+ * parameters are workflow inputs with no location to pair the name with. A
+ * malformed location (`in: 1`) reads as `null` and equals nothing, its own
+ * duplicate included: it is not a location, so two parameters carrying one are
+ * no more "the same parameter" than two unnamed entries are, and deduplicating
+ * them would drop authored content the same way.
  */
 const locationEquals = (parameter1: ParameterElement, parameter2: ParameterElement): boolean => {
-  const location1 = parameter1.in;
-  const location2 = parameter2.in;
-
-  if (location1 === undefined || location2 === undefined) {
-    return location1 === undefined && location2 === undefined;
-  }
-  return (
-    isStringElement(location1) &&
-    isStringElement(location2) &&
-    toValue(location1) === toValue(location2)
-  );
+  const location1 = parameterLocation(parameter1);
+  const location2 = parameterLocation(parameter2);
+  return location1 !== null && location2 !== null && location1 === location2;
 };
 
 /**
@@ -172,6 +166,16 @@ class ArazzoWorkflowNormalizer {
    * workflow-level `value` that is a runtime expression still be evaluated once
    * per step, against the state that step is entered with.
    *
+   * Not every workflow parameter is applicable to every kind of step. One
+   * without a location (`in`) is a workflow-input mapping — meaningful for a
+   * step targeting a `workflowId`, where "all parameters map to workflow
+   * inputs", but naming no place in a request — so it is inherited only into
+   * such steps. Inheriting it into an operation step would plant a bare-named
+   * value in the request-parameter map, and the client consults bare names
+   * before location-qualified ones, so it would silently outrank the step's own
+   * same-named parameters. The workflow's own `parameters` list is left intact;
+   * only the synthesized per-step copies are filtered.
+   *
    * A malformed `steps` or `parameters` is left for the executor to report as
    * the authoring error it is; there is nothing to inherit through it here, and
    * a step whose own `parameters` is present but not a list is skipped rather
@@ -180,7 +184,8 @@ class ArazzoWorkflowNormalizer {
    * *within* either list that is not a Parameter Object is carried across
    * untouched rather than filtered out, for the same reason: rebuilding a step's
    * list is no licence to drop what its author wrote, and `ParameterResolver`
-   * ignores it anyway.
+   * ignores it anyway. A parameter whose location is malformed (`in: 1`) is
+   * likewise carried, for the resolver to report loudly.
    */
   #inheritParametersToSteps(workflow: WorkflowElement): void {
     const inherited = workflow.parameters;
@@ -193,9 +198,17 @@ class ArazzoWorkflowNormalizer {
       if (!isStepElement(step)) continue;
       if (step.parameters !== undefined && !isArrayElement(step.parameters)) continue;
 
+      const applicable = isStringElement(step.workflowId)
+        ? inheritedParameters
+        : inheritedParameters.filter(
+            (parameter) =>
+              !isParameterElement(parameter) || parameterLocation(parameter) !== undefined,
+          );
+      if (applicable.length === 0) continue;
+
       const own = isArrayElement(step.parameters) ? [...step.parameters] : [];
       step.parameters = new StepParametersElement(
-        uniqWith(parameterEquals, [...own, ...inheritedParameters]),
+        uniqWith(parameterEquals, [...own, ...applicable]),
       );
     }
   }

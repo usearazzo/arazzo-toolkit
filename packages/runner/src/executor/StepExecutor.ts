@@ -209,8 +209,9 @@ class StepExecutor {
     // keyed by '{in}.{name}' rather than bare name, so two parameters that
     // legally differ only in their location each reach their own place.
     const preContext = state.toContext();
-    const parameters = this.#parameterResolver.resolveQualified(step.parameters, (expression) =>
-      this.#evaluate(preContext, expression),
+    const parameters = this.#parameterResolver.resolveRequestParameters(
+      step.parameters,
+      (expression) => this.#evaluate(preContext, expression),
     );
     const requestBody = this.#requestBodyResolver.resolve(step.requestBody, (expression) =>
       this.#evaluate(preContext, expression),

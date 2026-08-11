@@ -449,6 +449,13 @@ class OpenAPIOperationExecutor {
    * `querystring`, `header`, and `cookie`), which is why the translation lives
    * here, where the assembled document has those parameters dereferenced and
    * inherited.
+   *
+   * The payload travels under `'{in}.{name}'` keys (`body.{name}`,
+   * `formData.{name}`), not bare names. `buildRequest` consults a bare name
+   * *before* the qualified key of any declared parameter that bears it, so a
+   * bare payload key would capture a same-named parameter in another location
+   * — 2.0 legally declares e.g. `petId` in `path` and in `formData` at once,
+   * and the caller's own parameters arrive qualified.
    */
   #adaptRequestBody(
     buildOptions: Record<string, unknown>,
@@ -470,11 +477,11 @@ class OpenAPIOperationExecutor {
     ) as ParameterElement2[];
 
     // the body parameter's name is arbitrary, so the payload wins over a
-    // same-named entry the caller supplied
+    // same-keyed entry the caller supplied
     const body = parameters.find((parameter) => toValue(parameter.in) === 'body');
     if (body !== undefined) {
       const name = toValue(body.name) as string;
-      return { ...rest, parameters: { ...callerParameters, [name]: requestBody } };
+      return { ...rest, parameters: { ...callerParameters, [`body.${name}`]: requestBody } };
     }
 
     // formData models each field as its own parameter, so the payload's keys
@@ -488,7 +495,13 @@ class OpenAPIOperationExecutor {
           { operationPath: jsonPointer },
         );
       }
-      return { ...rest, parameters: { ...callerParameters, ...requestBody } };
+      const formParameters = Object.fromEntries(
+        Object.entries(requestBody as Record<string, unknown>).map(([field, value]) => [
+          `formData.${field}`,
+          value,
+        ]),
+      );
+      return { ...rest, parameters: { ...callerParameters, ...formParameters } };
     }
 
     throw new ClientError(

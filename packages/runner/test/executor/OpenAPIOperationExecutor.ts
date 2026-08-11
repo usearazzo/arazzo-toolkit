@@ -605,10 +605,11 @@ describe('OpenAPIOperationExecutor', function () {
     specify(
       'should spread a formData payload alongside qualified parameter keys',
       async function () {
-        // the formData adaptation spreads the payload's keys *bare* into the
-        // parameters map, next to the caller's '{in}.{name}' keys — the client
-        // resolves each declared parameter against either shape, which this
-        // pins rather than leaves to luck.
+        // the formData adaptation spreads the payload into the parameters map
+        // under qualified 'formData.{name}' keys, next to the caller's other
+        // '{in}.{name}' keys — one uniform shape, so a payload field cannot
+        // capture a same-named parameter in another location (2.0 legally
+        // declares e.g. petId in path and in formData at once).
         const formLocator = await locatorNormalizer2.normalizeOperationId(
           'updatePetWithForm',
           entry2,
