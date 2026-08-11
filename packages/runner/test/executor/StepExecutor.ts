@@ -283,6 +283,48 @@ describe('StepExecutor', function () {
     );
   });
 
+  context('cancellation', function () {
+    specify(
+      'should throw aborted rather than send an already-cancelled request',
+      async function () {
+        const step = refractStep({
+          stepId: 'findPets',
+          operationId: 'findPetsByStatus',
+          parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        }) as StepElement;
+        const { executor, requests } = makeExecutor();
+        const controller = new AbortController();
+        controller.abort();
+
+        await rejects(
+          executor.execute(step, state(), { signal: controller.signal }),
+          ExecutionError,
+          /run aborted before step "findPets"/,
+        );
+        // nothing reached the transport: an aborted signal must not become a
+        // cancelled request judged like a refusal from the API.
+        assert.strictEqual(requests.length, 0);
+      },
+    );
+
+    specify('should forward a live signal to the request it builds', async function () {
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+      }) as StepElement;
+      const { executor, requests } = makeExecutor();
+      const controller = new AbortController();
+
+      const result = await executor.execute(step, state(), { signal: controller.signal });
+
+      // a signal that has not fired changes nothing but still reaches the wire,
+      // so the transport can cancel the request in flight.
+      assert.isTrue(result.successful);
+      assert.strictEqual(requests[0].signal, controller.signal);
+    });
+  });
+
   context('given a Swagger 2.0 source description', function () {
     specify("should send a step's request body to a 2.0 operation", async function () {
       // Arazzo expresses a payload only as `requestBody` — its parameter `in`

@@ -27,6 +27,7 @@ import OpenAPIOperationLocatorNormalizer, {
   type OpenAPIOperationLocator,
 } from './OpenAPIOperationLocatorNormalizer.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
+import { readAbortSignal, throwIfAborted } from './abort.ts';
 
 /**
  * The mutually exclusive fields by which a step names its target. A step may
@@ -132,8 +133,9 @@ export interface StepExecutionResult {
  * targeting a `workflowId` (a sub-workflow) is not an operation step and throws
  * {@link ExecutionError}; running sub-workflows is the workflow executor's
  * concern. A received response with unmet criteria is a normal
- * `successful: false` outcome; only malformed input (e.g. an invalid criterion
- * or expression) throws.
+ * `successful: false` outcome; malformed input (e.g. an invalid criterion or
+ * expression) throws, as does a run the caller has cancelled through an
+ * `AbortSignal` in the execute options.
  * @public
  */
 class StepExecutor {
@@ -161,6 +163,12 @@ class StepExecutor {
    * (e.g. a `server` to run the step against, or an `AbortSignal`). The
    * Arazzo-derived options (`operationId`, `parameters`, `requestBody`) always
    * take precedence over it.
+   *
+   * A `signal` in that bag is honored here and not only at the transport: an
+   * already-aborted signal throws `reason: 'aborted'` instead of sending a
+   * request that would be cancelled on the wire — which would surface as a
+   * transport {@link ClientError} and be judged by `successCriteria` as if the
+   * API had refused.
    *
    * `defaultActions` are the workflow-level `successActions` / `failureActions`
    * the step falls back to when it declares no `onSuccess` / `onFailure` of its
@@ -205,6 +213,13 @@ class StepExecutor {
     const requestBody = this.#requestBodyResolver.resolve(step.requestBody, (expression) =>
       this.#evaluate(preContext, expression),
     );
+
+    // checked here rather than on entry: locating the operation and resolving
+    // the expressions above are awaited, so a run cancelled during them would
+    // still reach this line — and this is the last moment before the step has a
+    // live side effect. The signal stays in the bag, so a request already in
+    // flight is aborted by the transport as before.
+    throwIfAborted(readAbortSignal(executeOptions), { stepId });
 
     // the Arazzo-derived parameters and request body are spread after the opaque
     // executeOptions bag so they take precedence over it. the operation executor

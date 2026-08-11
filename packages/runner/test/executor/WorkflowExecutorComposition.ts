@@ -86,16 +86,20 @@ describe('WorkflowExecutor composition', function () {
    */
   const makeExecutor = (
     response: CannedResponse = okResponse,
-    options: { maxSteps?: number; maxWorkflowDepth?: number } = {},
+    options: { maxSteps?: number; maxWorkflowDepth?: number; onCall?: () => void } = {},
   ): {
     executor: WorkflowExecutor;
     calls: OpenAPIOperationRequest[];
     sleeps: number[];
   } => {
+    // `onCall` fires as each request is answered, which is how a test cancels a
+    // run from the outside at a known point in it.
+    const { onCall = (): void => {}, ...executorOptions } = options;
     const calls: OpenAPIOperationRequest[] = [];
     const sleeps: number[] = [];
     const httpClient: HTTPClient = async (request) => {
       calls.push(request);
+      onCall();
       return new Response(JSON.stringify(response.body), {
         status: response.status,
         statusText: response.statusText,
@@ -113,7 +117,7 @@ describe('WorkflowExecutor composition', function () {
       sleep: async (ms) => {
         sleeps.push(ms);
       },
-      ...options,
+      ...executorOptions,
     });
     return { executor, calls, sleeps };
   };
@@ -449,6 +453,45 @@ describe('WorkflowExecutor composition', function () {
 
       assert.strictEqual(error.reason, 'workflow-cycle');
       assert.deepEqual(error.path, ['crossA', 'crossB', 'crossA']);
+    });
+  });
+
+  context('cancellation across the call tree', function () {
+    specify('should stop before the next prerequisite when aborted', async function () {
+      // aborted while setupA's only request is in flight: setupB must not be
+      // entered at all, and the dependent's own step never runs.
+      const controller = new AbortController();
+      const { executor, calls } = makeExecutor(okResponse, {
+        onCall: () => controller.abort(),
+      });
+
+      const error = await captureError(
+        executor.execute('dependent', { signal: controller.signal }),
+      );
+
+      assert.strictEqual(error.reason, 'aborted');
+      assert.strictEqual(error.workflowId, 'setupB');
+      // the chain, not just the leaf: the caller asked for `dependent`.
+      assert.deepEqual(error.path, ['dependent', 'setupB']);
+      assert.strictEqual(calls.length, 1);
+    });
+
+    specify('should stop before the next sub-workflow call when aborted', async function () {
+      // two steps call the same child; the abort lands during the first call, so
+      // the second step is never attempted and the child runs once.
+      const controller = new AbortController();
+      const { executor, calls } = makeExecutor(okResponse, {
+        onCall: () => controller.abort(),
+      });
+
+      const error = await captureError(
+        executor.execute('callsChildTwice', { signal: controller.signal }),
+      );
+
+      assert.strictEqual(error.reason, 'aborted');
+      assert.strictEqual(error.workflowId, 'callsChildTwice');
+      assert.strictEqual(error.stepId, 'second');
+      assert.strictEqual(calls.length, 1);
     });
   });
 

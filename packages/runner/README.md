@@ -152,6 +152,7 @@ console.log(result.durationMs); // elapsed time for the whole run
 | `executeOptions`   | opaque bag forwarded to every step's operation (e.g. `server`, `requestInterceptor`) |
 | `dependencyInputs` | inputs for workflows run to satisfy `dependsOn`, keyed by workflowId                 |
 | `runDependencies`  | run this workflow's `dependsOn` workflows first (default `true`)                     |
+| `signal`           | an `AbortSignal` cancelling the run (see [Cancellation](#cancellation))              |
 
 The run state is created fresh per `execute` call and owned internally; the returned `result` is
 read-only. Every layer takes its collaborator rather than building one: `WorkflowExecutor` takes a
@@ -217,13 +218,46 @@ declares its own `onSuccess` / `onFailure` **overrides** the corresponding workf
 There is no per-action merge, and success and failure fall back independently (a step may override
 only its failure actions and still inherit the workflow's success actions).
 
+### Cancellation
+
+Pass an `AbortSignal` as `signal` to cancel a run:
+
+```js
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 5_000);
+
+const result = await executor.execute('authenticateAndOrderPet', {
+  inputs: { username: 'user1', password: 'secret' },
+  signal: controller.signal,
+});
+```
+
+The signal is observed at every boundary in the call tree — before each step, before each **retry
+attempt** of a step, before entering a sub-workflow or a `dependsOn` prerequisite — and during the
+`retryAfter` waits between attempts, which the default timer cuts short rather than sitting out. It
+is also forwarded to the transport, so the request in flight when the abort lands is cancelled
+rather than merely awaited (the `HTTPClient` contract asks every transport to honor
+`request.signal`). A transport that ignores it costs one in-flight request: the run still stops at
+the next boundary.
+
+An aborted run throws `ExecutionError` with `reason: 'aborted'`, naming the boundary it stopped at
+(`workflowId`, `stepId`, and the `path` of workflows in progress) and carrying the signal's own
+`reason` as the error's `cause`. It does **not** resolve as a `failed` result: cancellation is not
+something the steps did, and the steps that never ran were not decided against by any criteria.
+
+A `signal` passed through `executeOptions` instead — the only channel before this option existed —
+cancels the run just the same; the first-class option wins when both are given. `StepExecutor`
+honors a `signal` in its execute options when used on its own too, throwing `aborted` instead of
+dispatching a request that would be cancelled on the wire.
+
 ### Authoring errors vs. failed runs
 
 Same split as `StepExecutor`: a step whose `successCriteria` go unmet with no redirecting action is
 a normal `status: 'failed'` result, **not** a throw — as is a run whose `dependsOn` workflow failed.
-Only authoring errors throw `ExecutionError`: an unknown `workflowId` (`workflow-not-found`), a
-`goto` to a step that does not exist (`goto-target-not-found`), a `goto` naming neither `stepId` nor
-`workflowId` (`goto-target-missing`), an action of an unknown `type` (`unknown-action-type`), a
+Authoring errors throw `ExecutionError` — as does a cancelled run (`aborted`, above): an unknown
+`workflowId` (`workflow-not-found`), a `goto` to a step that does not exist
+(`goto-target-not-found`), a `goto` naming neither `stepId` nor `workflowId`
+(`goto-target-missing`), an action of an unknown `type` (`unknown-action-type`), a
 present but malformed `steps` or `dependsOn` (`malformed-steps`, `malformed-dependsOn`), a step
 naming more than one target (`ambiguous-target`), a cycle or over-deep nesting (`workflow-cycle`,
 `dependsOn-cycle`, `workflow-depth`), or the step-budget overflow above (`step-budget`).
@@ -311,6 +345,9 @@ The two are deliberately distinct:
 - A **received response with unmet criteria** is a normal outcome: `successful: false`, no throw.
 - **Malformed input** throws an `ExecutionError` (a step with no operation target, more than one
   mutually-exclusive target, a `workflowId` step, or an operation that cannot be located).
+- A **cancelled run** throws too (`reason: 'aborted'`): an `AbortSignal` passed as `signal` in the
+  execute options is checked before the request is dispatched, so an already-aborted run does not
+  send a request whose wire-level cancellation would then be judged like a refusal from the API.
 
 ## `OpenAPIOperationExecutor`
 

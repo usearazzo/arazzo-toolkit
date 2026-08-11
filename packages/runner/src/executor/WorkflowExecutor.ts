@@ -22,6 +22,7 @@ import WorkflowCallStack, { type WorkflowCallVia } from './WorkflowCallStack.ts'
 import StepTransitionInterpreter from './StepTransitionInterpreter.ts';
 import type { SelectedAction } from '../action/ActionResolver.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
+import { readAbortSignal, throwIfAborted } from './abort.ts';
 
 /**
  * Options for the WorkflowExecutor.
@@ -70,8 +71,12 @@ export interface WorkflowExecutorOptions {
    * Delays for the given number of milliseconds — awaited between a step's retry
    * attempts (`retryAfter`). Injected so tests pass a no-op and real runs delay;
    * defaults to a real timer.
+   *
+   * The run's {@link WorkflowExecuteOptions.signal} is forwarded to it, so the
+   * default timer stops waiting when the run is cancelled; an injected sleep
+   * that ignores it merely postpones the cancellation until its wait ends.
    */
-  readonly sleep?: (ms: number) => Promise<void>;
+  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /**
    * Reads the current time in milliseconds, used for the `durationMs` of each
    * run and step. Injected so tests assert exact durations; defaults to
@@ -122,6 +127,25 @@ export interface WorkflowExecuteOptions {
    * that workflow against state nobody claimed to have prepared.
    */
   readonly runDependencies?: boolean;
+  /**
+   * Cancels the run. Observed before every step attempt — including each retry,
+   * each sub-workflow step, and each `dependsOn` prerequisite — and during the
+   * `retryAfter` waits between attempts, so an aborted run stops at the next
+   * boundary rather than working its way to the end of the workflow.
+   *
+   * An aborted run throws {@link ExecutionError} with `reason: 'aborted'`,
+   * naming the boundary it stopped at and carrying the signal's own `reason` as
+   * the error's `cause`. It does not resolve as a `failed` result: cancellation
+   * is not something the steps did, and the steps that never ran were not
+   * decided against.
+   *
+   * The signal is also forwarded to the transport (through the same
+   * `executeOptions` bag it may be passed in), so the request in flight when the
+   * abort lands is cancelled rather than merely awaited. A `signal` passed in
+   * that bag instead is observed here too — it cancels the run just as this
+   * option does — and this option wins when both are given.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -194,6 +218,10 @@ interface RunScope {
   readonly dependencyInputs: Record<string, Record<string, unknown>>;
   readonly runDependencies: boolean;
   /**
+   * The caller's cancellation, checked at every boundary in the call tree.
+   */
+  readonly signal: AbortSignal | undefined;
+  /**
    * Step attempts spent so far, across every workflow in the tree.
    */
   readonly budget: { spent: number };
@@ -255,9 +283,11 @@ interface WorkflowInvocation {
  * State is created fresh per {@link WorkflowExecutor.execute} call — and per
  * workflow invocation within it — and owned here; the returned result is
  * read-only. Authoring errors (missing workflow, unknown `goto` target, a cycle,
- * budget overflow) throw {@link ExecutionError}; a step that legitimately fails
- * and breaks, or a dependency that fails, is a normal `status: 'failed'` result,
- * not a throw — the same split {@link StepExecutor} draws.
+ * budget overflow) throw {@link ExecutionError}, as does a run the caller
+ * cancels through {@link WorkflowExecuteOptions.signal}; a step that
+ * legitimately fails and breaks, or a dependency that fails, is a normal
+ * `status: 'failed'` result, not a throw — the same split {@link StepExecutor}
+ * draws.
  *
  * Not yet supported, throwing rather than behaving incorrectly: a step-level
  * `goto` to a workflow, a `retry` carrying a `stepId` / `workflowId` reference,
@@ -273,6 +303,7 @@ class WorkflowExecutor {
     'executeOptions',
     'dependencyInputs',
     'runDependencies',
+    'signal',
   ]);
 
   readonly #document: ArazzoDocument;
@@ -316,10 +347,20 @@ class WorkflowExecutor {
   ): Promise<WorkflowExecutionResult> {
     this.#rejectUnknownOptions(options);
 
+    // a signal in the opaque bag was the only channel before this option existed,
+    // and it still reaches the transport. Absorbing it here is what makes it a
+    // whole cancellation rather than half of one: read only at dispatch, it would
+    // abort requests while the loop walked on through the remaining steps.
+    const signal = options.signal ?? readAbortSignal(options.executeOptions ?? {});
     const scope: RunScope = {
-      executeOptions: options.executeOptions ?? {},
+      // the first-class signal is also spread into the opaque bag, because that
+      // bag is how anything reaches the transport: the executor's own checks
+      // stop the run at the next boundary, and this is what cancels the request
+      // already in flight. Spread last, so it wins over one passed in the bag.
+      executeOptions: { ...options.executeOptions, ...(signal === undefined ? {} : { signal }) },
       dependencyInputs: options.dependencyInputs ?? {},
       runDependencies: options.runDependencies ?? true,
+      signal,
       budget: { spent: 0 },
       dependencyRuns: new Map(),
       workflows: new Map(),
@@ -350,7 +391,7 @@ class WorkflowExecutor {
     if (unknown.length === 0) return;
 
     throw new ExecutionError(
-      `execute received unknown option(s) ${unknown.join(', ')}; it takes (workflowId, { inputs, executeOptions, dependencyInputs, runDependencies }) — workflow inputs go under "inputs"`,
+      `execute received unknown option(s) ${unknown.join(', ')}; it takes (workflowId, { inputs, executeOptions, dependencyInputs, runDependencies, signal }) — workflow inputs go under "inputs"`,
       { reason: 'unknown-execute-option' },
     );
   }
@@ -373,6 +414,11 @@ class WorkflowExecutor {
     // implicit — and a cycle or over-deep nesting throws here, before any of this
     // workflow's own work begins.
     const nested = callStack.enter(workflowId, via);
+    // the workflow boundary, checked in its own right and not only per step: a
+    // run cancelled before any step — or between a prerequisite and the workflow
+    // that needed it — must not go on to normalize and enter a workflow nobody
+    // is waiting for.
+    throwIfAborted(scope.signal, { workflowId, callStack: nested });
 
     const workflow = await this.#resolveWorkflow(workflowId, scope);
     const state = new WorkflowExecutionState({ inputs });
@@ -414,8 +460,12 @@ class WorkflowExecutor {
       const runAttempt = this.#stepAttempt(step, stepId, invocation, scope, subWorkflows);
       // the budget is charged inside the attempt itself, so the retry runner
       // needs no notion of one: whatever re-invokes the step pays for it, and a
-      // spent budget throws before the step runs again.
+      // spent budget throws before the step runs again. Cancellation rides the
+      // same seam — checked here, it covers the boundary between two steps and
+      // the one between two attempts of the same step alike, so a run abandoned
+      // mid-retry stops instead of spending the rest of the chain.
       const attempt = async (): Promise<StepAttemptOutcome> => {
+        throwIfAborted(scope.signal, { workflowId, stepId, callStack: nested });
         this.#chargeBudget(scope, invocation, stepId);
         return runAttempt();
       };
@@ -426,6 +476,7 @@ class WorkflowExecutor {
       const { outcome, action, attempts } = await this.#retryRunner.run(attempt, {
         stepId,
         workflowId,
+        signal: scope.signal,
       });
       state.setStepOutputs(outcome.stepId, outcome.outputs);
       trace.push({
