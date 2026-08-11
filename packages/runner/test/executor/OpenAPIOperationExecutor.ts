@@ -602,6 +602,35 @@ describe('OpenAPIOperationExecutor', function () {
       assert.strictEqual(requests[0].headers['Content-Type'], 'application/json');
     });
 
+    specify(
+      'should spread a formData payload alongside qualified parameter keys',
+      async function () {
+        // the formData adaptation spreads the payload's keys *bare* into the
+        // parameters map, next to the caller's '{in}.{name}' keys — the client
+        // resolves each declared parameter against either shape, which this
+        // pins rather than leaves to luck.
+        const formLocator = await locatorNormalizer2.normalizeOperationId(
+          'updatePetWithForm',
+          entry2,
+        );
+        const { executor, requests } = makeExecutor();
+
+        await executor.execute(formLocator, {
+          parameters: { 'path.petId': 42, 'header.x-trace': 'abc' },
+          requestBody: { name: 'Rex', status: 'sold' },
+          requestContentType: 'application/x-www-form-urlencoded',
+        });
+
+        assert.include(requests[0].url, '/pet/42/form');
+        assert.strictEqual(requests[0].headers['x-trace'], 'abc');
+        // the spread payload keys matched the declared formData parameters and
+        // were form-encoded into the body.
+        const body = new URLSearchParams(requests[0].body as string);
+        assert.strictEqual(body.get('name'), 'Rex');
+        assert.strictEqual(body.get('status'), 'sold');
+      },
+    );
+
     specify('should throw when the 2.0 operation declares no parameters at all', async function () {
       // an operation declaring none leaves `parameters` absent rather than
       // empty, which must still reach the "nothing can carry it" error.

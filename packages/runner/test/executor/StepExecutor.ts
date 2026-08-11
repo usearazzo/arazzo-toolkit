@@ -386,6 +386,78 @@ describe('StepExecutor', function () {
     });
   });
 
+  context('parameters differing only in location', function () {
+    let dualRegistry: DocumentRegistry;
+    let dualEntry: ArazzoDocument;
+
+    before(async function () {
+      dualRegistry = new DocumentRegistry();
+      dualEntry = await dualRegistry.acquireEntryDocument(
+        path.join(fixturesPath, 'dual-location-workflow.arazzo.yaml'),
+      );
+    });
+
+    const makeDualExecutor = (): {
+      executor: StepExecutor;
+      requests: OpenAPIOperationRequest[];
+    } => {
+      const requests: OpenAPIOperationRequest[] = [];
+      const httpClient: HTTPClient = async (request) => {
+        requests.push(request);
+        return okResponse();
+      };
+      const executor = new StepExecutor({
+        document: dualEntry,
+        registry: dualRegistry,
+        operationExecutor: new OpenAPIOperationExecutor({ httpClient }),
+      });
+      return { executor, requests };
+    };
+
+    specify('should send both same-named parameters, each to its own place', async function () {
+      // a parameter is unique by (name, in), so the operation legally declares
+      // `token` both as a header and as a query parameter — the step supplies
+      // both, and neither may silently shadow the other.
+      const step = refractStep({
+        stepId: 'fetch',
+        operationId: 'getThing',
+        parameters: [
+          { name: 'id', in: 'path', value: '7' },
+          { name: 'token', in: 'header', value: 'secret' },
+          { name: 'token', in: 'query', value: 'legacy' },
+        ],
+      }) as StepElement;
+      const { executor, requests } = makeDualExecutor();
+
+      const result = await executor.execute(step, state());
+
+      assert.isTrue(result.successful);
+      assert.include(requests[0].url, '/things/7');
+      assert.include(requests[0].url, 'token=legacy');
+      assert.strictEqual(requests[0].headers.token, 'secret');
+    });
+
+    specify('should serialize a parameter whose name contains a dot', async function () {
+      // `filter.name` is the parameter's whole name; the qualified key
+      // `query.filter.name` is matched verbatim against the declared (name, in)
+      // rather than split on a separator.
+      const step = refractStep({
+        stepId: 'fetch',
+        operationId: 'getThing',
+        parameters: [
+          { name: 'id', in: 'path', value: '7' },
+          { name: 'filter.name', in: 'query', value: 'rex' },
+        ],
+      }) as StepElement;
+      const { executor, requests } = makeDualExecutor();
+
+      const result = await executor.execute(step, state());
+
+      assert.isTrue(result.successful);
+      assert.include(requests[0].url, 'filter.name=rex');
+    });
+  });
+
   context('given a Swagger 2.0 source description', function () {
     specify("should send a step's request body to a 2.0 operation", async function () {
       // Arazzo expresses a payload only as `requestBody` — its parameter `in`
@@ -418,5 +490,46 @@ describe('StepExecutor', function () {
       assert.isTrue(result.successful);
       assert.deepEqual(JSON.parse(requests[0].body as string), { petId: 7, quantity: 1 });
     });
+
+    specify(
+      "should mix a step's qualified parameters with the adapted body parameter",
+      async function () {
+        // the 2.0 body adaptation merges the payload under the declared body
+        // parameter's *bare* name, while the step's own parameters travel under
+        // '{in}.{name}' keys — the client accepts both shapes in one map, which
+        // this pins rather than leaves to luck.
+        const registry2 = new DocumentRegistry();
+        const entry2 = await registry2.acquireEntryDocument(
+          path.join(fixturesPath, 'petstore-order-workflow-2-0.arazzo.yaml'),
+        );
+        const requests: OpenAPIOperationRequest[] = [];
+        const httpClient: HTTPClient = async (request) => {
+          requests.push(request);
+          return okResponse();
+        };
+        const executor = new StepExecutor({
+          document: entry2,
+          registry: registry2,
+          operationExecutor: new OpenAPIOperationExecutor({ httpClient }),
+        });
+
+        const step = refractStep({
+          stepId: 'updateOrder',
+          operationId: 'updateOrder',
+          parameters: [
+            { name: 'orderId', in: 'path', value: 42 },
+            { name: 'x-trace', in: 'header', value: 'abc' },
+          ],
+          requestBody: { contentType: 'application/json', payload: { petId: 7, quantity: 2 } },
+        }) as StepElement;
+
+        const result = await executor.execute(step, new WorkflowExecutionState({ inputs: {} }));
+
+        assert.isTrue(result.successful);
+        assert.include(requests[0].url, '/store/order/42');
+        assert.strictEqual(requests[0].headers['x-trace'], 'abc');
+        assert.deepEqual(JSON.parse(requests[0].body as string), { petId: 7, quantity: 2 });
+      },
+    );
   });
 });

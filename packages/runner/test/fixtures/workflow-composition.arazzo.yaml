@@ -93,6 +93,23 @@ workflows:
     outputs:
       childPetId: $workflows.fetchPet.inputs.petId
 
+  # the calling workflow declares a request-shaped `petId` (it carries an `in`)
+  # and the step calling the child declares nothing of its own. Per the
+  # specification "all parameters map to workflow inputs" for such a step, so
+  # the inherited parameter must arrive as an input under its bare name — not
+  # under a location-qualified key like `query.petId`, which an operation step
+  # would deliver it by.
+  - workflowId: inheritedRequestParameterAsInput
+    parameters:
+      - name: petId
+        in: query
+        value: "7"
+    steps:
+      - stepId: child
+        workflowId: fetchPet
+    outputs:
+      childPetId: $workflows.fetchPet.inputs.petId
+
   # two steps call the SAME child with different inputs — two distinct runs, so
   # neither trace may overwrite the other.
   - workflowId: callsChildTwice

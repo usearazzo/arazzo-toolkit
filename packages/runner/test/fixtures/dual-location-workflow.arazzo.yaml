@@ -1,0 +1,26 @@
+arazzo: "1.0.1"
+info:
+  title: Dual-location parameter workflows
+  version: "1.0.0"
+  summary: >-
+    Minimal entry document for steps against an operation that declares the
+    same parameter name in more than one location.
+sourceDescriptions:
+  - name: dualAPI
+    url: ./dual-location.openapi.json
+    type: openapi
+workflows:
+  - workflowId: fetchThing
+    steps:
+      - stepId: fetch
+        operationId: getThing
+        parameters:
+          - name: id
+            in: path
+            value: "7"
+          - name: token
+            in: header
+            value: $inputs.token
+          - name: token
+            in: query
+            value: $inputs.legacyToken

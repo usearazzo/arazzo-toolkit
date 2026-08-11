@@ -163,9 +163,10 @@ class ArazzoWorkflowNormalizer {
    * ahead of the Path Item's it inherits.
    *
    * That leading position is what makes the override effective and not merely
-   * present: {@link ParameterResolver} drops `in` when it keys the resolved
-   * values by name, so of two parameters differing only in `in` the earlier one
-   * survives — which must be the step's.
+   * present: {@link ParameterResolver} keys resolved values first-wins — by the
+   * same `(name, in)` identity for an operation step, and by bare name for a
+   * `workflowId` step's inputs — so wherever the two collapse to one key, the
+   * earlier survives, which must be the step's.
    *
    * Inheriting the elements here rather than the resolved values is what lets a
    * workflow-level `value` that is a runtime expression still be evaluated once

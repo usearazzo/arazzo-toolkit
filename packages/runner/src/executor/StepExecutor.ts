@@ -206,8 +206,10 @@ class StepExecutor {
     const locator = await this.#locateOperation(step, stepId);
 
     // resolve parameters and request body against the pre-request context.
+    // keyed by '{in}.{name}' rather than bare name, so two parameters that
+    // legally differ only in their location each reach their own place.
     const preContext = state.toContext();
-    const parameters = this.#parameterResolver.resolve(step.parameters, (expression) =>
+    const parameters = this.#parameterResolver.resolveQualified(step.parameters, (expression) =>
       this.#evaluate(preContext, expression),
     );
     const requestBody = this.#requestBodyResolver.resolve(step.requestBody, (expression) =>

@@ -181,6 +181,23 @@ describe('WorkflowExecutor composition', function () {
       },
     );
 
+    specify(
+      'should key an inherited request-shaped parameter as an input by bare name',
+      async function () {
+        const { executor, calls } = makeExecutor();
+
+        const result = await executor.execute('inheritedRequestParameterAsInput');
+
+        assert.strictEqual(result.status, 'completed');
+        // the inherited parameter carries `in: query`, but "all parameters map
+        // to workflow inputs" for a workflowId step — so the child receives it
+        // as the input `petId`, not under a `query.petId` key that would leave
+        // `$inputs.petId` unresolved.
+        assert.strictEqual(result.outputs.childPetId, '7');
+        assert.include(calls[0].url, '/pet/7');
+      },
+    );
+
     specify("should nest the sub-run's own trace under the calling step", async function () {
       const { executor } = makeExecutor();
 

@@ -142,4 +142,57 @@ describe('ParameterResolver', function () {
       },
     );
   });
+
+  context('resolveQualified', function () {
+    specify('should let parameters differing only in their location coexist', function () {
+      // a parameter is unique by (name, in), so an operation may declare
+      // `token` both as a header and as a query parameter — keying by bare
+      // name would collapse them and silently drop one.
+      const result = resolver.resolveQualified(
+        parameters(
+          { name: 'token', in: 'header', value: '$steps.login.outputs.token' },
+          { name: 'token', in: 'query', value: 'legacy' },
+        ),
+        resolve,
+      );
+
+      assert.deepEqual(result, { 'header.token': 'abc', 'query.token': 'legacy' });
+    });
+
+    specify('should keep the bare name for a parameter without a location', function () {
+      const result = resolver.resolveQualified(
+        parameters({ name: 'status', value: '$inputs.status' }),
+        resolve,
+      );
+
+      assert.deepEqual(result, { status: 'available' });
+    });
+
+    specify('should let the earlier of two same-(name, in) parameters win', function () {
+      // the qualified key is exactly the (name, in) identity the normalizer
+      // merges on, so only a genuinely same parameter can shadow another — and
+      // the list leads with the most specific, the step's own.
+      const result = resolver.resolveQualified(
+        parameters(
+          { name: 'trace', in: 'query', value: 'from-step' },
+          { name: 'trace', in: 'query', value: 'from-workflow' },
+        ),
+        resolve,
+      );
+
+      assert.deepEqual(result, { 'query.trace': 'from-step' });
+    });
+
+    specify('should carry a dotted parameter name into the qualified key', function () {
+      // a query parameter genuinely named `filter.name` — the client looks the
+      // key up verbatim (it builds '{in}.{name}' from the declared parameter
+      // rather than splitting the key), so the dots compose without ambiguity.
+      const result = resolver.resolveQualified(
+        parameters({ name: 'filter.name', in: 'query', value: 'rex' }),
+        resolve,
+      );
+
+      assert.deepEqual(result, { 'query.filter.name': 'rex' });
+    });
+  });
 });
