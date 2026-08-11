@@ -11,6 +11,7 @@ import {
   OpenAPIOperationExecutor,
   WorkflowExecutionState,
   ExecutionError,
+  ClientError,
   type HTTPClient,
   type OpenAPIOperationRequest,
 } from '../../src/index.ts';
@@ -306,6 +307,66 @@ describe('StepExecutor', function () {
         assert.strictEqual(requests.length, 0);
       },
     );
+
+    specify('should report a request cancelled in flight as the abort', async function () {
+      // what a real transport does: fetch and axios both reject the request they
+      // were told to drop. The operation executor wraps that as a ClientError —
+      // the shape for a request that failed on its own terms — which would make
+      // a mid-flight cancellation read differently from one between two steps.
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+      }) as StepElement;
+      const controller = new AbortController();
+      const requests: OpenAPIOperationRequest[] = [];
+      const httpClient: HTTPClient = async (request) => {
+        requests.push(request);
+        controller.abort();
+        throw new DOMException('This operation was aborted', 'AbortError');
+      };
+      const executor = new StepExecutor({
+        document: entry,
+        registry,
+        operationExecutor: new OpenAPIOperationExecutor({ httpClient }),
+      });
+
+      await rejects(
+        executor.execute(step, state(), { signal: controller.signal }),
+        ExecutionError,
+        /run aborted before step "findPets"/,
+      );
+      // the request did go out — this is the in-flight case, not the pre-dispatch one.
+      assert.strictEqual(requests.length, 1);
+    });
+
+    specify('should still report a genuine transport failure as one', async function () {
+      // the same rejection without a cancellation stays a ClientError: only an
+      // aborted signal reinterprets it.
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+      }) as StepElement;
+      const controller = new AbortController();
+      const httpClient: HTTPClient = async () => {
+        throw new Error('ECONNREFUSED');
+      };
+      const executor = new StepExecutor({
+        document: entry,
+        registry,
+        operationExecutor: new OpenAPIOperationExecutor({ httpClient }),
+      });
+
+      let caught: unknown;
+      try {
+        await executor.execute(step, state(), { signal: controller.signal });
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.instanceOf(caught, ClientError);
+    });
 
     specify('should forward a live signal to the request it builds', async function () {
       const step = refractStep({

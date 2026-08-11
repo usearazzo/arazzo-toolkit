@@ -219,16 +219,29 @@ class StepExecutor {
     // still reach this line — and this is the last moment before the step has a
     // live side effect. The signal stays in the bag, so a request already in
     // flight is aborted by the transport as before.
-    throwIfAborted(readAbortSignal(executeOptions), { stepId });
+    const signal = readAbortSignal(executeOptions);
+    throwIfAborted(signal, { stepId });
 
     // the Arazzo-derived parameters and request body are spread after the opaque
     // executeOptions bag so they take precedence over it. the operation executor
     // then forces the operation target on top of this before executing.
-    const response = await this.#operationExecutor.execute(locator, {
-      ...executeOptions,
-      parameters,
-      ...this.#requestBodyOptions(requestBody),
-    });
+    let response: OpenAPIOperationResponse;
+    try {
+      response = await this.#operationExecutor.execute(locator, {
+        ...executeOptions,
+        parameters,
+        ...this.#requestBodyOptions(requestBody),
+      });
+    } catch (error: unknown) {
+      // a transport that honors the signal rejects the request it was told to
+      // drop, which the operation executor wraps as a `ClientError` — the shape
+      // reserved for a request that failed on its own terms. Cancelled while
+      // cancelled, it did not: reporting it as the abort keeps one error shape
+      // whether the run was withdrawn between two steps or mid-flight, and keeps
+      // the whole feature from reading differently per transport.
+      throwIfAborted(signal, { stepId });
+      throw error;
+    }
 
     // evaluate criteria, outputs, and the next action against the post-request
     // context (with $request / $url / $method and $response / $statusCode).

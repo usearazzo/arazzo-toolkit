@@ -237,12 +237,17 @@ attempt** of a step, before entering a sub-workflow or a `dependsOn` prerequisit
 `retryAfter` waits between attempts, which the default timer cuts short rather than sitting out. It
 is also forwarded to the transport, so the request in flight when the abort lands is cancelled
 rather than merely awaited (the `HTTPClient` contract asks every transport to honor
-`request.signal`). A transport that ignores it costs one in-flight request: the run still stops at
-the next boundary.
+`request.signal` — global fetch does it for free, since the request doubles as fetch init; an axios
+or undici client passes `request.signal` through in one line). A transport that ignores it costs
+one in-flight request: the run still stops at the next boundary.
 
 An aborted run throws `ExecutionError` with `reason: 'aborted'`, naming the boundary it stopped at
 (`workflowId`, `stepId`, and the `path` of workflows in progress) and carrying the signal's own
-`reason` as the error's `cause`. It does **not** resolve as a `failed` result: cancellation is not
+`reason` as the error's `cause`. One shape covers every case: a transport that honors the signal
+rejects the request it was told to drop, and that rejection is reported as the cancellation it is
+rather than as the `ClientError` a request failing on its own terms would raise — so a run
+cancelled mid-flight reads the same as one cancelled between two steps, whichever transport is
+plugged in. It does **not** resolve as a `failed` result: cancellation is not
 something the steps did, and the steps that never ran were not decided against by any criteria.
 
 A `signal` passed through `executeOptions` instead — the only channel before this option existed —

@@ -305,6 +305,13 @@ refused.
   operation and resolving the expressions are awaited, so an entry-only check
   would still send a request that the transport then cancels — surfacing as a
   transport `ClientError` and being judged like a refusal from the API.
+- A request the transport drops mid-flight is reported as the abort, not as the
+  `ClientError` reserved for a request that failed on its own terms: a
+  signal-honoring transport (fetch, axios, undici) rejects what it was told to
+  drop, and without this the same cancellation would read one way when it landed
+  between two steps and another when it landed in flight — per transport, since
+  a transport ignoring the signal produces neither. Only an aborted signal
+  reinterprets a transport error; a genuine failure stays a `ClientError`.
 - **Shape (the open decision, settled):** an aborted run **throws**
   `ExecutionError` with `reason: 'aborted'`, naming the boundary (`workflowId`,
   `stepId`, `path`) and carrying the signal's own `reason` as `cause`. Not a
@@ -328,7 +335,7 @@ transport's job, and the `HTTPClient` contract already asks for it ("honor
 `request.signal` when present"). A transport that ignores it costs one in-flight
 request; the run still stops at the next boundary.
 
-**Tests:** 14, across four suites. `WorkflowExecutor`: a pre-aborted signal
+**Tests:** 17, across four suites. `WorkflowExecutor`: a pre-aborted signal
 starts nothing (`path: ['linear']`, zero calls), an abort mid-request stops at
 the next step, an abort stops between two retry attempts (the injected sleep,
 which ignores the signal, still waited once), `cause` carries the abort reason,
@@ -339,7 +346,10 @@ one in the bag. Composition: an abort before the next prerequisite
 `StepRetryRunner`: the injected sleep is offered the signal, and the _real_
 timer cuts a 5s `retryAfter` short (asserted on elapsed time, so a regression
 fails rather than hangs). `StepExecutor`: an aborted signal throws with nothing
-reaching the transport; a live one reaches the request.
+reaching the transport; a live one reaches the request; a transport that rejects
+the request it was told to drop surfaces as `aborted`, while the same rejection
+without a cancellation stays a `ClientError`. A bag value that is not a usable
+signal is ignored rather than taken for a cancellation.
 
 ### Not yet implemented / missing
 
