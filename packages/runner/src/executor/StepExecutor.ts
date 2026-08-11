@@ -29,6 +29,16 @@ import OpenAPIOperationLocatorNormalizer, {
 import ExecutionError from '../errors/ExecutionError.ts';
 
 /**
+ * The mutually exclusive fields by which a step names its target. A step may
+ * declare at most one. Extend this as the Arazzo Specification adds targets
+ * (e.g. `channelPath` in 1.1.0) so every exclusivity check stays complete —
+ * both this module's and the workflow executor's, which makes the same check
+ * for a step it intercepts before {@link StepExecutor.execute}.
+ * @internal
+ */
+export const STEP_TARGET_FIELDS = ['operationId', 'operationPath', 'workflowId'] as const;
+
+/**
  * A read-only source of the runtime expression context for a step.
  *
  * The step executor only reads accumulated run state — it produces the
@@ -127,13 +137,6 @@ export interface StepExecutionResult {
  * @public
  */
 class StepExecutor {
-  /**
-   * The mutually exclusive fields by which a step names its target. A step may
-   * declare at most one. Extend this as the Arazzo Specification adds targets
-   * (e.g. `channelPath` in 1.1.0) so the exclusivity check stays complete.
-   */
-  static readonly #TARGET_FIELDS = ['operationId', 'operationPath', 'workflowId'] as const;
-
   readonly #document: ArazzoDocument;
   readonly #registry: DocumentRegistry;
   readonly #locatorNormalizer: OpenAPIOperationLocatorNormalizer;
@@ -174,12 +177,10 @@ class StepExecutor {
 
     // a step's target fields are mutually exclusive; declaring more than one is
     // malformed and has no defined resolution.
-    const declaredTargets = StepExecutor.#TARGET_FIELDS.filter((field) =>
-      isStringElement(step[field]),
-    );
+    const declaredTargets = STEP_TARGET_FIELDS.filter((field) => isStringElement(step[field]));
     if (declaredTargets.length > 1) {
       throw new ExecutionError(
-        `Step "${stepId}" declares more than one of ${StepExecutor.#TARGET_FIELDS.join(', ')} (mutually exclusive)`,
+        `Step "${stepId}" declares more than one of ${STEP_TARGET_FIELDS.join(', ')} (mutually exclusive)`,
         { stepId, reason: 'ambiguous-target' },
       );
     }
@@ -220,11 +221,11 @@ class StepExecutor {
       this.#requestContext(response),
       this.#responseContext(response),
     );
-    const successful = this.#evaluateCriteria(step, postContext);
+    const successful = this.evaluateCriteria(step, postContext);
     const outputs = this.#outputResolver.resolve(step.outputs, (expression) =>
       this.#evaluate(postContext, expression),
     );
-    const matchedActions = this.#selectActions(step, successful, postContext, defaultActions);
+    const matchedActions = this.selectActions(step, successful, postContext, defaultActions);
 
     return { stepId, response, successful, outputs, action: matchedActions[0], matchedActions };
   }
@@ -269,8 +270,13 @@ class StepExecutor {
   /**
    * Evaluates the step's `successCriteria`; all criteria must pass. A step with
    * no criteria succeeds on a received response.
+   *
+   * Public for the same reason as {@link StepExecutor.selectActions}: a step
+   * targeting a `workflowId` is run by the workflow executor and never reaches
+   * {@link StepExecutor.execute}, but its criteria are still the author's
+   * assertion about the step and must be evaluated somewhere.
    */
-  #evaluateCriteria(step: StepElement, context: RuntimeExpressionContext): boolean {
+  evaluateCriteria(step: StepElement, context: RuntimeExpressionContext): boolean {
     const criteria = step.successCriteria;
     // no (or non-array) successCriteria: the step succeeds on a received response.
     if (!isArrayElement(criteria)) return true;
@@ -302,8 +308,14 @@ class StepExecutor {
    * The full matching list (not just the first) is returned so the caller can
    * honor "retryLimit exhausted prior to subsequent failure actions"; the common
    * caller simply takes the first.
+   *
+   * Public because selecting a step's actions is meaningful beyond running one:
+   * the workflow executor selects them for a step targeting a `workflowId`, which
+   * it runs itself and which therefore never reaches
+   * {@link StepExecutor.execute}. Keeping one implementation keeps the
+   * override/fallback rules from drifting apart.
    */
-  #selectActions(
+  selectActions(
     step: StepElement,
     successful: boolean,
     context: RuntimeExpressionContext,

@@ -1,0 +1,424 @@
+arazzo: "1.0.1"
+info:
+  title: Workflow composition test workflows
+  version: "1.0.0"
+  summary: >-
+    Minimal workflows exercising WorkflowExecutor composition — sub-workflow
+    (workflowId) steps and dependsOn prerequisites, with their cycle, depth and
+    memoization edge cases — against the petstore API.
+sourceDescriptions:
+  - name: petstoreAPI
+    url: ./petstore.openapi.json
+    type: openapi
+workflows:
+  # a child workflow taking an input and producing an output — the callee in the
+  # sub-workflow cases below.
+  - workflowId: fetchPet
+    inputs:
+      type: object
+      properties:
+        petId:
+          type: string
+    steps:
+      - stepId: get
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: $inputs.petId
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          petName: $response.body#/name
+    outputs:
+      name: $steps.get.outputs.petName
+
+  # a step calls the child, mapping a parameter in (by name, no `in`) and the
+  # child's output back out; a following step proves control returns.
+  - workflowId: callsChild
+    steps:
+      - stepId: child
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "7"
+        outputs:
+          childName: $workflows.fetchPet.outputs.name
+      - stepId: after
+        operationId: getInventory
+        outputs:
+          ran: $statusCode
+    outputs:
+      childName: $steps.child.outputs.childName
+      afterRan: $steps.after.outputs.ran
+      viaWorkflows: $workflows.fetchPet.outputs.name
+
+  # two steps call the SAME child with different inputs — two distinct runs, so
+  # neither trace may overwrite the other.
+  - workflowId: callsChildTwice
+    steps:
+      - stepId: first
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "7"
+      - stepId: second
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "8"
+
+  # the calling step asserts something about the sub-run that does not hold, so
+  # the step fails even though the sub-workflow itself completed.
+  - workflowId: childCriteriaFail
+    steps:
+      - stepId: child
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "7"
+        successCriteria:
+          - condition: $workflows.fetchPet.outputs.name == 'Fido'
+        onFailure:
+          - name: stop
+            type: end
+
+  # the same assertion, but true — the positive control proving the criterion's
+  # expression really resolves the sub-run's outputs rather than quietly
+  # yielding undefined (which would fail the negative case for the wrong reason).
+  - workflowId: childCriteriaPass
+    steps:
+      - stepId: child
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "7"
+        successCriteria:
+          - condition: $workflows.fetchPet.outputs.name == 'Rex'
+
+  # a malformed "steps" on a workflow that also declares a prerequisite: the
+  # authoring error must be raised before the prerequisite's live side effects.
+  - workflowId: malformedStepsWithDependency
+    dependsOn:
+      - setupA
+    steps: not-a-list
+
+  # a child that always fails its criteria (driven by a 500 response). It still
+  # resolves outputs — a failed run's outputs are resolved like any other.
+  - workflowId: failingChild
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          status: $statusCode
+    outputs:
+      status: $steps.doomed.outputs.status
+
+  # a child that fails, echoing back the input it was given so each attempt's
+  # inputs are observable, and offering an output the caller's parameter reads.
+  - workflowId: echoFailing
+    inputs:
+      type: object
+      properties:
+        status:
+          type: string
+    steps:
+      - stepId: only
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          echoed: $inputs.status
+          nextStatus: sold
+    outputs:
+      echoed: $steps.only.outputs.echoed
+      nextStatus: $steps.only.outputs.nextStatus
+
+  # the calling step's parameter reads the sub-workflow's own recorded outputs,
+  # which the first attempt writes. Resolving inputs per attempt would therefore
+  # hand the retry a different status ("sold") than the first attempt got
+  # (nothing recorded yet); a retry re-runs the step as it was entered, so both
+  # attempts must see the inputs resolved before the first one.
+  - workflowId: retriesChildStableInputs
+    steps:
+      - stepId: child
+        workflowId: echoFailing
+        parameters:
+          - name: status
+            value: $workflows.echoFailing.outputs.nextStatus
+        onFailure:
+          - name: tryAgain
+            type: retry
+            retryLimit: 1
+
+  # a failing sub-workflow takes the step's failure path: the retry re-runs the
+  # whole child, once per attempt.
+  - workflowId: retriesChild
+    steps:
+      - stepId: child
+        workflowId: failingChild
+        onFailure:
+          - name: tryAgain
+            type: retry
+            retryLimit: 2
+            retryAfter: 1
+
+  # a workflow whose only step calls itself — a direct cycle.
+  - workflowId: selfCycle
+    steps:
+      - stepId: again
+        workflowId: selfCycle
+
+  # an indirect cycle through sub-workflow steps: A -> B -> A.
+  - workflowId: cycleA
+    steps:
+      - stepId: toB
+        workflowId: cycleB
+  - workflowId: cycleB
+    steps:
+      - stepId: toA
+        workflowId: cycleA
+
+  # a diamond: the top calls left and right, both of which call the same shared
+  # workflow. Not a cycle — each visit completes and unwinds before the next.
+  - workflowId: diamondTop
+    steps:
+      - stepId: left
+        workflowId: diamondLeft
+      - stepId: right
+        workflowId: diamondRight
+  - workflowId: diamondLeft
+    steps:
+      - stepId: shared
+        workflowId: diamondShared
+  - workflowId: diamondRight
+    steps:
+      - stepId: shared
+        workflowId: diamondShared
+  - workflowId: diamondShared
+    steps:
+      - stepId: only
+        operationId: getInventory
+
+  # legitimate acyclic nesting, three workflows deep — bounded by maxWorkflowDepth.
+  - workflowId: deepOne
+    steps:
+      - stepId: down
+        workflowId: deepTwo
+  - workflowId: deepTwo
+    steps:
+      - stepId: down
+        workflowId: deepThree
+  - workflowId: deepThree
+    steps:
+      - stepId: only
+        operationId: getInventory
+
+  # two independent setup workflows used as prerequisites below.
+  - workflowId: setupA
+    steps:
+      - stepId: only
+        operationId: getInventory
+        outputs:
+          ran: $statusCode
+    outputs:
+      ran: $steps.only.outputs.ran
+  - workflowId: setupB
+    steps:
+      - stepId: only
+        operationId: findPetsByStatus
+        parameters:
+          - name: status
+            in: query
+            value: available
+        outputs:
+          ran: $statusCode
+    outputs:
+      ran: $steps.only.outputs.ran
+
+  # both prerequisites run to completion, in declaration order, before this
+  # workflow's own step; a dependency's outputs are readable via $workflows.
+  - workflowId: dependent
+    dependsOn:
+      - setupA
+      - setupB
+    steps:
+      - stepId: own
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: "7"
+        outputs:
+          ran: $statusCode
+    outputs:
+      own: $steps.own.outputs.ran
+      fromSetupA: $workflows.setupA.outputs.ran
+
+  # a prerequisite that needs inputs — it has no spec-defined way to receive
+  # them, so they come from the caller's dependencyInputs map.
+  - workflowId: needsInput
+    inputs:
+      type: object
+      properties:
+        petId:
+          type: string
+    steps:
+      - stepId: get
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: $inputs.petId
+  - workflowId: dependsOnNeedsInput
+    dependsOn:
+      - needsInput
+    steps:
+      - stepId: own
+        operationId: getInventory
+
+  # a transitive prerequisite: outer -> middle -> needsInput.
+  - workflowId: transitiveOuter
+    dependsOn:
+      - transitiveMiddle
+    steps:
+      - stepId: own
+        operationId: getInventory
+  - workflowId: transitiveMiddle
+    dependsOn:
+      - needsInput
+    steps:
+      - stepId: own
+        operationId: getInventory
+
+  # a dependency diamond: both prerequisites declare the same one, which must be
+  # satisfied once rather than run twice.
+  - workflowId: depDiamondTop
+    dependsOn:
+      - depDiamondLeft
+      - depDiamondRight
+    steps:
+      - stepId: own
+        operationId: getInventory
+  - workflowId: depDiamondLeft
+    dependsOn:
+      - setupA
+    steps:
+      - stepId: own
+        operationId: getInventory
+  - workflowId: depDiamondRight
+    dependsOn:
+      - setupA
+    steps:
+      - stepId: own
+        operationId: getInventory
+
+  # a prerequisite that fails: the dependent cannot be processed and none of its
+  # own steps run.
+  - workflowId: dependsOnFailing
+    dependsOn:
+      - failingChild
+    steps:
+      - stepId: never
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: "7"
+    outputs:
+      fromFailed: $workflows.failingChild.outputs.status
+
+  # a prerequisite list whose second entry is unusable: the first must not run
+  # before the authoring error is raised.
+  - workflowId: dependsOnLateBadEntry
+    dependsOn:
+      - setupA
+      - $sourceDescriptions.petstoreAPI.someWorkflow
+    steps:
+      - stepId: own
+        operationId: getInventory
+
+  # a prerequisite list naming a workflow this document does not define, after
+  # one it does.
+  - workflowId: dependsOnLateUnknown
+    dependsOn:
+      - setupA
+      - noSuchWorkflow
+    steps:
+      - stepId: own
+        operationId: getInventory
+
+  # the caller can vouch for the prerequisites of the workflow they name; the
+  # ones a sub-workflow declares are not theirs to skip.
+  - workflowId: rootSkipsOwnDeps
+    dependsOn:
+      - setupA
+    steps:
+      - stepId: child
+        workflowId: childWithDeps
+  - workflowId: childWithDeps
+    dependsOn:
+      - setupB
+    steps:
+      - stepId: own
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: "7"
+
+  # a cycle formed purely by dependsOn edges.
+  - workflowId: depCycleA
+    dependsOn:
+      - depCycleB
+    steps:
+      - stepId: only
+        operationId: getInventory
+  - workflowId: depCycleB
+    dependsOn:
+      - depCycleA
+    steps:
+      - stepId: only
+        operationId: getInventory
+
+  # a cycle crossing both mechanisms: A dependsOn B, and B has a step calling A.
+  - workflowId: crossA
+    dependsOn:
+      - crossB
+    steps:
+      - stepId: only
+        operationId: getInventory
+  - workflowId: crossB
+    steps:
+      - stepId: backToA
+        workflowId: crossA
+
+  # a sub-workflow step referencing another document — not yet supported.
+  - workflowId: crossDocumentStep
+    steps:
+      - stepId: remote
+        workflowId: $sourceDescriptions.petstoreAPI.someWorkflow
+
+  # a prerequisite in another document — not yet supported.
+  - workflowId: crossDocumentDependsOn
+    dependsOn:
+      - $sourceDescriptions.petstoreAPI.someWorkflow
+    steps:
+      - stepId: only
+        operationId: getInventory
+
+  # a step naming both a workflowId and an operationId — mutually exclusive.
+  - workflowId: ambiguousStep
+    steps:
+      - stepId: both
+        workflowId: fetchPet
+        operationId: getInventory
+
+  # a present but non-list "dependsOn" — malformed, an authoring error.
+  - workflowId: scalarDependsOn
+    dependsOn: setupA
+    steps:
+      - stepId: only
+        operationId: getInventory

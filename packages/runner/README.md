@@ -94,8 +94,8 @@ registry.clear(); // drop cached documents to reclaim memory
 ## `WorkflowExecutor`
 
 > [!NOTE]
-> Under active development. The backbone below works today; sub-workflow calls, `dependsOn`,
-> and step-level `goto` to a workflow are not yet implemented and throw `ExecutionError` rather than
+> Under active development. Step-level `goto` to a workflow, a `retry` carrying a reference, and
+> cross-document workflow references are not yet implemented and throw `ExecutionError` rather than
 > behaving incorrectly (see [Not yet supported](#not-yet-supported)).
 
 `WorkflowExecutor` is the stateful orchestrator that runs a whole workflow. It iterates a workflow's
@@ -131,15 +131,27 @@ const stepExecutor = new StepExecutor({ document: arazzoDoc, registry, operation
 const executor = new WorkflowExecutor({ document: arazzoDoc, registry, stepExecutor });
 
 const result = await executor.execute('authenticateAndOrderPet', {
-  username: 'user1',
-  password: 'secret',
-  preferredPetStatus: 'available',
+  inputs: {
+    username: 'user1',
+    password: 'secret',
+    preferredPetStatus: 'available',
+  },
 });
 
 console.log(result.status); // 'completed' | 'ended' | 'failed'
 console.log(result.outputs); // workflow $outputs, resolved against final state
-console.log(result.steps); // trace: each step's id, success, and selected action, in run order
+console.log(result.steps); // trace: each step's id, success, action, attempts, durationMs
+console.log(result.durationMs); // elapsed time for the whole run
 ```
+
+`execute` takes the workflowId and an options bag:
+
+| option             | meaning                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| `inputs`           | the workflow's inputs, read via `$inputs`                                            |
+| `executeOptions`   | opaque bag forwarded to every step's operation (e.g. `server`, `requestInterceptor`) |
+| `dependencyInputs` | inputs for workflows run to satisfy `dependsOn`, keyed by workflowId                 |
+| `runDependencies`  | run this workflow's `dependsOn` workflows first (default `true`)                     |
 
 The run state is created fresh per `execute` call and owned internally; the returned `result` is
 read-only. Every layer takes its collaborator rather than building one: `WorkflowExecutor` takes a
@@ -162,10 +174,41 @@ After each step, the selected `onSuccess` / `onFailure` action determines what h
   none remains, the break-default applies. Each step's `attempts` count is surfaced in the result
   trace.
 
-A runaway `goto` loop **or** a runaway `retry` is bounded by `maxSteps` (default `1000`), which
-counts every operation execution (each step attempt, including retries) and throws `ExecutionError`
-(`reason: 'step-budget'`) when exceeded. The `retryAfter` delay uses an injectable `sleep`
-(`WorkflowExecutorOptions.sleep`, default a real timer) so tests can run without waiting.
+A runaway `goto` loop, a runaway `retry`, **or** a runaway tree of sub-workflow calls is bounded by
+`maxSteps` (default `1000`), which counts every step attempt and throws `ExecutionError`
+(`reason: 'step-budget'`) when exceeded. The budget is shared by the whole call tree rather than
+granted afresh per workflow, so a sub-workflow cannot escape the ceiling the caller set; the error
+carries the offending `path` (the chain of workflowIds in progress). The `retryAfter` delay uses an
+injectable `sleep` (`WorkflowExecutorOptions.sleep`, default a real timer) so tests can run without
+waiting, and `durationMs` uses an injectable `now` (default the monotonic `performance.now`) so
+they can assert timings.
+
+### Composing workflows
+
+A step targeting a `workflowId` calls another workflow. Its `parameters` become that workflow's
+inputs (mapped by `name` — such a step's parameters carry no `in`), the sub-run is recorded under
+`$workflows.<id>`, and the step's own `outputs` and `successCriteria` are then resolved against that
+updated state. A sub-run that ends `failed` puts the step on its failure path, so `onFailure` —
+including `retry`, which re-runs the whole sub-workflow — applies exactly as for an operation step.
+
+A workflow's `dependsOn` workflows are run to completion before its own steps. Each one's outputs
+become readable as `$workflows.<id>.outputs`; they are not merged into the dependent's own outputs.
+A dependency already completed in the same run is not run again, so a diamond does not duplicate its
+side effects. Because the specification gives `dependsOn` no input-mapping mechanism, a dependency
+that needs inputs takes them from the caller's `dependencyInputs` map; pass `runDependencies: false`
+to assert they were already satisfied out-of-band. That assertion covers the workflow you name and
+no more — a sub-workflow it calls still runs its own prerequisites, which the caller may not know
+exist. A dependency that fails makes the run `failed` without executing any of its own steps.
+
+Both recurse through one guarded call tree. Re-entering a workflow already in progress throws
+(`reason: 'workflow-cycle'`, or `'dependsOn-cycle'` when every edge closing the loop is a dependency
+edge), carrying the offending `path`; nesting past `maxWorkflowDepth` (default `32`, counting the
+workflow `execute` was called with) throws `reason: 'workflow-depth'`. A diamond is not a cycle: a
+workflow that completed and unwound may be entered again.
+
+The result mirrors this structure. A step record carries `subWorkflows` — one nested
+`WorkflowExecutionResult` per attempt, so a retried sub-workflow step keeps every attempt's trace —
+and a result carries `dependencies`, the prerequisite runs in declaration order.
 
 ### Workflow-level default actions
 
@@ -177,21 +220,26 @@ only its failure actions and still inherit the workflow's success actions).
 ### Authoring errors vs. failed runs
 
 Same split as `StepExecutor`: a step whose `successCriteria` go unmet with no redirecting action is
-a normal `status: 'failed'` result, **not** a throw. Only authoring errors throw `ExecutionError`:
-an unknown `workflowId` (`workflow-not-found`), a `goto` to a step that does not exist
-(`goto-target-not-found`), a `goto` naming neither `stepId` nor `workflowId`
-(`goto-target-missing`), an action of an unknown `type` (`unknown-action-type`), a present but
-malformed `steps` (`malformed-steps`), or the step-budget overflow above (`step-budget`).
+a normal `status: 'failed'` result, **not** a throw — as is a run whose `dependsOn` workflow failed.
+Only authoring errors throw `ExecutionError`: an unknown `workflowId` (`workflow-not-found`), a
+`goto` to a step that does not exist (`goto-target-not-found`), a `goto` naming neither `stepId` nor
+`workflowId` (`goto-target-missing`), an action of an unknown `type` (`unknown-action-type`), a
+present but malformed `steps` or `dependsOn` (`malformed-steps`, `malformed-dependsOn`), a step
+naming more than one target (`ambiguous-target`), a cycle or over-deep nesting (`workflow-cycle`,
+`dependsOn-cycle`, `workflow-depth`), or the step-budget overflow above (`step-budget`).
+
+A workflow's own `steps` and `dependsOn` lists are validated before any of its prerequisites run, so
+those two mistakes never fire live requests on the way to throwing. Errors belonging to an
+individual step — a step naming two targets, a `goto` to a step that does not exist, an unknown
+action `type` — are raised when the run reaches that step, which means earlier steps have already
+executed. That is deliberate: a bad step the run never reaches should not fail an otherwise valid
+run.
 
 ### Not yet supported
 
 These land in later work. Each throws `ExecutionError` (with the noted `reason`) rather than
 behaving incorrectly, except workflow-level `parameters`, which is simply not read yet:
 
-- **sub-workflow steps**: a step targeting a `workflowId`, i.e. calling another workflow
-  (`reason: 'workflow-step-unsupported'`). Recursion, sub-workflow cycle detection, and a
-  nesting-depth guard land with this;
-- **`dependsOn`**: running the workflows a workflow depends on before its own steps;
 - **step-level `goto` to a `workflowId`** (`reason: 'goto-workflow-unsupported'`);
 - **a `retry` carrying a `stepId` / `workflowId` reference** to run before retrying
   (`reason: 'retry-reference-unsupported'`);

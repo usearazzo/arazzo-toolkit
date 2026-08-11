@@ -106,6 +106,7 @@ export type { CriterionPredicate, SelectedAction } from './action/ActionResolver
 export { default as WorkflowExecutor } from './executor/WorkflowExecutor.ts';
 export type {
   WorkflowExecutorOptions,
+  WorkflowExecuteOptions,
   WorkflowExecutionResult,
   StepRunRecord,
 } from './executor/WorkflowExecutor.ts';
