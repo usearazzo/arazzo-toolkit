@@ -27,6 +27,7 @@ import OpenAPIOperationLocatorNormalizer, {
   type OpenAPIOperationLocator,
 } from './OpenAPIOperationLocatorNormalizer.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
+import { readAbortSignal, throwIfAborted } from './abort.ts';
 
 /**
  * The mutually exclusive fields by which a step names its target. A step may
@@ -132,8 +133,9 @@ export interface StepExecutionResult {
  * targeting a `workflowId` (a sub-workflow) is not an operation step and throws
  * {@link ExecutionError}; running sub-workflows is the workflow executor's
  * concern. A received response with unmet criteria is a normal
- * `successful: false` outcome; only malformed input (e.g. an invalid criterion
- * or expression) throws.
+ * `successful: false` outcome; malformed input (e.g. an invalid criterion or
+ * expression) throws, as does a run the caller has cancelled through an
+ * `AbortSignal` in the execute options.
  * @public
  */
 class StepExecutor {
@@ -161,6 +163,12 @@ class StepExecutor {
    * (e.g. a `server` to run the step against, or an `AbortSignal`). The
    * Arazzo-derived options (`operationId`, `parameters`, `requestBody`) always
    * take precedence over it.
+   *
+   * A `signal` in that bag is honored here and not only at the transport: an
+   * already-aborted signal throws `reason: 'aborted'` instead of issuing a
+   * request nobody is waiting for, whose wire-level cancellation would surface
+   * as a transport {@link ClientError} — a request that failed on its own terms
+   * — rather than as the withdrawal it is.
    *
    * `defaultActions` are the workflow-level `successActions` / `failureActions`
    * the step falls back to when it declares no `onSuccess` / `onFailure` of its
@@ -206,14 +214,34 @@ class StepExecutor {
       this.#evaluate(preContext, expression),
     );
 
+    // checked here rather than on entry: locating the operation and resolving
+    // the expressions above are awaited, so a run cancelled during them would
+    // still reach this line — and this is the last moment before the step has a
+    // live side effect. The signal stays in the bag, so a request already in
+    // flight is aborted by the transport as before.
+    const signal = readAbortSignal(executeOptions);
+    throwIfAborted(signal, { stepId });
+
     // the Arazzo-derived parameters and request body are spread after the opaque
     // executeOptions bag so they take precedence over it. the operation executor
     // then forces the operation target on top of this before executing.
-    const response = await this.#operationExecutor.execute(locator, {
-      ...executeOptions,
-      parameters,
-      ...this.#requestBodyOptions(requestBody),
-    });
+    let response: OpenAPIOperationResponse;
+    try {
+      response = await this.#operationExecutor.execute(locator, {
+        ...executeOptions,
+        parameters,
+        ...this.#requestBodyOptions(requestBody),
+      });
+    } catch (error: unknown) {
+      // a transport that honors the signal rejects the request it was told to
+      // drop, which the operation executor wraps as a `ClientError` — the shape
+      // reserved for a request that failed on its own terms. Cancelled while
+      // cancelled, it did not: reporting it as the abort keeps one error shape
+      // whether the run was withdrawn between two steps or mid-flight, and keeps
+      // the whole feature from reading differently per transport.
+      throwIfAborted(signal, { stepId });
+      throw error;
+    }
 
     // evaluate criteria, outputs, and the next action against the post-request
     // context (with $request / $url / $method and $response / $statusCode).

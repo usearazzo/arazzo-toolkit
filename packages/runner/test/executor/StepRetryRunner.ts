@@ -189,6 +189,72 @@ describe('StepRetryRunner', function () {
     });
   });
 
+  context('cancellation', function () {
+    specify('should hand the run signal to the injected sleep', async function () {
+      const signals: (AbortSignal | undefined)[] = [];
+      const runner = new StepRetryRunner({
+        sleep: async (ms, signal) => {
+          signals.push(signal);
+        },
+      });
+      const controller = new AbortController();
+      const target = step([
+        {
+          successful: false,
+          matchedActions: matched({ name: 'again', type: 'retry', retryAfter: 1 }),
+        },
+        { successful: true },
+      ]);
+
+      await runner.run(target.attempt, { ...runContext, signal: controller.signal });
+
+      // a custom sleep is free to ignore it, but it must be offered the signal —
+      // otherwise a cancelled run sits out every retryAfter it has left.
+      assert.deepEqual(signals, [controller.signal]);
+    });
+
+    specify('should cut a real retryAfter wait short once aborted', async function () {
+      // the default timer, not an injected one: a 5s retryAfter aborted 10ms in
+      // must resume immediately rather than run its course.
+      const runner = new StepRetryRunner();
+      const controller = new AbortController();
+      const target = step([
+        {
+          successful: false,
+          matchedActions: matched({ name: 'again', type: 'retry', retryAfter: 5 }),
+        },
+        { successful: true },
+      ]);
+      const startedAt = performance.now();
+      setTimeout(() => controller.abort(), 10);
+
+      await runner.run(target.attempt, { ...runContext, signal: controller.signal });
+
+      assert.isBelow(performance.now() - startedAt, 1000);
+      // the runner does not turn the abort into an error — it only declines to
+      // wait it out, leaving the next attempt to trip the caller's own check.
+      assert.strictEqual(target.calls, 2);
+    });
+
+    specify('should not wait at all when the run is already aborted', async function () {
+      const runner = new StepRetryRunner();
+      const controller = new AbortController();
+      controller.abort();
+      const target = step([
+        {
+          successful: false,
+          matchedActions: matched({ name: 'again', type: 'retry', retryAfter: 5 }),
+        },
+        { successful: true },
+      ]);
+      const startedAt = performance.now();
+
+      await runner.run(target.attempt, { ...runContext, signal: controller.signal });
+
+      assert.isBelow(performance.now() - startedAt, 1000);
+    });
+  });
+
   context('an attempt that throws', function () {
     specify('should propagate the error and stop retrying', function () {
       // whatever the caller does per attempt — charging a run budget, say — it

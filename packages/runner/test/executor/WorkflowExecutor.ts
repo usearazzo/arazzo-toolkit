@@ -60,6 +60,22 @@ const rejects = async (
   assert.fail('expected promise to reject, but it resolved');
 };
 
+/**
+ * Runs a promise expected to reject and returns the ExecutionError it rejected
+ * with, so a test can assert on its structured fields (`reason`, `path`) rather
+ * than only its message.
+ */
+const captureError = async (promise: Promise<unknown>): Promise<ExecutionError> => {
+  let caught: unknown;
+  try {
+    await promise;
+  } catch (error) {
+    caught = error;
+  }
+  assert.instanceOf(caught, ExecutionError);
+  return caught as ExecutionError;
+};
+
 describe('WorkflowExecutor', function () {
   let registry: DocumentRegistry;
   let entry: ArazzoDocument;
@@ -107,13 +123,15 @@ describe('WorkflowExecutor', function () {
    */
   const makeExecutor = (
     responses: CannedResponse | readonly CannedResponse[] = okResponse,
-    options: { maxSteps?: number; tickMs?: number } = {},
+    options: { maxSteps?: number; tickMs?: number; onCall?: () => void } = {},
   ): {
     executor: WorkflowExecutor;
     calls: OpenAPIOperationRequest[];
     sleeps: number[];
   } => {
-    const { tickMs = 0, ...executorOptions } = options;
+    // `onCall` fires as each request is answered, which is how a test cancels a
+    // run from the outside at a known point in it.
+    const { tickMs = 0, onCall = (): void => {}, ...executorOptions } = options;
     const sequence = Array.isArray(responses) ? responses : [responses as CannedResponse];
     const calls: OpenAPIOperationRequest[] = [];
     const sleeps: number[] = [];
@@ -125,6 +143,7 @@ describe('WorkflowExecutor', function () {
       registry,
       stepExecutor: makeStepExecutor(sequence, calls, () => {
         time += tickMs;
+        onCall();
       }),
       sleep: async (ms) => {
         sleeps.push(ms);
@@ -590,6 +609,189 @@ describe('WorkflowExecutor', function () {
         assert.strictEqual(calls.length, 0);
       },
     );
+  });
+
+  context('cancellation', function () {
+    specify('should refuse to start a run whose signal has already fired', async function () {
+      const { executor, calls } = makeExecutor();
+      const controller = new AbortController();
+      controller.abort();
+
+      const error = await captureError(
+        executor.execute('linear', { inputs: { status: 'available' }, signal: controller.signal }),
+      );
+
+      assert.strictEqual(error.reason, 'aborted');
+      assert.match(error.message, /run aborted before workflow "linear"/);
+      assert.deepEqual(error.path, ['linear']);
+      assert.strictEqual(calls.length, 0);
+    });
+
+    specify('should stop at the next step when aborted mid-run', async function () {
+      // aborted while the first step's request is in flight: that step finishes
+      // (its response is already on the way back) and the run stops there rather
+      // than working through the rest of the workflow.
+      const controller = new AbortController();
+      const { executor, calls } = makeExecutor(okResponse, {
+        onCall: () => controller.abort(),
+      });
+
+      const error = await captureError(
+        executor.execute('linear', { inputs: { status: 'available' }, signal: controller.signal }),
+      );
+
+      assert.strictEqual(error.reason, 'aborted');
+      assert.strictEqual(error.workflowId, 'linear');
+      assert.strictEqual(error.stepId, 'getPet');
+      assert.strictEqual(calls.length, 1);
+    });
+
+    specify('should stop between retry attempts when aborted', async function () {
+      // the step fails (500) and its retry fires, so the abort lands between two
+      // attempts of the same step — the boundary a step-level check would miss.
+      const controller = new AbortController();
+      const { executor, calls, sleeps } = makeExecutor([serverErrorResponse], {
+        onCall: () => controller.abort(),
+      });
+
+      const error = await captureError(
+        executor.execute('retryThenSucceed', { signal: controller.signal }),
+      );
+
+      assert.strictEqual(error.reason, 'aborted');
+      assert.strictEqual(error.stepId, 'flaky');
+      // the retry never ran; the injected sleep, which ignores the signal, was
+      // still asked to wait once before the cancellation surfaced.
+      assert.strictEqual(calls.length, 1);
+      assert.deepEqual(sleeps, [2000]);
+    });
+
+    specify('should not resolve a run abandoned during its last step', async function () {
+      // the transport here ignores the signal, which the HTTPClient contract
+      // permits — so the final step succeeds and no further boundary follows it.
+      // Without a closing check the run would hand back outputs the caller had
+      // already withdrawn from, and only for transports that ignore the signal.
+      const controller = new AbortController();
+      const { executor, calls } = makeExecutor(okResponse, {
+        onCall: () => {
+          if (calls.length === 2) controller.abort();
+        },
+      });
+
+      const error = await captureError(
+        executor.execute('linear', { inputs: { status: 'available' }, signal: controller.signal }),
+      );
+
+      assert.strictEqual(error.reason, 'aborted');
+      assert.strictEqual(error.workflowId, 'linear');
+      // both steps did run — this is the boundary after the last one.
+      assert.strictEqual(calls.length, 2);
+    });
+
+    specify('should name the workflow and chain for an abort mid-request', async function () {
+      // a transport that honors the signal rejects the request it was told to
+      // drop. StepExecutor turns that into the abort, but knows only the step;
+      // the run must still report which workflow, and the chain it sat in.
+      const controller = new AbortController();
+      const httpClient: HTTPClient = async () => {
+        controller.abort();
+        throw new DOMException('This operation was aborted', 'AbortError');
+      };
+      const executor = new WorkflowExecutor({
+        document: entry,
+        registry,
+        stepExecutor: new StepExecutor({
+          document: entry,
+          registry,
+          operationExecutor: new OpenAPIOperationExecutor({ httpClient }),
+        }),
+      });
+
+      const error = await captureError(
+        executor.execute('linear', { inputs: { status: 'available' }, signal: controller.signal }),
+      );
+
+      assert.strictEqual(error.reason, 'aborted');
+      assert.strictEqual(error.workflowId, 'linear');
+      assert.strictEqual(error.stepId, 'findPets');
+      assert.deepEqual(error.path, ['linear']);
+    });
+
+    specify('should carry the abort reason as the error cause', async function () {
+      const { executor } = makeExecutor();
+      const controller = new AbortController();
+      const reason = new Error('user navigated away');
+      controller.abort(reason);
+
+      const error = await captureError(executor.execute('linear', { signal: controller.signal }));
+
+      assert.strictEqual(error.cause, reason);
+    });
+
+    specify('should forward a live signal to the transport', async function () {
+      const { executor, calls } = makeExecutor();
+      const controller = new AbortController();
+
+      const result = await executor.execute('linear', {
+        inputs: { status: 'available' },
+        signal: controller.signal,
+      });
+
+      // a signal that never fires changes nothing about the run, but must reach
+      // the request so a transport can cancel one in flight.
+      assert.strictEqual(result.status, 'completed');
+      assert.strictEqual(calls[0].signal, controller.signal);
+    });
+
+    specify('should cancel the run for a signal passed in executeOptions', async function () {
+      // the bag was the only channel before `signal` existed. Observed only at
+      // dispatch it would abort requests while the loop walked on, so it gates
+      // the executor's boundaries too — here, the second step never starts.
+      const controller = new AbortController();
+      const { executor, calls } = makeExecutor(okResponse, {
+        onCall: () => controller.abort(),
+      });
+
+      const error = await captureError(
+        executor.execute('linear', {
+          inputs: { status: 'available' },
+          executeOptions: { signal: controller.signal },
+        }),
+      );
+
+      assert.strictEqual(error.reason, 'aborted');
+      assert.strictEqual(error.stepId, 'getPet');
+      assert.strictEqual(calls.length, 1);
+    });
+
+    specify('should ignore a bag value that is not a usable signal', async function () {
+      // the bag is open, so anything may be under `signal`. A value the runner
+      // cannot subscribe to is not a cancellation: taking it for one would
+      // trade a working run for a TypeError thrown from inside a retry wait.
+      const { executor, calls } = makeExecutor();
+
+      const result = await executor.execute('linear', {
+        inputs: { status: 'available' },
+        executeOptions: { signal: { aborted: true } },
+      });
+
+      assert.strictEqual(result.status, 'completed');
+      assert.strictEqual(calls.length, 2);
+    });
+
+    specify('should take precedence over a signal smuggled in executeOptions', async function () {
+      const { executor, calls } = makeExecutor();
+      const stale = new AbortController();
+      const controller = new AbortController();
+
+      await executor.execute('linear', {
+        inputs: { status: 'available' },
+        executeOptions: { signal: stale.signal },
+        signal: controller.signal,
+      });
+
+      assert.strictEqual(calls[0].signal, controller.signal);
+    });
   });
 
   context('not yet supported', function () {

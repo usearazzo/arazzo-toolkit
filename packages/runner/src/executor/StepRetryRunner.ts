@@ -51,17 +51,25 @@ export interface StepRetryRunnerOptions {
    * Delays for the given number of milliseconds, awaited between attempts
    * (`retryAfter`). Injected so tests pass a no-op and real runs delay; defaults
    * to a real timer.
+   *
+   * The `signal` is the run's cancellation, forwarded so a long `retryAfter` is
+   * not sat out by a run the caller has already abandoned: the default timer
+   * clears itself and returns early when it fires. An injected sleep that
+   * ignores the signal is not wrong, it merely delays the cancellation until its
+   * wait is over.
    */
-  readonly sleep?: (ms: number) => Promise<void>;
+  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 }
 
 /**
- * Which step is being run — carried for diagnostics only.
+ * Which step is being run — carried for diagnostics, plus the run's cancellation
+ * so the wait between attempts can be cut short.
  * @internal
  */
 export interface StepRetryRunContext {
   readonly stepId: string;
   readonly workflowId: string;
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -87,16 +95,46 @@ export interface StepRetryRunContext {
  * caller whose per-attempt check is about to fail (a spent budget, say) still
  * pays that delay before its error surfaces. Keeping the seam this narrow is
  * worth one bounded wait on a run that was already doomed.
+ *
+ * Cancellation is the one thing it will not wait out: the run's `AbortSignal`
+ * reaches the timer, which returns early, and the next attempt then trips the
+ * caller's own check. Turning an abort into an error stays the caller's job, as
+ * with the budget; the signal is here only because a wait already in progress
+ * cannot be cut short from inside the thunk.
  * @internal
  */
 class StepRetryRunner {
   static readonly #DEFAULT_RETRY_LIMIT = 1;
-  static readonly #DEFAULT_SLEEP = (ms: number): Promise<void> =>
+  /**
+   * A real timer that stops waiting as soon as the run is cancelled, and leaves
+   * no pending timeout behind either way — a `retryAfter` of minutes would
+   * otherwise hold the event loop open long after the caller walked away.
+   *
+   * It resolves on abort rather than rejecting: turning a cancellation into an
+   * error is the caller's per-attempt check, which reports it uniformly for a
+   * run cancelled mid-wait and one cancelled mid-request.
+   */
+  static readonly #DEFAULT_SLEEP = (ms: number, signal?: AbortSignal): Promise<void> =>
     new Promise((resolve) => {
-      setTimeout(resolve, ms);
+      if (signal?.aborted === true) {
+        resolve();
+        return;
+      }
+
+      const onAbort = (): void => {
+        clearTimeout(timer);
+        resolve();
+      };
+      // unsubscribed when the wait ends normally, so a signal outliving many
+      // retries does not accumulate a listener per wait.
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      signal?.addEventListener('abort', onAbort, { once: true });
     });
 
-  readonly #sleep: (ms: number) => Promise<void>;
+  readonly #sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
 
   constructor(options: StepRetryRunnerOptions = {}) {
     this.#sleep = options.sleep ?? StepRetryRunner.#DEFAULT_SLEEP;
@@ -147,7 +185,7 @@ class StepRetryRunner {
         // sleep(0) for immediate retries, and never hand a custom sleep a
         // zero/negative/NaN value.
         const delayMs = this.#retryAfterMs(action);
-        if (delayMs > 0) await this.#sleep(delayMs);
+        if (delayMs > 0) await this.#sleep(delayMs, context.signal);
         fired = true;
         break;
       }

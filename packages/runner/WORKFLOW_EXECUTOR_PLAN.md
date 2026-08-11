@@ -1,7 +1,8 @@
 # WorkflowExecutor — implementation plan
 
-Status: the design below is implemented, across three PRs — the backbone
-(`#290`), retry (`#2`), and sub-workflow steps + `dependsOn` (`#3`). §0 tracks
+Status: the design below is implemented, across four PRs — the backbone
+(`#290`), retry (`#2`), sub-workflow steps + `dependsOn` (`#3`), and
+cancellation (`#4`). §0 tracks
 what shipped, what deliberately still throws, and **what to build next**;
 the numbered sections after it are the design and its spec citations, kept
 because the reasoning outlives the code. Grounds on the merged StepExecutor
@@ -266,6 +267,98 @@ asserted exactly via an injected `now`; `dependencyInputs` feeds a dependency
 (and a transitive one), `runDependencies: false` runs no deps and leaves
 `$workflows.<depId>` unresolved.
 
+### Shipped (PR `#4` — cancellation / `AbortSignal`)
+
+Issue `#28`, the head of the queue below. Cancellation was wire-deep before
+this: a `signal` smuggled through the opaque `executeOptions` bag reached the
+transport, so the request in flight was aborted — but the loop above it neither
+accepted nor observed one, so an aborted run went on to execute every remaining
+step, each aborted request judged by `successCriteria` as if the API had
+refused.
+
+**Delivered:**
+
+- `signal` is a first-class `WorkflowExecuteOptions` field (and a recognized
+  `#EXECUTE_OPTION_KEYS` key, so a typo still fails loudly). It is spread into
+  the `executeOptions` bag on its way down — that bag is how anything reaches
+  the transport. The bag remains a valid channel in its own right: a `signal`
+  passed only there is absorbed into the run scope at `execute`, so it gates
+  every boundary rather than just the dispatch, and the first-class option wins
+  when both are given. Read at the run boundary rather than at each dispatch,
+  the pre-option idiom cancels a whole run instead of half of one.
+- Observed at every boundary in the call tree: entering a workflow (so a
+  sub-workflow call or the next `dependsOn` prerequisite is not started), before
+  every step attempt, and on the way out of a workflow — nothing follows the
+  last step, so without that closing check a run abandoned while it was in
+  flight would resolve as though the caller had waited for it, and only under a
+  transport that ignores the signal. The error names where the run _was_ rather
+  than where it was heading: the deepest frame in progress reports it, and a
+  cancellation surfacing from inside a step is re-raised by the calling
+  workflow, which adds the workflowId and call chain the step executor has no
+  way to know. The per-attempt check rides the same seam as the
+  budget charge, inside the thunk handed to `StepRetryRunner`, so it covers the
+  boundary between two steps and between two attempts of one step alike.
+- `StepRetryRunner`'s `sleep` takes the signal (`(ms, signal?)`); the default
+  timer clears itself and returns early on abort rather than sitting out a long
+  `retryAfter`, and removes its listener when the wait ends normally so a
+  long-lived signal accumulates nothing. It resolves rather than rejects:
+  turning an abort into an error stays the caller's job, as with the budget —
+  the signal reaches the runner only because a wait already in progress cannot
+  be cut short from inside the attempt thunk. An injected
+  sleep that ignores the signal is not wrong — it merely postpones the
+  cancellation until its wait ends (asserted in the tests).
+- `StepExecutor` honors a `signal` in its execute options on its own account,
+  checked immediately **before dispatch** rather than on entry: locating the
+  operation and resolving the expressions are awaited, so an entry-only check
+  would still issue a request nobody is waiting for, whose wire-level
+  cancellation surfaces as a transport `ClientError` rather than as the
+  withdrawal it is.
+- A request the transport drops mid-flight is reported as the abort, not as the
+  `ClientError` reserved for a request that failed on its own terms: a
+  signal-honoring transport (fetch, axios, undici) rejects what it was told to
+  drop, and without this the same cancellation would read one way when it landed
+  between two steps and another when it landed in flight — per transport, since
+  a transport ignoring the signal produces neither. Only an aborted signal
+  reinterprets a transport error; a genuine failure stays a `ClientError`.
+- **Shape (the open decision, settled):** an aborted run **throws**
+  `ExecutionError` with `reason: 'aborted'`, naming the boundary (`workflowId`,
+  `stepId`, `path`) and carrying the signal's own `reason` as `cause`. Not a
+  `status: 'aborted'` result: cancellation is not a workflow outcome — nothing
+  was judged, no failure action was consulted, and the steps that did not run
+  were not decided against — and a fourth status would let a caller mistake a
+  withdrawn run for one the API answered. The partial trace is _not_ attached;
+  that stays open, and adding it to the error later is compatible in a way a new
+  result status would not have been.
+- Shared internals in `src/executor/abort.ts` (`throwIfAborted`,
+  `readAbortSignal`), unexported from the barrel. The signal is duck-typed out
+  of the bag rather than `instanceof`-checked, so one made in another realm (a
+  worker, a polyfill, a test harness) still cancels the run. The abort context
+  carries the call **stack**, not its `path`: that getter rebuilds an array per
+  access, and the check sits in the per-attempt loop, so the chain is
+  materialized only on the way out.
+
+**Client-agnostic by construction:** every check above is executor-level and
+touches no transport. Only cancelling the request _already on the wire_ is the
+transport's job, and the `HTTPClient` contract already asks for it ("honor
+`request.signal` when present"). A transport that ignores it costs one in-flight
+request; the run still stops at the next boundary.
+
+**Tests:** 21, across four suites. `WorkflowExecutor`: a pre-aborted signal
+starts nothing (`path: ['linear']`, zero calls), an abort mid-request stops at
+the next step, an abort stops between two retry attempts (the injected sleep,
+which ignores the signal, still waited once), `cause` carries the abort reason,
+a live signal reaches the request, a signal passed only in
+`executeOptions` cancels the run all the same, and the first-class option beats
+one in the bag. Composition: an abort before the next prerequisite
+(`path: ['dependent', 'setupB']`) and before the next sub-workflow call.
+`StepRetryRunner`: the injected sleep is offered the signal, and the _real_
+timer cuts a 5s `retryAfter` short (asserted on elapsed time, so a regression
+fails rather than hangs). `StepExecutor`: an aborted signal throws with nothing
+reaching the transport; a live one reaches the request; a transport that rejects
+the request it was told to drop surfaces as `aborted`, while the same rejection
+without a cancellation stays a `ClientError`. A bag value that is not a usable
+signal is ignored rather than taken for a cancellation.
+
 ### Not yet implemented / missing
 
 Each currently **throws `ExecutionError`** rather than misbehaving (or is simply
@@ -331,23 +424,14 @@ Everything above is done. This is the queue, ordered by what it would cost to do
 later rather than by appetite, so the sequencing argument is visible and can be
 overruled.
 
-**1. Cancellation / `AbortSignal` (issue `#28`).** The between-steps and
-between-retries check points, and making the retry `sleep` abortable, live in the
-loop that PR `#3` restructured — so this is cheapest while that restructure is
-fresh, and it slots into the per-call options bag PR `#3` introduced rather than
-needing its own. Also a prerequisite for any resume-from-checkpoint or durable
-runtime embedding. Needs one decision: the error and trace shape of an aborted
-run (`reason: 'aborted'` fits the named-reason discipline; what the partial trace
-contains is open).
-
-**2. Reference-retry.** A `retry` carrying a `stepId` / `workflowId` to run before
+**1. Reference-retry.** A `retry` carrying a `stepId` / `workflowId` to run before
 retrying; currently `retry-reference-unsupported`. Small, and it reuses the
 sub-workflow machinery that just landed. The deferred target validation lands with
 it. One ambiguity to settle: "the reference is executed and the context is
 returned, after which the current step is retried" does not say whether the
 reference runs once per attempt or once per retry chain.
 
-**3. Step-level `goto` to a `workflowId`.** Confirmed a must-have. Blocked on
+**2. Step-level `goto` to a `workflowId`.** Confirmed a must-have. Blocked on
 semantics rather than on code: 1.0.1 calls `goto` "a one-way transfer of workflow
 control", which is ambiguous inside a running workflow (does control return?).
 Worth settling as a question to the specification maintainers before building,
@@ -355,13 +439,13 @@ since guessing wrong is expensive to unwind. Expected shape: another `Transition
 kind the executor acts on, leaving the interpreter pure (see
 `StepTransitionInterpreter`).
 
-**4. Cross-document workflow references.** The largest, because it is a design
+**3. Cross-document workflow references.** The largest, because it is a design
 change rather than a lookup — the document must move into the per-invocation
 frame, and `StepExecutor`, injected pre-bound to one document, needs either a
 per-call document argument or a `(document) => StepExecutor` factory. Full
-analysis under "Cross-document workflow refs" above. Doing `#28` and
-reference-retry first costs nothing here; doing this first would make both of
-them rebase around a changed collaborator seam.
+analysis under "Cross-document workflow refs" above. Doing reference-retry first
+costs nothing here; doing this first would make both it and goto-workflow rebase
+around a changed collaborator seam.
 
 **Independent of that order:** workflow-level `parameters` (open question #2), the
 opt-in e2e petstore suite (§10), issue `#35` (per-source-description `server` /
@@ -439,7 +523,7 @@ export interface WorkflowExecutorOptions {
   // tunables with sane defaults:
   readonly maxSteps?: number; // runaway-goto/retry guard, global across the whole recursion tree (default 1000)
   readonly maxWorkflowDepth?: number; // sub-workflow recursion guard (default 32, matching libopenapi)
-  readonly sleep?: (ms: number) => Promise<void>; // injectable for retryAfter; default real timer, tests pass a no-op
+  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>; // injectable for retryAfter; default real timer (abort-aware, PR #4), tests pass a no-op
   readonly now?: () => number; // injectable clock for durationMs (PR #3); default Date.now
 }
 
@@ -468,8 +552,7 @@ export interface StepRunRecord {
 class WorkflowExecutor {
   constructor(options: WorkflowExecutorOptions);
   // options-bag signature from PR #3 on (was positional inputs/executeOptions):
-  // dependencyInputs feeds implicitly-run dependsOn workflows by workflowId;
-  // the bag is also where #28's `signal` will land.
+  // dependencyInputs feeds implicitly-run dependsOn workflows by workflowId.
   execute(
     workflowId: string,
     options?: {
@@ -477,6 +560,7 @@ class WorkflowExecutor {
       executeOptions?: Record<string, unknown>;
       dependencyInputs?: Record<string, Record<string, unknown>>;
       runDependencies?: boolean; // default true; false = caller asserts deps are satisfied out-of-band
+      signal?: AbortSignal; // cancels the run; throws reason: 'aborted' at the next boundary (PR #4)
     },
   ): Promise<WorkflowExecutionResult>;
 }
@@ -813,7 +897,9 @@ New `ExecutionError` reasons (extend the existing error type, no new class):
 `workflow-not-found`, `workflow-cycle` (self-referential call chain, §4c),
 `dependsOn-cycle`, `goto-target-not-found`, `goto-workflow-unsupported`
 (initial), `step-budget`, `workflow-depth`,
-`cross-document-workflow-unsupported` (initial).
+`cross-document-workflow-unsupported` (initial), `aborted` (PR #4 — the caller
+cancelled the run; carries `workflowId`/`stepId`/`path` and the signal's own
+`reason` as `cause`).
 
 `workflow-cycle` carries the offending `path` (chain of workflowIds, e.g.
 A → B → A). Keep it distinct from `workflow-depth`: cycle = guaranteed
