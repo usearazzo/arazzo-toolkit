@@ -1,6 +1,6 @@
+import WorkflowCallStack from '../../src/executor/WorkflowCallStack.ts';
+import { ExecutionError } from '../../src/index.ts';
 import { assert } from 'chai';
-
-import { WorkflowCallStack, ExecutionError } from '../../src/index.ts';
 
 describe('WorkflowCallStack', function () {
   const root = (maxDepth = 32): WorkflowCallStack => new WorkflowCallStack({ maxDepth });

@@ -12,7 +12,7 @@ import ExecutionError from '../errors/ExecutionError.ts';
  * `StepExecutionResult` satisfies this shape) and a sub-workflow step
  * (synthesized from the sub-run's outcome) — so the retry loop drives them
  * identically and knows nothing about either.
- * @public
+ * @internal
  */
 export interface StepAttemptOutcome {
   readonly stepId: string;
@@ -24,7 +24,7 @@ export interface StepAttemptOutcome {
 
 /**
  * The terminal outcome of a step once its retries are settled.
- * @public
+ * @internal
  */
 export interface StepRetryResult {
   /**
@@ -44,7 +44,7 @@ export interface StepRetryResult {
 
 /**
  * Options for the StepRetryRunner.
- * @public
+ * @internal
  */
 export interface StepRetryRunnerOptions {
   /**
@@ -57,7 +57,7 @@ export interface StepRetryRunnerOptions {
 
 /**
  * Which step is being run — carried for diagnostics only.
- * @public
+ * @internal
  */
 export interface StepRetryRunContext {
   readonly stepId: string;
@@ -83,7 +83,7 @@ export interface StepRetryRunContext {
  * thunk is also where a caller puts anything it wants done per attempt — charging
  * a run budget, say — so this class needs no notion of one; a thunk that throws
  * ends the step there, without further attempts.
- * @public
+ * @internal
  */
 class StepRetryRunner {
   static readonly #DEFAULT_RETRY_LIMIT = 1;

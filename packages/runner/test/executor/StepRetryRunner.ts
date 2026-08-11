@@ -1,12 +1,7 @@
+import StepRetryRunner, { type StepAttemptOutcome } from '../../src/executor/StepRetryRunner.ts';
+import { ExecutionError, type SelectedAction } from '../../src/index.ts';
 import { assert } from 'chai';
 import { refractFailureAction, isFailureActionElement } from '@speclynx/apidom-ns-arazzo-1';
-
-import {
-  StepRetryRunner,
-  ExecutionError,
-  type StepAttemptOutcome,
-  type SelectedAction,
-} from '../../src/index.ts';
 
 describe('StepRetryRunner', function () {
   const runContext = { stepId: 'only', workflowId: 'wf' };

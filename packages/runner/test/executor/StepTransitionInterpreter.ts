@@ -1,3 +1,5 @@
+import StepTransitionInterpreter from '../../src/executor/StepTransitionInterpreter.ts';
+import { ExecutionError, type SelectedAction } from '../../src/index.ts';
 import { assert } from 'chai';
 import {
   refractStep,
@@ -7,8 +9,6 @@ import {
   isSuccessActionElement,
   isFailureActionElement,
 } from '@speclynx/apidom-ns-arazzo-1';
-
-import { StepTransitionInterpreter, ExecutionError, type SelectedAction } from '../../src/index.ts';
 
 describe('StepTransitionInterpreter', function () {
   let interpreter: StepTransitionInterpreter;

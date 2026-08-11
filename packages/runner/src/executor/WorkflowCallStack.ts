@@ -6,7 +6,7 @@ import ExecutionError from '../errors/ExecutionError.ts';
  * Recorded per call so a detected loop can be named for the mechanism that formed
  * it: a repeat reached purely through `dependsOn` edges is a dependency cycle,
  * one involving a sub-workflow step call is a call cycle.
- * @public
+ * @internal
  */
 export type WorkflowCallVia = 'root' | 'step' | 'dependsOn';
 
@@ -20,7 +20,7 @@ interface WorkflowCall {
 
 /**
  * Options for the WorkflowCallStack.
- * @public
+ * @internal
  */
 export interface WorkflowCallStackOptions {
   /**
@@ -52,7 +52,7 @@ export interface WorkflowCallStackOptions {
  *
  * Both carry the offending `path`, since the workflow the error names is rarely
  * the one whose authoring needs looking at.
- * @public
+ * @internal
  */
 class WorkflowCallStack {
   readonly #calls: readonly WorkflowCall[];

@@ -13,7 +13,7 @@ import ExecutionError from '../errors/ExecutionError.ts';
  * targets the next step); `goto` jumps to a step by id within the current
  * workflow; `end` stops the run with `status: ended`; `break` stops with
  * `status: failed` (the failure default).
- * @public
+ * @internal
  */
 export type Transition =
   | { readonly kind: 'next' }
@@ -23,7 +23,7 @@ export type Transition =
 
 /**
  * Which step's outcome is being interpreted — carried for diagnostics only.
- * @public
+ * @internal
  */
 export interface StepTransitionContext {
   readonly workflowId: string;
@@ -54,7 +54,7 @@ export interface StepTransitionContext {
  *   `retry` is the one action that never arrives here: it is settled by
  *   {@link StepRetryRunner}, which yields only the terminal action a retry chain
  *   resolves to.
- * @public
+ * @internal
  */
 class StepTransitionInterpreter {
   /**
