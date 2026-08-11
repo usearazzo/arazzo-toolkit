@@ -6,6 +6,7 @@ import {
   type StepParametersElement,
 } from '@speclynx/apidom-ns-arazzo-1';
 
+import { deliveryKey } from '../client/delivery-key.ts';
 import { parameterLocation } from '../document/parameter-location.ts';
 import ResolverError from '../errors/ResolverError.ts';
 
@@ -18,14 +19,6 @@ import ResolverError from '../errors/ResolverError.ts';
  * @public
  */
 export type ParameterValueResolver = (expression: string) => unknown;
-
-/**
- * The OpenAPI parameter locations, the ones `buildRequest` can deliver a
- * `'{in}.{name}'` key to. Arazzo additionally allows `querystring`, which
- * names no OpenAPI location — see
- * {@link ParameterResolver.resolveRequestParameters} for how it travels.
- */
-const OPENAPI_LOCATIONS = new Set(['path', 'query', 'header', 'cookie']);
 
 /**
  * Resolves a step's `parameters` to a plain map of resolved values.
@@ -93,29 +86,27 @@ class ParameterResolver {
 
   /**
    * Resolves each parameter's `value`, returning the map an OpenAPI operation
-   * is executed with. An OpenAPI location (`path`, `query`, `header`,
-   * `cookie`) yields a `'{in}.{name}'` key, which the client matches verbatim
-   * against the declared parameter it built the same key from — so parameters
-   * that differ only in their location coexist. Arazzo's `querystring` names
-   * no OpenAPI location, so there is nothing to qualify against: the value
-   * keeps its bare name, which can still reach a same-named declared
-   * parameter.
+   * is executed with, keyed per {@link deliveryKey}: `'{in}.{name}'` for a
+   * location the client can address — so parameters that differ only in their
+   * location coexist — and the bare name for Arazzo's `querystring`, which
+   * names no OpenAPI location and can still reach a same-named declared
+   * parameter that way.
    *
    * A parameter without a location throws {@link ResolverError}: a step
    * targeting an operation requires one (the normalizer does not inherit
    * input-shaped workflow parameters into such steps, so this is the step's
    * own authoring error), and delivering it bare instead would let it capture
-   * *every* declared location of that name — the client consults bare names
-   * before qualified ones, so a stray bare key silently outranks the step's
-   * own qualified values. A non-string location throws for the same reason it
-   * deduplicates with nothing in the normalizer: it names no location.
+   * *every* declared location of that name — see {@link deliveryKey} for the
+   * lookup order that makes it so. A non-string location throws for the same
+   * reason it deduplicates with nothing in the normalizer: it names no
+   * location.
    *
-   * The `'{in}.{name}'` scheme is the client's and is not injective — a
-   * parameter legally named `header.token` in the `querystring` location and a
-   * header parameter named `token` both produce the key `header.token`. Two
-   * *different* parameters colliding on one key cannot both be delivered, so
-   * that throws {@link ResolverError} rather than silently dropping one; the
-   * same parameter declared twice collapses to its first, most specific
+   * The key scheme is not injective — a parameter legally named
+   * `header.token` in the `querystring` location and a header parameter named
+   * `token` both produce the key `header.token`. Two *different* parameters
+   * colliding on one key cannot both be delivered, so that throws
+   * {@link ResolverError} rather than silently dropping one; the same
+   * parameter declared twice collapses to its first, most specific
    * declaration as everywhere else.
    */
   resolveRequestParameters(
@@ -125,8 +116,9 @@ class ParameterResolver {
     const result: Record<string, unknown> = {};
     if (parameters === undefined) return result;
 
-    // which (name, location) identity claimed each key, so a genuine duplicate
-    // (same identity) is told apart from a key collision (different identities)
+    // which location claimed each key. Given a key, the claimant's name is
+    // determined by its location (the key embeds the name, or is the name), so
+    // location alone tells a genuine duplicate apart from a key collision.
     const claimedBy = new Map<string, string>();
 
     for (const parameter of parameters) {
@@ -149,18 +141,17 @@ class ParameterResolver {
         });
       }
 
-      const key = OPENAPI_LOCATIONS.has(location) ? `${location}.${name}` : name;
-      const identity = JSON.stringify([location, name]);
+      const key = deliveryKey(location, name);
       if (Object.hasOwn(result, key)) {
         // the same parameter declared again: the earlier, more specific one won
-        if (claimedBy.get(key) === identity) continue;
+        if (claimedBy.get(key) === location) continue;
         throw new ResolverError(
           `Parameter "${name}" (in: ${location}) collides with another parameter on the ` +
             `delivery key "${key}" and cannot be delivered unambiguously`,
           { target: name, reason: 'ambiguous-delivery' },
         );
       }
-      claimedBy.set(key, identity);
+      claimedBy.set(key, location);
 
       result[key] = this.#resolveValue(parameter, resolve);
     }

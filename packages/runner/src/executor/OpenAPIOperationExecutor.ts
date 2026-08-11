@@ -11,6 +11,7 @@ import { isPlainObject } from 'ramda-adjunct';
 
 // @ts-expect-error vendored swagger-client bundle has no type declarations
 import { buildRequest, idFromPathMethodLegacy } from '../vendor/swagger-client.mjs';
+import { deliveryKey } from '../client/delivery-key.ts';
 import type HTTPClient from '../client/HTTPClient.ts';
 import httpClientFetch from '../client/HTTPClientFetch.ts';
 import type { OpenAPIOperationElement } from '../document/openapi-types.ts';
@@ -450,12 +451,11 @@ class OpenAPIOperationExecutor {
    * here, where the assembled document has those parameters dereferenced and
    * inherited.
    *
-   * The payload travels under `'{in}.{name}'` keys (`body.{name}`,
-   * `formData.{name}`), not bare names. `buildRequest` consults a bare name
-   * *before* the qualified key of any declared parameter that bears it, so a
-   * bare payload key would capture a same-named parameter in another location
-   * — 2.0 legally declares e.g. `petId` in `path` and in `formData` at once,
-   * and the caller's own parameters arrive qualified.
+   * The payload travels under {@link deliveryKey} keys (`body.{name}`,
+   * `formData.{name}`), never bare names: a bare key would capture a
+   * same-named parameter in another location — 2.0 legally declares e.g.
+   * `petId` in `path` and in `formData` at once — per the lookup order
+   * documented on {@link deliveryKey}.
    */
   #adaptRequestBody(
     buildOptions: Record<string, unknown>,
@@ -481,7 +481,10 @@ class OpenAPIOperationExecutor {
     const body = parameters.find((parameter) => toValue(parameter.in) === 'body');
     if (body !== undefined) {
       const name = toValue(body.name) as string;
-      return { ...rest, parameters: { ...callerParameters, [`body.${name}`]: requestBody } };
+      return {
+        ...rest,
+        parameters: { ...callerParameters, [deliveryKey('body', name)]: requestBody },
+      };
     }
 
     // formData models each field as its own parameter, so the payload's keys
@@ -495,13 +498,11 @@ class OpenAPIOperationExecutor {
           { operationPath: jsonPointer },
         );
       }
-      const formParameters = Object.fromEntries(
-        Object.entries(requestBody as Record<string, unknown>).map(([field, value]) => [
-          `formData.${field}`,
-          value,
-        ]),
-      );
-      return { ...rest, parameters: { ...callerParameters, ...formParameters } };
+      const merged: Record<string, unknown> = { ...callerParameters };
+      for (const [field, value] of Object.entries(requestBody as Record<string, unknown>)) {
+        merged[deliveryKey('formData', field)] = value;
+      }
+      return { ...rest, parameters: merged };
     }
 
     throw new ClientError(

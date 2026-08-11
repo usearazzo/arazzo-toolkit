@@ -45,8 +45,8 @@ const normalizerOptionsOverride = mergeOptions(arazzoProviderOptions as ApiDOMRe
  */
 const locationEquals = (parameter1: ParameterElement, parameter2: ParameterElement): boolean => {
   const location1 = parameterLocation(parameter1);
-  const location2 = parameterLocation(parameter2);
-  return location1 !== null && location2 !== null && location1 === location2;
+  // a malformed left side fails here; a malformed right side fails the equality
+  return location1 !== null && location1 === parameterLocation(parameter2);
 };
 
 /**
@@ -166,15 +166,14 @@ class ArazzoWorkflowNormalizer {
    * workflow-level `value` that is a runtime expression still be evaluated once
    * per step, against the state that step is entered with.
    *
-   * Not every workflow parameter is applicable to every kind of step. One
-   * without a location (`in`) is a workflow-input mapping — meaningful for a
-   * step targeting a `workflowId`, where "all parameters map to workflow
-   * inputs", but naming no place in a request — so it is inherited only into
-   * such steps. Inheriting it into an operation step would plant a bare-named
-   * value in the request-parameter map, and the client consults bare names
-   * before location-qualified ones, so it would silently outrank the step's own
-   * same-named parameters. The workflow's own `parameters` list is left intact;
-   * only the synthesized per-step copies are filtered.
+   * Not every workflow parameter is applicable to every kind of step: one
+   * without a location is a workflow-input mapping (see
+   * {@link parameterLocation}), so it is inherited only into steps targeting a
+   * `workflowId` — on an operation step it names no place in a request, and
+   * the resolver reports a location-less parameter there as the step's *own*
+   * authoring error, which not synthesizing one is what keeps true. The
+   * workflow's own `parameters` list is left intact; only the synthesized
+   * per-step copies are filtered.
    *
    * A malformed `steps` or `parameters` is left for the executor to report as
    * the authoring error it is; there is nothing to inherit through it here, and
@@ -193,17 +192,17 @@ class ArazzoWorkflowNormalizer {
     if (!isArrayElement(workflow.steps)) return;
 
     const inheritedParameters = [...inherited];
+    // what an operation step may inherit — the input-shaped entries filtered
+    // out once, ahead of the per-step loop
+    const requestShaped = inheritedParameters.filter(
+      (parameter) => !isParameterElement(parameter) || parameterLocation(parameter) !== undefined,
+    );
 
     for (const step of workflow.steps) {
       if (!isStepElement(step)) continue;
       if (step.parameters !== undefined && !isArrayElement(step.parameters)) continue;
 
-      const applicable = isStringElement(step.workflowId)
-        ? inheritedParameters
-        : inheritedParameters.filter(
-            (parameter) =>
-              !isParameterElement(parameter) || parameterLocation(parameter) !== undefined,
-          );
+      const applicable = isStringElement(step.workflowId) ? inheritedParameters : requestShaped;
       if (applicable.length === 0) continue;
 
       const own = isArrayElement(step.parameters) ? [...step.parameters] : [];
