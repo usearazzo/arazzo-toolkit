@@ -4,9 +4,9 @@ import type ArazzoDocument from '../document/ArazzoDocument.ts';
 /**
  * Normalizes an extracted Arazzo step.
  *
- * Currently acts as an identity function. Steps are already
- * dereferenced as part of workflow normalization and have no
- * inherited properties to merge.
+ * Currently acts as an identity function. Steps are already dereferenced as part
+ * of workflow normalization, which also inherits the workflow's `parameters`
+ * into them — a step reaching here has no inherited properties left to merge.
  * @public
  */
 class ArazzoStepNormalizer {

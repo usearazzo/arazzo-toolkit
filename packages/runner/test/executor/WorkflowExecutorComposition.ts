@@ -145,6 +145,42 @@ describe('WorkflowExecutor composition', function () {
       assert.strictEqual(result.outputs.afterRan, 200);
     });
 
+    specify(
+      "should pass the calling workflow's parameters in as the child's inputs",
+      async function () {
+        const { executor, calls } = makeExecutor();
+
+        const result = await executor.execute('callsChildWithInheritedParameters');
+
+        assert.strictEqual(result.status, 'completed');
+        // the step declares no `petId` of its own, so the child was called with
+        // the one it inherited from the workflow.
+        assert.include(calls[0].url, '/pet/7');
+        assert.strictEqual(result.outputs.childName, 'Rex');
+        // and the step's own parameter still overrides the inherited one of the
+        // same name — a workflowId step's parameters carry no `in`, so name
+        // alone decides.
+        assert.strictEqual(result.outputs.childPetId, '7');
+        assert.strictEqual(result.outputs.childUnused, 'from-step');
+      },
+    );
+
+    specify(
+      "should let the step's own input beat an inherited parameter of the same name",
+      async function () {
+        const { executor, calls } = makeExecutor();
+
+        const result = await executor.execute('childInputBeatsInheritedParameter');
+
+        assert.strictEqual(result.status, 'completed');
+        // the two differ in `in`, so both survive the merge — but a step "can
+        // never remove" what it inherits and must still override it. Were the
+        // inherited one to win, the child would fetch pet 99.
+        assert.strictEqual(result.outputs.childPetId, '7');
+        assert.include(calls[0].url, '/pet/7');
+      },
+    );
+
     specify("should nest the sub-run's own trace under the calling step", async function () {
       const { executor } = makeExecutor();
 

@@ -3,7 +3,11 @@ import { fileURLToPath } from 'node:url';
 
 import { assert } from 'chai';
 import { toValue } from '@speclynx/apidom-core';
-import { isWorkflowElement } from '@speclynx/apidom-ns-arazzo-1';
+import {
+  isWorkflowElement,
+  refractWorkflow,
+  type WorkflowElement,
+} from '@speclynx/apidom-ns-arazzo-1';
 
 import { DocumentRegistry, ArazzoDocument } from '../../src/index.ts';
 import ArazzoWorkflowExtractor from '../../src/extractor/ArazzoWorkflowExtractor.ts';
@@ -43,6 +47,210 @@ describe('ArazzoWorkflowNormalizer', function () {
       const normalized = await normalizer.normalize(workflow, entryDoc);
 
       assert.strictEqual(toValue(normalized.workflowId), 'authenticateAndOrderPet');
+    });
+  });
+
+  context('parameter inheritance', function () {
+    let entryDoc: ArazzoDocument;
+
+    before(async function () {
+      const registry = new DocumentRegistry();
+      entryDoc = await registry.acquireEntryDocument(fixturePath);
+    });
+
+    type ParameterEntry = { name?: string; in?: string; value?: unknown };
+
+    /**
+     * Normalizes a workflow built from plain values, returning the parameters
+     * its steps end up with — one list per step, in step order.
+     */
+    const inherit = async (
+      parameters: ParameterEntry[] | undefined,
+      ...steps: { stepId: string; parameters?: ParameterEntry[] }[]
+    ): Promise<(ParameterEntry[] | undefined)[]> => {
+      const workflow = refractWorkflow({
+        workflowId: 'w',
+        ...(parameters === undefined ? {} : { parameters }),
+        steps: steps.map((step) => ({ operationId: 'getInventory', ...step })),
+      }) as WorkflowElement;
+      const normalized = await normalizer.normalize(workflow, entryDoc);
+
+      return (toValue(normalized.steps) as { parameters?: ParameterEntry[] }[]).map(
+        (step) => step.parameters,
+      );
+    };
+
+    specify('should inherit a workflow parameter into a step declaring none', async function () {
+      const [step] = await inherit([{ name: 'status', in: 'query', value: 'available' }], {
+        stepId: 'a',
+      });
+
+      assert.deepEqual(step, [{ name: 'status', in: 'query', value: 'available' }]);
+    });
+
+    specify('should inherit into every step of the workflow', async function () {
+      const steps = await inherit(
+        [{ name: 'status', in: 'query', value: 'available' }],
+        { stepId: 'a' },
+        { stepId: 'b' },
+      );
+
+      assert.deepEqual(steps[0], steps[1]);
+      assert.lengthOf(steps[1]!, 1);
+    });
+
+    specify("should let a step's own parameter override the inherited one", async function () {
+      const [step] = await inherit([{ name: 'status', in: 'query', value: 'pending' }], {
+        stepId: 'a',
+        parameters: [{ name: 'status', in: 'query', value: 'sold' }],
+      });
+
+      assert.deepEqual(step, [{ name: 'status', in: 'query', value: 'sold' }]);
+    });
+
+    specify("should order the step's own list ahead of what it inherits", async function () {
+      const [step] = await inherit([{ name: 'inherited', in: 'query', value: 1 }], {
+        stepId: 'a',
+        parameters: [{ name: 'own', in: 'query', value: 2 }],
+      });
+
+      // matches how inheritParametersToOperation orders an Operation's
+      // parameters ahead of the Path Item's it inherits.
+      assert.deepEqual(step, [
+        { name: 'own', in: 'query', value: 2 },
+        { name: 'inherited', in: 'query', value: 1 },
+      ]);
+    });
+
+    specify(
+      'should treat the same name in different locations as two parameters',
+      async function () {
+        const [step] = await inherit([{ name: 'trace', in: 'header', value: 'from-workflow' }], {
+          stepId: 'a',
+          parameters: [{ name: 'trace', in: 'query', value: 'from-step' }],
+        });
+
+        // a step may override an inherited parameter but never remove it: these
+        // are bound for two different places, so both survive.
+        assert.deepEqual(step, [
+          { name: 'trace', in: 'query', value: 'from-step' },
+          { name: 'trace', in: 'header', value: 'from-workflow' },
+        ]);
+      },
+    );
+
+    specify('should treat an absent location as its own identity', async function () {
+      // a workflowId step's parameters are workflow inputs and carry no `in`, so
+      // name alone decides there — while an `in`-carrying parameter of the same
+      // name remains a separate one.
+      const [step] = await inherit(
+        [
+          { name: 'token', value: 'inherited-input' },
+          { name: 'token', in: 'header', value: 'inherited-header' },
+        ],
+        { stepId: 'a', parameters: [{ name: 'token', value: 'own-input' }] },
+      );
+
+      assert.deepEqual(step, [
+        { name: 'token', value: 'own-input' },
+        { name: 'token', in: 'header', value: 'inherited-header' },
+      ]);
+    });
+
+    specify('should carry a non-Parameter entry across untouched', async function () {
+      const workflow = refractWorkflow({
+        workflowId: 'w',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        steps: [{ stepId: 'a', operationId: 'getInventory', parameters: ['not-a-parameter'] }],
+      }) as WorkflowElement;
+
+      const normalized = await normalizer.normalize(workflow, entryDoc);
+
+      // rebuilding the step's list is no licence to drop what its author wrote,
+      // however malformed — two such entries are not "equal" to each other.
+      assert.deepEqual((toValue(normalized.steps) as { parameters: unknown }[])[0].parameters, [
+        'not-a-parameter',
+        { name: 'status', in: 'query', value: 'available' },
+      ]);
+    });
+
+    specify('should not collapse two entries that both lack a name', async function () {
+      const workflow = refractWorkflow({
+        workflowId: 'w',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        steps: [
+          {
+            stepId: 'a',
+            operationId: 'getInventory',
+            parameters: [
+              { in: 'query', value: 1 },
+              { in: 'query', value: 2 },
+            ],
+          },
+        ],
+      }) as WorkflowElement;
+
+      const normalized = await normalizer.normalize(workflow, entryDoc);
+
+      assert.lengthOf((toValue(normalized.steps) as { parameters: unknown[] }[])[0].parameters, 3);
+    });
+
+    specify('should match names case-sensitively, per the specification', async function () {
+      const [step] = await inherit([{ name: 'Status', in: 'query', value: 'pending' }], {
+        stepId: 'a',
+        parameters: [{ name: 'status', in: 'query', value: 'sold' }],
+      });
+
+      assert.lengthOf(step!, 2);
+    });
+
+    specify('should leave steps untouched when the workflow declares none', async function () {
+      const steps = await inherit(
+        undefined,
+        { stepId: 'a', parameters: [{ name: 'status', in: 'query', value: 'sold' }] },
+        { stepId: 'b' },
+      );
+
+      assert.deepEqual(steps[0], [{ name: 'status', in: 'query', value: 'sold' }]);
+      // a step declaring none is not given an empty list it never had.
+      assert.isUndefined(steps[1]);
+    });
+
+    specify(
+      'should be idempotent, so a cached workflow is not re-inherited into',
+      async function () {
+        const workflow = refractWorkflow({
+          workflowId: 'w',
+          parameters: [{ name: 'status', in: 'query', value: 'available' }],
+          steps: [
+            {
+              stepId: 'a',
+              operationId: 'getInventory',
+              parameters: [{ name: 'limit', in: 'query', value: 10 }],
+            },
+          ],
+        }) as WorkflowElement;
+
+        await normalizer.normalize(workflow, entryDoc);
+        const normalized = await normalizer.normalize(workflow, entryDoc);
+
+        assert.deepEqual((toValue(normalized.steps) as { parameters: unknown }[])[0].parameters, [
+          { name: 'limit', in: 'query', value: 10 },
+          { name: 'status', in: 'query', value: 'available' },
+        ]);
+      },
+    );
+
+    specify('should leave a malformed steps for the executor to report', async function () {
+      const workflow = refractWorkflow({
+        workflowId: 'w',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        steps: 'not-a-list',
+      }) as WorkflowElement;
+
+      const normalized = await normalizer.normalize(workflow, entryDoc);
+
+      assert.strictEqual(toValue(normalized.steps), 'not-a-list');
     });
   });
 

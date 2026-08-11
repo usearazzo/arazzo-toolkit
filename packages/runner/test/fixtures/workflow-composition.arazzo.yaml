@@ -53,6 +53,46 @@ workflows:
       afterRan: $steps.after.outputs.ran
       viaWorkflows: $workflows.fetchPet.outputs.name
 
+  # the calling workflow's parameters are applicable to a step that calls a
+  # child workflow too, where they become the child's inputs alongside the
+  # step's own. `petId` is inherited; `unused` is overridden by the step.
+  - workflowId: callsChildWithInheritedParameters
+    parameters:
+      - name: petId
+        value: "7"
+      - name: unused
+        value: from-workflow
+    steps:
+      - stepId: child
+        workflowId: fetchPet
+        parameters:
+          - name: unused
+            value: from-step
+        outputs:
+          childName: $workflows.fetchPet.outputs.name
+    outputs:
+      childName: $steps.child.outputs.childName
+      childPetId: $workflows.fetchPet.inputs.petId
+      childUnused: $workflows.fetchPet.inputs.unused
+
+  # the calling workflow declares a request-shaped `petId` (it carries an `in`);
+  # the step calling the child declares its own input of the same name, which
+  # carries none. They are two different parameters, so both survive the merge —
+  # but the step's own must still be the one the child is invoked with.
+  - workflowId: childInputBeatsInheritedParameter
+    parameters:
+      - name: petId
+        in: query
+        value: "99"
+    steps:
+      - stepId: child
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "7"
+    outputs:
+      childPetId: $workflows.fetchPet.inputs.petId
+
   # two steps call the SAME child with different inputs — two distinct runs, so
   # neither trace may overwrite the other.
   - workflowId: callsChildTwice

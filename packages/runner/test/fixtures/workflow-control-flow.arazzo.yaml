@@ -452,6 +452,43 @@ workflows:
       second: $steps.second.outputs.secondStatus
       third: $steps.third.outputs.thirdStatus
 
+  # the workflow's parameters are applicable to every step: the first inherits
+  # `status` having declared none of its own, the second overrides it with its
+  # own value.
+  - workflowId: inheritsParameters
+    parameters:
+      - name: status
+        in: query
+        value: $inputs.status
+    steps:
+      - stepId: inherits
+        operationId: findPetsByStatus
+      - stepId: overrides
+        operationId: findPetsByStatus
+        parameters:
+          - name: status
+            in: query
+            value: sold
+
+  # the workflow-level parameter is a runtime expression reading an earlier
+  # step's output, so it can only be resolved per step, as each step is entered.
+  - workflowId: parameterResolvedPerStep
+    parameters:
+      - name: petId
+        in: path
+        value: $steps.findPets.outputs.petId
+    steps:
+      - stepId: findPets
+        operationId: findPetsByStatus
+        parameters:
+          - name: status
+            in: query
+            value: available
+        outputs:
+          petId: $response.body#/id
+      - stepId: getPet
+        operationId: getPetById
+
   # a goto action naming neither stepId nor workflowId — malformed control flow.
   - workflowId: gotoNoTarget
     steps:
