@@ -195,6 +195,46 @@ describe('ArazzoWorkflowNormalizer', function () {
       assert.lengthOf((toValue(normalized.steps) as { parameters: unknown[] }[])[0].parameters, 3);
     });
 
+    specify('should not collapse two entries whose location is not a string', async function () {
+      const workflow = refractWorkflow({
+        workflowId: 'w',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        steps: [
+          {
+            stepId: 'a',
+            operationId: 'getInventory',
+            // `in: 1` is not a location, so these are no more "the same
+            // parameter" than two unnamed entries are.
+            parameters: [
+              { name: 'x', in: 1, value: 'first' },
+              { name: 'x', in: 1, value: 'second' },
+            ],
+          },
+        ],
+      }) as WorkflowElement;
+
+      const normalized = await normalizer.normalize(workflow, entryDoc);
+
+      assert.lengthOf((toValue(normalized.steps) as { parameters: unknown[] }[])[0].parameters, 3);
+    });
+
+    specify('should skip a step whose own parameters is present but not a list', async function () {
+      const workflow = refractWorkflow({
+        workflowId: 'w',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        steps: [{ stepId: 'a', operationId: 'getInventory', parameters: 'not-a-list' }],
+      }) as WorkflowElement;
+
+      const normalized = await normalizer.normalize(workflow, entryDoc);
+
+      // overwriting it would erase the very thing that makes the document
+      // invalid, leaving the executor nothing to report.
+      assert.strictEqual(
+        (toValue(normalized.steps) as { parameters: unknown }[])[0].parameters,
+        'not-a-list',
+      );
+    });
+
     specify('should match names case-sensitively, per the specification', async function () {
       const [step] = await inherit([{ name: 'Status', in: 'query', value: 'pending' }], {
         stepId: 'a',

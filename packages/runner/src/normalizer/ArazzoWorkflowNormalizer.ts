@@ -3,6 +3,7 @@ import {
   isParameterElement,
   isStepElement,
   StepParametersElement,
+  type ParameterElement,
   type WorkflowElement,
 } from '@speclynx/apidom-ns-arazzo-1';
 import { toValue } from '@speclynx/apidom-core';
@@ -31,6 +32,30 @@ export type ArazzoWorkflowNormalizerOptions = PartialDeep<ApiDOMReferenceOptions
 const normalizerOptionsOverride = mergeOptions(arazzoProviderOptions as ApiDOMReferenceOptions, {});
 
 /**
+ * Whether two Parameter Objects name the same location.
+ *
+ * Absent on both sides is a match — that is the `workflowId` step case, where
+ * parameters are workflow inputs with no location to pair the name with.
+ * Otherwise both must be strings: a location that is present but not a string
+ * (`in: 1`) is not a location, so two parameters carrying one are no more "the
+ * same parameter" than two unnamed entries are, and deduplicating them would
+ * drop authored content the same way.
+ */
+const locationEquals = (parameter1: ParameterElement, parameter2: ParameterElement): boolean => {
+  const location1 = parameter1.in;
+  const location2 = parameter2.in;
+
+  if (location1 === undefined || location2 === undefined) {
+    return location1 === undefined && location2 === undefined;
+  }
+  return (
+    isStringElement(location1) &&
+    isStringElement(location2) &&
+    toValue(location1) === toValue(location2)
+  );
+};
+
+/**
  * Whether two Arazzo Parameter Objects are the same parameter.
  *
  * Identity is the `(name, in)` pair — the rule ApiDOM's OpenAPI
@@ -42,12 +67,12 @@ const normalizerOptionsOverride = mergeOptions(arazzoProviderOptions as ApiDOMRe
  * location to pair the name with. Names are case-sensitive per the
  * specification, so nothing is case-folded.
  *
- * Anything that is not a named Parameter Object is equal to nothing, including
- * itself — an unresolved Reusable Object, or a scalar someone put in the list.
- * Such an entry has no identity to deduplicate on, and since this feeds a
- * `uniqWith` that rebuilds the step's list, calling it equal to another would
- * delete authored content from the document. The OpenAPI plugin guards the same
- * way and for the same reason.
+ * Anything without a well-formed identity is equal to nothing, including itself
+ * — an unresolved Reusable Object, a scalar someone put in the list, a parameter
+ * with no `name`, or one whose `name` or `in` is not a string. Such an entry has
+ * nothing to deduplicate on, and since this feeds a `uniqWith` that rebuilds the
+ * step's list, calling it equal to another would delete authored content from
+ * the document. The OpenAPI plugin guards the same way and for the same reason.
  */
 const parameterEquals = (parameter1: Element, parameter2: Element): boolean =>
   isParameterElement(parameter1) &&
@@ -55,7 +80,7 @@ const parameterEquals = (parameter1: Element, parameter2: Element): boolean =>
   isStringElement(parameter1.name) &&
   isStringElement(parameter2.name) &&
   toValue(parameter1.name) === toValue(parameter2.name) &&
-  toValue(parameter1.in) === toValue(parameter2.in);
+  locationEquals(parameter1, parameter2);
 
 /**
  * Normalizes an extracted Arazzo workflow.
@@ -147,10 +172,14 @@ class ArazzoWorkflowNormalizer {
    * per step, against the state that step is entered with.
    *
    * A malformed `steps` or `parameters` is left for the executor to report as
-   * the authoring error it is; there is nothing to inherit through it here. An
-   * entry within either list that is not a Parameter Object is carried across
-   * untouched rather than filtered out — rebuilding a step's list is no licence
-   * to drop what its author wrote, and `ParameterResolver` ignores it anyway.
+   * the authoring error it is; there is nothing to inherit through it here, and
+   * a step whose own `parameters` is present but not a list is skipped rather
+   * than handed a synthesized one — overwriting it would erase the very thing
+   * that makes the document invalid and leave nothing to report. An entry
+   * *within* either list that is not a Parameter Object is carried across
+   * untouched rather than filtered out, for the same reason: rebuilding a step's
+   * list is no licence to drop what its author wrote, and `ParameterResolver`
+   * ignores it anyway.
    */
   #inheritParametersToSteps(workflow: WorkflowElement): void {
     const inherited = workflow.parameters;
@@ -161,6 +190,7 @@ class ArazzoWorkflowNormalizer {
 
     for (const step of workflow.steps) {
       if (!isStepElement(step)) continue;
+      if (step.parameters !== undefined && !isArrayElement(step.parameters)) continue;
 
       const own = isArrayElement(step.parameters) ? [...step.parameters] : [];
       step.parameters = new StepParametersElement(
