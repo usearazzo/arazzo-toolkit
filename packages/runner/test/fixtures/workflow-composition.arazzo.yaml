@@ -330,6 +330,45 @@ workflows:
     outputs:
       fromFailed: $workflows.failingChild.outputs.status
 
+  # a prerequisite list whose second entry is unusable: the first must not run
+  # before the authoring error is raised.
+  - workflowId: dependsOnLateBadEntry
+    dependsOn:
+      - setupA
+      - $sourceDescriptions.petstoreAPI.someWorkflow
+    steps:
+      - stepId: own
+        operationId: getInventory
+
+  # a prerequisite list naming a workflow this document does not define, after
+  # one it does.
+  - workflowId: dependsOnLateUnknown
+    dependsOn:
+      - setupA
+      - noSuchWorkflow
+    steps:
+      - stepId: own
+        operationId: getInventory
+
+  # the caller can vouch for the prerequisites of the workflow they name; the
+  # ones a sub-workflow declares are not theirs to skip.
+  - workflowId: rootSkipsOwnDeps
+    dependsOn:
+      - setupA
+    steps:
+      - stepId: child
+        workflowId: childWithDeps
+  - workflowId: childWithDeps
+    dependsOn:
+      - setupB
+    steps:
+      - stepId: own
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: "7"
+
   # a cycle formed purely by dependsOn edges.
   - workflowId: depCycleA
     dependsOn:

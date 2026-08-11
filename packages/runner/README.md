@@ -151,7 +151,7 @@ console.log(result.durationMs); // wall-clock for the whole run
 | `inputs`           | the workflow's inputs, read via `$inputs`                                            |
 | `executeOptions`   | opaque bag forwarded to every step's operation (e.g. `server`, `requestInterceptor`) |
 | `dependencyInputs` | inputs for workflows run to satisfy `dependsOn`, keyed by workflowId                 |
-| `runDependencies`  | run the `dependsOn` workflows first (default `true`)                                 |
+| `runDependencies`  | run this workflow's `dependsOn` workflows first (default `true`)                     |
 
 The run state is created fresh per `execute` call and owned internally; the returned `result` is
 read-only. Every layer takes its collaborator rather than building one: `WorkflowExecutor` takes a
@@ -195,8 +195,9 @@ become readable as `$workflows.<id>.outputs`; they are not merged into the depen
 A dependency already completed in the same run is not run again, so a diamond does not duplicate its
 side effects. Because the specification gives `dependsOn` no input-mapping mechanism, a dependency
 that needs inputs takes them from the caller's `dependencyInputs` map; pass `runDependencies: false`
-to assert they were already satisfied out-of-band. A dependency that fails makes the run `failed`
-without executing any of its own steps.
+to assert they were already satisfied out-of-band. That assertion covers the workflow you name and
+no more — a sub-workflow it calls still runs its own prerequisites, which the caller may not know
+exist. A dependency that fails makes the run `failed` without executing any of its own steps.
 
 Both recurse through one guarded call tree. Re-entering a workflow already in progress throws
 (`reason: 'workflow-cycle'`, or `'dependsOn-cycle'` when every edge closing the loop is a dependency

@@ -73,9 +73,10 @@ export interface WorkflowExecutorOptions {
    */
   readonly sleep?: (ms: number) => Promise<void>;
   /**
-   * Reads the current wall-clock time in milliseconds, used for the `durationMs`
-   * of each run and step. Injected so tests assert exact durations; defaults to
-   * `Date.now`.
+   * Reads the current time in milliseconds, used for the `durationMs` of each
+   * run and step. Injected so tests assert exact durations; defaults to
+   * `performance.now`, which is monotonic — `Date.now` would yield a wrong or
+   * negative duration if the system clock were adjusted mid-run.
    */
   readonly now?: () => number;
 }
@@ -114,6 +115,11 @@ export interface WorkflowExecuteOptions {
    * run*, and re-running them may duplicate side effects. Opting out records no
    * `$workflows.{dependencyId}.outputs`, so expressions reading a dependency's
    * outputs then resolve to `undefined`.
+   *
+   * It applies to **the workflow named in this call only**. A sub-workflow it
+   * calls still runs its own prerequisites: those are an implementation detail
+   * the caller may not know exists, so skipping them on their behalf would run
+   * that workflow against state nobody claimed to have prepared.
    */
   readonly runDependencies?: boolean;
 }
@@ -195,6 +201,12 @@ interface RunScope {
    * rather than run twice.
    */
   readonly dependencyRuns: Map<string, WorkflowExecutionResult>;
+  /**
+   * Workflows already extracted and normalized in this run, keyed by workflowId.
+   * Normalization dereferences the whole workflow subtree, so a sub-workflow
+   * called from several places — or retried — must not pay for it each time.
+   */
+  readonly workflows: Map<string, WorkflowElement>;
 }
 
 /**
@@ -214,6 +226,11 @@ interface WorkflowInvocation {
    * workflow this invocation calls or depends on.
    */
   readonly callStack: WorkflowCallStack;
+  /**
+   * How this workflow was reached, which distinguishes the workflow the caller
+   * named from the ones the run pulled in on its own.
+   */
+  readonly via: WorkflowCallVia;
 }
 
 /**
@@ -248,7 +265,7 @@ interface WorkflowInvocation {
 class WorkflowExecutor {
   static readonly #DEFAULT_MAX_STEPS = 1000;
   static readonly #DEFAULT_MAX_WORKFLOW_DEPTH = 32;
-  static readonly #DEFAULT_NOW = (): number => Date.now();
+  static readonly #DEFAULT_NOW = (): number => performance.now();
 
   readonly #document: ArazzoDocument;
   readonly #registry: DocumentRegistry;
@@ -295,6 +312,7 @@ class WorkflowExecutor {
       runDependencies: options.runDependencies ?? true,
       budget: { spent: 0 },
       dependencyRuns: new Map(),
+      workflows: new Map(),
     };
     return this.#run(
       workflowId,
@@ -324,7 +342,7 @@ class WorkflowExecutor {
     // workflow's own work begins.
     const nested = callStack.enter(workflowId, via);
 
-    const workflow = await this.#resolveWorkflow(workflowId);
+    const workflow = await this.#resolveWorkflow(workflowId, scope);
     const state = new WorkflowExecutionState({ inputs });
     const invocation: WorkflowInvocation = {
       workflowId,
@@ -333,6 +351,7 @@ class WorkflowExecutor {
       // onSuccess / onFailure of its own, resolved once for the run.
       defaultActions: { onSuccess: workflow.successActions, onFailure: workflow.failureActions },
       callStack: nested,
+      via,
     };
 
     // validated before any prerequisite runs: a malformed `steps` is an
@@ -469,28 +488,22 @@ class WorkflowExecutor {
     invocation: WorkflowInvocation,
     scope: RunScope,
   ): Promise<WorkflowExecutionResult[]> {
-    const { workflowId, state, callStack } = invocation;
-    if (!scope.runDependencies || !workflow.hasKey('dependsOn')) return [];
+    const { workflowId, state, callStack, via } = invocation;
+    // `runDependencies: false` is the caller vouching for the prerequisites of
+    // the workflow they named. It stops there: a sub-workflow's own `dependsOn`
+    // is an implementation detail the caller may not know exists, so skipping it
+    // on their behalf would run that workflow against state nobody claimed to
+    // have prepared — silently producing a wrong-but-`completed` result.
+    if (via === 'root' && !scope.runDependencies) return [];
+    if (!workflow.hasKey('dependsOn')) return [];
 
-    const dependsOn = workflow.dependsOn;
-    if (!isArrayElement(dependsOn)) {
-      throw new ExecutionError(`workflow "${workflowId}" has a non-list "dependsOn"`, {
-        workflowId,
-        reason: 'malformed-dependsOn',
-      });
-    }
+    // every entry is validated before the first one runs: an authoring error
+    // found halfway down the list would otherwise be raised only after earlier
+    // prerequisites had already fired live requests.
+    const dependencyIds = this.#dependencyIds(workflow, workflowId);
 
     const results: WorkflowExecutionResult[] = [];
-    for (const [index, entry] of [...dependsOn].entries()) {
-      if (!isStringElement(entry)) {
-        throw new ExecutionError(
-          `workflow "${workflowId}" has a non-string entry at dependsOn[${index}]`,
-          { workflowId, reason: 'malformed-dependsOn' },
-        );
-      }
-      const dependencyId = toValue(entry) as string;
-      this.#rejectCrossDocumentWorkflow(dependencyId, workflowId);
-
+    for (const dependencyId of dependencyIds) {
       const inputs = scope.dependencyInputs[dependencyId] ?? {};
       // a dependency already completed in this run is satisfied, not repeated: a
       // precondition holds once met, and a diamond (two dependents sharing one
@@ -512,6 +525,45 @@ class WorkflowExecutor {
       scope.dependencyRuns.set(dependencyId, result);
     }
     return results;
+  }
+
+  /**
+   * The workflowIds a workflow declares in `dependsOn`, with every entry checked
+   * before any of them is run: the list must be a list of strings, none of them
+   * may reference another document, and each must name a workflow this document
+   * defines.
+   *
+   * Checking the whole list up front is the point. These are authoring errors,
+   * and validating them one at a time as they are run would let a bad entry
+   * halfway down the list throw only after the entries before it had already
+   * made live requests.
+   */
+  #dependencyIds(workflow: WorkflowElement, workflowId: string): string[] {
+    const dependsOn = workflow.dependsOn;
+    if (!isArrayElement(dependsOn)) {
+      throw new ExecutionError(`workflow "${workflowId}" has a non-list "dependsOn"`, {
+        workflowId,
+        reason: 'malformed-dependsOn',
+      });
+    }
+
+    return [...dependsOn].map((entry, index) => {
+      if (!isStringElement(entry)) {
+        throw new ExecutionError(
+          `workflow "${workflowId}" has a non-string entry at dependsOn[${index}]`,
+          { workflowId, reason: 'malformed-dependsOn' },
+        );
+      }
+      const dependencyId = toValue(entry) as string;
+      this.#rejectCrossDocumentWorkflow(dependencyId, workflowId);
+      if (!this.#document.workflowIndex.has(dependencyId)) {
+        throw new ExecutionError(
+          `workflow "${workflowId}" depends on "${dependencyId}", which the Arazzo document at "${this.#document.uri}" does not define`,
+          { workflowId, reason: 'workflow-not-found' },
+        );
+      }
+      return dependencyId;
+    });
   }
 
   /**
@@ -639,15 +691,22 @@ class WorkflowExecutor {
    * does not define is the executor-level `workflow-not-found` authoring error,
    * raised here rather than leaking the extractor's `ExtractionError`.
    */
-  async #resolveWorkflow(workflowId: WorkflowId): Promise<WorkflowElement> {
+  async #resolveWorkflow(workflowId: WorkflowId, scope: RunScope): Promise<WorkflowElement> {
+    const cached = scope.workflows.get(workflowId);
+    if (cached !== undefined) return cached;
+
     if (!this.#document.workflowIndex.has(workflowId)) {
       throw new ExecutionError(
         `workflow "${workflowId}" not found in Arazzo document at "${this.#document.uri}"`,
         { workflowId, reason: 'workflow-not-found' },
       );
     }
-    const workflow = this.#extractor.extract(this.#document, workflowId);
-    return this.#normalizer.normalize(workflow, this.#document);
+    const workflow = await this.#normalizer.normalize(
+      this.#extractor.extract(this.#document, workflowId),
+      this.#document,
+    );
+    scope.workflows.set(workflowId, workflow);
+    return workflow;
   }
 
   /**

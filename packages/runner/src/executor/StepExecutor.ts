@@ -34,7 +34,7 @@ import ExecutionError from '../errors/ExecutionError.ts';
  * (e.g. `channelPath` in 1.1.0) so every exclusivity check stays complete —
  * both this module's and the workflow executor's, which makes the same check
  * for a step it intercepts before {@link StepExecutor.execute}.
- * @public
+ * @internal
  */
 export const STEP_TARGET_FIELDS = ['operationId', 'operationPath', 'workflowId'] as const;
 

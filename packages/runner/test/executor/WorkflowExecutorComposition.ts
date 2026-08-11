@@ -395,6 +395,42 @@ describe('WorkflowExecutor composition', function () {
       assert.isUndefined(result.outputs.fromSetupA);
     });
 
+    specify('should validate every prerequisite before running any', async function () {
+      // the bad entry is second; the first must not have fired its requests by
+      // the time the authoring error surfaces.
+      const { executor, calls } = makeExecutor();
+
+      const error = await captureError(executor.execute('dependsOnLateBadEntry'));
+
+      assert.strictEqual(error.reason, 'cross-document-workflow-unsupported');
+      assert.strictEqual(calls.length, 0);
+    });
+
+    specify('should reject a prerequisite this document does not define', async function () {
+      const { executor, calls } = makeExecutor();
+
+      const error = await captureError(executor.execute('dependsOnLateUnknown'));
+
+      assert.strictEqual(error.reason, 'workflow-not-found');
+      assert.strictEqual(calls.length, 0);
+    });
+
+    specify('should not let runDependencies:false skip a sub-workflow’s own', async function () {
+      // the caller vouches for what they named, not for prerequisites a
+      // sub-workflow declares — those still run.
+      const { executor, calls } = makeExecutor();
+
+      const result = await executor.execute('rootSkipsOwnDeps', { runDependencies: false });
+
+      assert.strictEqual(result.status, 'completed');
+      assert.isUndefined(result.dependencies);
+      // setupA (the root's own) was skipped; setupB (the child's) ran, then the
+      // child's own step.
+      assert.strictEqual(calls.length, 2);
+      assert.include(calls[0].url, '/pet/findByStatus');
+      assert.include(calls[1].url, '/pet/7');
+    });
+
     specify('should detect a cycle formed purely by dependsOn edges', async function () {
       const { executor } = makeExecutor();
 

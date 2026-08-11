@@ -216,7 +216,10 @@ existing suite.
     dependency may have been satisfied out-of-band (a previous `execute`,
     yesterday's provisioning), and re-running it can be harmful (duplicate side
     effects). The engine can't detect external satisfaction, so
-    `runDependencies: false` is the caller asserting it. Documented caveat:
+    `runDependencies: false` is the caller asserting it — for the workflow they
+    name only, since a sub-workflow's prerequisites are an implementation detail
+    they may not know exists, and skipping those on their behalf would run it
+    against state nobody prepared. Documented caveat:
     opting out populates no `$workflows.<depId>.outputs`, so expressions reading
     dependency outputs resolve `undefined` — the caller owns that trade when
     asserting the precondition.
