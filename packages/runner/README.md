@@ -187,7 +187,8 @@ they can assert timings.
 ### Composing workflows
 
 A step targeting a `workflowId` calls another workflow. Its `parameters` become that workflow's
-inputs (mapped by `name` — such a step's parameters carry no `in`), the sub-run is recorded under
+inputs (mapped by `name`, and including any the calling workflow passed down), the sub-run is
+recorded under
 `$workflows.<id>`, and the step's own `outputs` and `successCriteria` are then resolved against that
 updated state. A sub-run that ends `failed` puts the step on its failure path, so `onFailure` —
 including `retry`, which re-runs the whole sub-workflow — applies exactly as for an operation step.
@@ -217,6 +218,42 @@ A workflow's `successActions` / `failureActions` apply to every step as a **defa
 declares its own `onSuccess` / `onFailure` **overrides** the corresponding workflow list wholesale.
 There is no per-action merge, and success and failure fall back independently (a step may override
 only its failure actions and still inherit the workflow's success actions).
+
+### Workflow-level parameters
+
+A workflow's `parameters` apply to every step it contains. Unlike the actions above these **merge**
+rather than replace: the specification lets a step override an inherited parameter but says it "can
+never remove" one, so each step ends up with the union of the two lists, its own declaration
+winning.
+
+This is inheritance, not dispatch, so it happens in `ArazzoWorkflowNormalizer` — a normalized
+workflow's steps already carry what they inherit, exactly as a normalized OpenAPI operation already
+carries the parameters it inherits from its Path Item. Neither executor knows about it.
+
+A parameter's identity is the **`(name, in)` pair**, not `name` alone — the rule ApiDOM applies for
+that OpenAPI-side inheritance ("a unique parameter is defined by a combination of a name and
+location"). So a step declaring a `trace` query parameter overrides an inherited `trace` query
+parameter but leaves an inherited `trace` *header* in place; they are two parameters bound for two
+places. Names are case-sensitive, per the specification. A step's own parameters lead the merged
+list, again matching the OpenAPI side.
+
+Inheritance copies the **declarations**, not resolved values, so a workflow-level `value` that is a
+runtime expression is still evaluated **once per step, in that step's own context**. A workflow
+parameter reading `$steps.login.outputs.token` therefore means what it looks like it means: each
+step sees the state as it was entered, not a value frozen when the workflow began.
+
+A step targeting a `workflowId` inherits them too. Such a step's parameters are workflow inputs
+rather than parts of a request and carry no `in`, so an absent `in` forms its own identity and name
+alone decides what overrides what. An inherited parameter that *does* carry an `in` still applies
+there, per the specification's "when the step in context specifies a `workflowId`, then all
+parameters map to workflow inputs" — it arrives as an input under its bare name.
+
+> [!NOTE]
+> Resolved values are keyed by `name` alone when they are handed to the client, so two parameters
+> differing only in `in` collapse into one at that boundary — the **step's own** survives, since the
+> merged list is read most-specific-first. That collapse predates workflow-level parameters (a
+> single step can declare both) and is tracked separately; what matters here is that a step can
+> never lose to something it inherited.
 
 ### Cancellation
 
@@ -276,17 +313,15 @@ run.
 
 ### Not yet supported
 
-These land in later work. Each throws `ExecutionError` (with the noted `reason`) rather than
-behaving incorrectly, except workflow-level `parameters`, which is simply not read yet:
+These land in later work. Each throws `ExecutionError` with the noted `reason` rather than behaving
+incorrectly:
 
 - **step-level `goto` to a `workflowId`** (`reason: 'goto-workflow-unsupported'`);
 - **a `retry` carrying a `stepId` / `workflowId` reference** to run before retrying
   (`reason: 'retry-reference-unsupported'`);
 - **cross-document workflow references**: a `workflowId` / `dependsOn` naming a workflow in another
   document via `$sourceDescriptions.<name>.<workflowId>`
-  (`reason: 'cross-document-workflow-unsupported'`); same-document only for now;
-- **workflow-level `parameters`**: a workflow's `parameters` applied to all its steps (they are not
-  read yet).
+  (`reason: 'cross-document-workflow-unsupported'`); same-document only for now.
 
 ## `StepExecutor`
 

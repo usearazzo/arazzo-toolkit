@@ -24,7 +24,14 @@ export type ParameterValueResolver = (expression: string) => unknown;
  *
  * Values are keyed by parameter `name`; the parameter `in` (its location) is not
  * consulted here — how a resolved value is delivered to the client, and the
- * operation-vs-workflow distinction, are the executor's concern.
+ * operation-vs-workflow distinction, are the executor's concern. Because `in` is
+ * dropped, two parameters that differ only in it collapse into one entry, and
+ * **the earlier of the two wins**: the list is ordered by precedence, most
+ * specific first, as `ArazzoWorkflowNormalizer` leaves it once a step's own
+ * parameters have been merged with the ones it inherits from its workflow. A
+ * step must be able to override an inherited parameter — the specification says
+ * it "will override it but can never remove it" — and reading the list in the
+ * other direction would let the parameter it inherited win instead.
  * @public
  */
 class ParameterResolver {
@@ -44,6 +51,10 @@ class ParameterResolver {
 
       const name = toValue(parameter.name) as string | undefined;
       if (typeof name !== 'string') continue;
+      // first entry wins — see the precedence note above. `Object.hasOwn` rather
+      // than `name in result`, so a parameter named `toString` is not mistaken
+      // for one already resolved.
+      if (Object.hasOwn(result, name)) continue;
 
       const value = toValue(parameter.value);
       result[name] =

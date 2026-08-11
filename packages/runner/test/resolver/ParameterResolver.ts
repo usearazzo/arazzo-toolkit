@@ -19,7 +19,9 @@ describe('ParameterResolver', function () {
     resolver = new ParameterResolver();
   });
 
-  const parameters = (...entries: { name: string; value: unknown }[]): StepParametersElement =>
+  const parameters = (
+    ...entries: { name: string; in?: string; value: unknown }[]
+  ): StepParametersElement =>
     new StepParametersElement(entries.map((entry) => refractParameter(entry)));
 
   context('resolve', function () {
@@ -100,6 +102,32 @@ describe('ParameterResolver', function () {
 
     specify('should return an empty object when parameters are absent', function () {
       assert.deepEqual(resolver.resolve(undefined, resolve), {});
+    });
+
+    specify('should let the earlier of two same-named parameters win', function () {
+      // the list is ordered by precedence, most specific first — as the
+      // normalizer leaves it once a step's own parameters have been merged with
+      // the ones it inherits.
+      const result = resolver.resolve(
+        parameters(
+          { name: 'trace', in: 'query', value: 'from-step' },
+          { name: 'trace', in: 'header', value: 'from-workflow' },
+        ),
+        resolve,
+      );
+
+      assert.deepEqual(result, { trace: 'from-step' });
+    });
+
+    specify('should not mistake a parameter named after an Object property', function () {
+      const result = resolver.resolve(
+        parameters({ name: 'toString', value: 'first' }, { name: 'toString', value: 'second' }),
+        resolve,
+      );
+
+      // `'toString' in {}` is true, so a naive presence check would drop the
+      // first entry and let the second win.
+      assert.deepEqual(result, { toString: 'first' });
     });
 
     specify(

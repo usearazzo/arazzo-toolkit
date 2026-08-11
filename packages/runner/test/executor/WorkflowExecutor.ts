@@ -297,6 +297,35 @@ describe('WorkflowExecutor', function () {
     );
   });
 
+  context('workflow-level parameters', function () {
+    specify('should apply them per step, each step overriding for itself', async function () {
+      const { executor, calls } = makeExecutor();
+
+      const result = await executor.execute('inheritsParameters', {
+        inputs: { status: 'available' },
+      });
+
+      assert.strictEqual(result.status, 'completed');
+      // the first step declares no `status` and runs with the inherited one; the
+      // second declares its own, which wins for itself and only for itself.
+      assert.include(calls[0].url, 'status=available');
+      assert.include(calls[1].url, 'status=sold');
+      assert.notInclude(calls[1].url, 'status=available');
+    });
+
+    specify('should resolve an inherited expression against each step state', async function () {
+      const { executor, calls } = makeExecutor();
+
+      const result = await executor.execute('parameterResolvedPerStep');
+
+      assert.strictEqual(result.status, 'completed');
+      // the workflow-level `petId` reads $steps.findPets.outputs.petId, which
+      // only has a value once the first step has run — so it is resolved as each
+      // step is entered, not once for the workflow.
+      assert.include(calls[1].url, '/pet/7');
+    });
+  });
+
   context('workflow-level default actions', function () {
     specify(
       'should apply workflow failureActions to a step that declares no onFailure',
