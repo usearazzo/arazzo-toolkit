@@ -226,9 +226,14 @@ Only authoring errors throw `ExecutionError`: an unknown `workflowId` (`workflow
 `workflowId` (`goto-target-missing`), an action of an unknown `type` (`unknown-action-type`), a
 present but malformed `steps` or `dependsOn` (`malformed-steps`, `malformed-dependsOn`), a step
 naming more than one target (`ambiguous-target`), a cycle or over-deep nesting (`workflow-cycle`,
-`dependsOn-cycle`, `workflow-depth`), or the step-budget overflow above (`step-budget`). Authoring
-errors are raised before any prerequisite runs, so a malformed workflow never fires live requests on
-its way to throwing.
+`dependsOn-cycle`, `workflow-depth`), or the step-budget overflow above (`step-budget`).
+
+A workflow's own `steps` and `dependsOn` lists are validated before any of its prerequisites run, so
+those two mistakes never fire live requests on the way to throwing. Errors belonging to an
+individual step — a step naming two targets, a `goto` to a step that does not exist, an unknown
+action `type` — are raised when the run reaches that step, which means earlier steps have already
+executed. That is deliberate: a bad step the run never reaches should not fail an otherwise valid
+run.
 
 ### Not yet supported
 

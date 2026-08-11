@@ -268,6 +268,12 @@ class WorkflowExecutor {
   static readonly #DEFAULT_MAX_STEPS = 1000;
   static readonly #DEFAULT_MAX_WORKFLOW_DEPTH = 32;
   static readonly #DEFAULT_NOW = (): number => performance.now();
+  static readonly #EXECUTE_OPTION_KEYS: ReadonlySet<string> = new Set([
+    'inputs',
+    'executeOptions',
+    'dependencyInputs',
+    'runDependencies',
+  ]);
 
   readonly #document: ArazzoDocument;
   readonly #registry: DocumentRegistry;
@@ -308,6 +314,8 @@ class WorkflowExecutor {
     workflowId: WorkflowId,
     options: WorkflowExecuteOptions = {},
   ): Promise<WorkflowExecutionResult> {
+    this.#rejectUnknownOptions(options);
+
     const scope: RunScope = {
       executeOptions: options.executeOptions ?? {},
       dependencyInputs: options.dependencyInputs ?? {},
@@ -322,6 +330,28 @@ class WorkflowExecutor {
       scope,
       new WorkflowCallStack({ maxDepth: this.#maxWorkflowDepth }),
       'root',
+    );
+  }
+
+  /**
+   * Rejects an options bag carrying keys this method does not recognize.
+   *
+   * `execute` used to take `inputs` as its second positional argument, and that
+   * bag is now the options object — so the old call reaches here as an object of
+   * unrecognized keys. Left unchecked it would run with no inputs at all, and
+   * every `$inputs.*` would resolve to `undefined` under lenient evaluation:
+   * a completed run issuing wrong requests. A typo in an option name fails the
+   * same silent way. Both are worth a loud error.
+   */
+  #rejectUnknownOptions(options: WorkflowExecuteOptions): void {
+    const unknown = Object.keys(options).filter(
+      (key) => !WorkflowExecutor.#EXECUTE_OPTION_KEYS.has(key),
+    );
+    if (unknown.length === 0) return;
+
+    throw new ExecutionError(
+      `execute received unknown option(s) ${unknown.join(', ')}; it takes (workflowId, { inputs, executeOptions, dependencyInputs, runDependencies }) — workflow inputs go under "inputs"`,
+      { reason: 'unknown-execute-option' },
     );
   }
 
@@ -484,6 +514,15 @@ class WorkflowExecutor {
    * own outputs. Runs stop at the first dependency that fails — the dependent
    * cannot be processed, so running the rest would be pointless work with live
    * side effects.
+   *
+   * Only workflows run *as prerequisites* are remembered as satisfying later
+   * ones. A workflow that already ran in this tree as a sub-workflow **step**
+   * target does not settle a later `dependsOn` on the same id, and runs again:
+   * a step call is an explicit invocation carrying that step's parameters as
+   * inputs, whereas a prerequisite runs with whatever the caller supplied in
+   * `dependencyInputs`. Treating one as having discharged the other would
+   * silently accept a run made with different inputs than the precondition asks
+   * for.
    */
   async #runDependencies(
     workflow: WorkflowElement,

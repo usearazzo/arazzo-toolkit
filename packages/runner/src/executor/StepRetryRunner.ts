@@ -82,7 +82,11 @@ export interface StepRetryRunContext {
  * operation step and a sub-workflow step retry through identical machinery. That
  * thunk is also where a caller puts anything it wants done per attempt — charging
  * a run budget, say — so this class needs no notion of one; a thunk that throws
- * ends the step there, without further attempts.
+ * ends the step there, without further attempts. One consequence is worth
+ * knowing: a `retryAfter` delay is awaited before the next attempt begins, so a
+ * caller whose per-attempt check is about to fail (a spent budget, say) still
+ * pays that delay before its error surfaces. Keeping the seam this narrow is
+ * worth one bounded wait on a run that was already doomed.
  * @internal
  */
 class StepRetryRunner {

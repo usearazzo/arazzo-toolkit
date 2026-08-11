@@ -12,6 +12,7 @@ import {
   ExecutionError,
   type HTTPClient,
   type OpenAPIOperationRequest,
+  type WorkflowExecuteOptions,
 } from '../../src/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -571,6 +572,24 @@ describe('WorkflowExecutor', function () {
 
       await rejects(executor.execute('noSuchWorkflow'), ExecutionError, /not found/);
     });
+
+    specify(
+      'should reject unknown execute options rather than run without them',
+      async function () {
+        // `execute` once took inputs as its second positional argument. That call
+        // now lands as an options bag of unrecognized keys, which would otherwise
+        // run with no inputs at all and issue wrong requests while reporting
+        // success.
+        const { executor, calls } = makeExecutor();
+
+        await rejects(
+          executor.execute('linear', { status: 'available' } as unknown as WorkflowExecuteOptions),
+          ExecutionError,
+          /unknown option\(s\) status/,
+        );
+        assert.strictEqual(calls.length, 0);
+      },
+    );
   });
 
   context('not yet supported', function () {
