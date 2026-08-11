@@ -141,7 +141,7 @@ const result = await executor.execute('authenticateAndOrderPet', {
 console.log(result.status); // 'completed' | 'ended' | 'failed'
 console.log(result.outputs); // workflow $outputs, resolved against final state
 console.log(result.steps); // trace: each step's id, success, action, attempts, durationMs
-console.log(result.durationMs); // wall-clock for the whole run
+console.log(result.durationMs); // elapsed time for the whole run
 ```
 
 `execute` takes the workflowId and an options bag:
@@ -180,7 +180,8 @@ A runaway `goto` loop, a runaway `retry`, **or** a runaway tree of sub-workflow 
 granted afresh per workflow, so a sub-workflow cannot escape the ceiling the caller set; the error
 carries the offending `path` (the chain of workflowIds in progress). The `retryAfter` delay uses an
 injectable `sleep` (`WorkflowExecutorOptions.sleep`, default a real timer) so tests can run without
-waiting, and `durationMs` uses an injectable `now` (default `Date.now`) so they can assert timings.
+waiting, and `durationMs` uses an injectable `now` (default the monotonic `performance.now`) so
+they can assert timings.
 
 ### Composing workflows
 

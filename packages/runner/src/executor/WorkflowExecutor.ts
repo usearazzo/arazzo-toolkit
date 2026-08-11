@@ -138,8 +138,9 @@ export interface StepRunRecord {
    */
   readonly attempts: number;
   /**
-   * Wall-clock time the step took, covering every attempt and the `retryAfter`
-   * waits between them.
+   * Elapsed time the step took, covering every attempt and the `retryAfter`
+   * waits between them. Measured on a monotonic clock by default, so it may be
+   * fractional and is unaffected by system clock changes.
    */
   readonly durationMs: number;
   /**
@@ -168,8 +169,9 @@ export interface WorkflowExecutionResult {
   readonly steps: readonly StepRunRecord[];
   readonly status: 'completed' | 'ended' | 'failed';
   /**
-   * Wall-clock time the run took, including its dependencies, sub-workflows, and
-   * retry waits.
+   * Elapsed time the run took, including its dependencies, sub-workflows, and
+   * retry waits. Measured on a monotonic clock by default, so it may be
+   * fractional and is unaffected by system clock changes.
    */
   readonly durationMs: number;
   /**
