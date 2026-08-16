@@ -3,11 +3,10 @@ import {
   isParameterElement,
   isStepElement,
   StepParametersElement,
-  type ParameterElement,
   type WorkflowElement,
 } from '@speclynx/apidom-ns-arazzo-1';
 import { toValue } from '@speclynx/apidom-core';
-import { isArrayElement, isStringElement, type Element } from '@speclynx/apidom-datamodel';
+import { isArrayElement, isStringElement } from '@speclynx/apidom-datamodel';
 import { dereferenceArazzoElement, defaultDereferenceArazzoOptions } from '@usearazzo/resolver';
 import {
   mergeOptions,
@@ -16,6 +15,7 @@ import {
 import type { PartialDeep } from 'type-fest';
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
+import ParameterIdentity from '../document/ParameterIdentity.ts';
 import NormalizationError from '../errors/NormalizationError.ts';
 import { providerOptionsOverride as arazzoProviderOptions } from '../registry/providers/ArazzoDocumentRegistryProvider.ts';
 
@@ -30,57 +30,6 @@ export type ArazzoWorkflowNormalizerOptions = PartialDeep<ApiDOMReferenceOptions
  */
 // shallow copy to avoid mutating the provider's shared options
 const normalizerOptionsOverride = mergeOptions(arazzoProviderOptions as ApiDOMReferenceOptions, {});
-
-/**
- * Whether two Parameter Objects name the same location.
- *
- * Absent on both sides is a match — that is the `workflowId` step case, where
- * parameters are workflow inputs with no location to pair the name with.
- * Otherwise both must be strings: a location that is present but not a string
- * (`in: 1`) is not a location, so two parameters carrying one are no more "the
- * same parameter" than two unnamed entries are, and deduplicating them would
- * drop authored content the same way.
- */
-const locationEquals = (parameter1: ParameterElement, parameter2: ParameterElement): boolean => {
-  const location1 = parameter1.in;
-  const location2 = parameter2.in;
-
-  if (location1 === undefined || location2 === undefined) {
-    return location1 === undefined && location2 === undefined;
-  }
-  return (
-    isStringElement(location1) &&
-    isStringElement(location2) &&
-    toValue(location1) === toValue(location2)
-  );
-};
-
-/**
- * Whether two Arazzo Parameter Objects are the same parameter.
- *
- * Identity is the `(name, in)` pair — the rule ApiDOM's OpenAPI
- * `normalize-parameters` plugin applies when inheriting a Path Item's parameters
- * into an Operation ("a unique parameter is defined by a combination of a name
- * and location"). Arazzo's `in` is optional where OpenAPI's is required, and an
- * absent one compares equal only to another absent one: that is a step naming a
- * `workflowId`, where "all parameters map to workflow inputs" and there is no
- * location to pair the name with. Names are case-sensitive per the
- * specification, so nothing is case-folded.
- *
- * Anything without a well-formed identity is equal to nothing, including itself
- * — an unresolved Reusable Object, a scalar someone put in the list, a parameter
- * with no `name`, or one whose `name` or `in` is not a string. Such an entry has
- * nothing to deduplicate on, and since this feeds a `uniqWith` that rebuilds the
- * step's list, calling it equal to another would delete authored content from
- * the document. The OpenAPI plugin guards the same way and for the same reason.
- */
-const parameterEquals = (parameter1: Element, parameter2: Element): boolean =>
-  isParameterElement(parameter1) &&
-  isParameterElement(parameter2) &&
-  isStringElement(parameter1.name) &&
-  isStringElement(parameter2.name) &&
-  toValue(parameter1.name) === toValue(parameter2.name) &&
-  locationEquals(parameter1, parameter2);
 
 /**
  * Normalizes an extracted Arazzo workflow.
@@ -157,19 +106,31 @@ class ArazzoWorkflowNormalizer {
    * Per Arazzo 1.0.1 a workflow's `parameters` are "applicable for all steps
    * described under this workflow" and a step's own definition "will override it
    * but can never remove it" — so each step ends up with the union, its own
-   * declaration winning wherever the two name the same {@link parameterEquals}
-   * parameter. `uniqWith` keeps the first of each equal pair, so the step's own
-   * list leads, exactly as `inheritParametersToOperation` orders an Operation's
-   * ahead of the Path Item's it inherits.
+   * declaration winning wherever the two are the same parameter by
+   * {@link ParameterIdentity}. `uniqWith` keeps the first of each equal pair,
+   * so the step's own list leads, exactly as `inheritParametersToOperation`
+   * orders an Operation's ahead of the Path Item's it inherits.
    *
    * That leading position is what makes the override effective and not merely
-   * present: {@link ParameterResolver} drops `in` when it keys the resolved
-   * values by name, so of two parameters differing only in `in` the earlier one
-   * survives — which must be the step's.
+   * present: the parameter resolvers key resolved values first-wins — by the
+   * same `(name, in)` identity for an operation step
+   * ({@link OpenAPIOperationParameterResolver}), and by bare name for a
+   * `workflowId` step's inputs ({@link WorkflowParameterResolver}) — so
+   * wherever the two collapse to one key, the earlier survives, which must be
+   * the step's.
    *
    * Inheriting the elements here rather than the resolved values is what lets a
    * workflow-level `value` that is a runtime expression still be evaluated once
    * per step, against the state that step is entered with.
+   *
+   * Not every workflow parameter is applicable to every kind of step: one
+   * without a location is a workflow-input mapping (see
+   * {@link ParameterIdentity}), so it is inherited only into steps targeting a
+   * `workflowId` — on an operation step it names no place in a request, and
+   * the resolver reports a location-less parameter there as the step's *own*
+   * authoring error, which not synthesizing one is what keeps true. The
+   * workflow's own `parameters` list is left intact; only the synthesized
+   * per-step copies are filtered.
    *
    * A malformed `steps` or `parameters` is left for the executor to report as
    * the authoring error it is; there is nothing to inherit through it here, and
@@ -178,8 +139,9 @@ class ArazzoWorkflowNormalizer {
    * that makes the document invalid and leave nothing to report. An entry
    * *within* either list that is not a Parameter Object is carried across
    * untouched rather than filtered out, for the same reason: rebuilding a step's
-   * list is no licence to drop what its author wrote, and `ParameterResolver`
-   * ignores it anyway.
+   * list is no licence to drop what its author wrote, and the parameter
+   * resolvers ignore it anyway. A parameter whose location is malformed (`in: 1`) is
+   * likewise carried, for the resolver to report loudly.
    */
   #inheritParametersToSteps(workflow: WorkflowElement): void {
     const inherited = workflow.parameters;
@@ -187,14 +149,27 @@ class ArazzoWorkflowNormalizer {
     if (!isArrayElement(workflow.steps)) return;
 
     const inheritedParameters = [...inherited];
+    // what an operation step may inherit — the input-shaped entries filtered
+    // out once, ahead of the per-step loop
+    const requestShaped = inheritedParameters.filter(
+      (parameter) =>
+        !isParameterElement(parameter) || ParameterIdentity.locationOf(parameter) !== undefined,
+    );
 
     for (const step of workflow.steps) {
       if (!isStepElement(step)) continue;
       if (step.parameters !== undefined && !isArrayElement(step.parameters)) continue;
 
+      // when nothing applicable remains AND the step declares no list of its
+      // own, there is nothing to synthesize. A step with its own list is still
+      // rebuilt, so its duplicates collapse the same way whichever kind of
+      // step it is — not depending on what the workflow happened to contribute
+      const applicable = isStringElement(step.workflowId) ? inheritedParameters : requestShaped;
+      if (applicable.length === 0 && step.parameters === undefined) continue;
+
       const own = isArrayElement(step.parameters) ? [...step.parameters] : [];
       step.parameters = new StepParametersElement(
-        uniqWith(parameterEquals, [...own, ...inheritedParameters]),
+        uniqWith(ParameterIdentity.equal, [...own, ...applicable]),
       );
     }
   }

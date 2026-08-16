@@ -11,6 +11,7 @@ import { isPlainObject } from 'ramda-adjunct';
 
 // @ts-expect-error vendored swagger-client bundle has no type declarations
 import { buildRequest, idFromPathMethodLegacy } from '../vendor/swagger-client.mjs';
+import ParameterDelivery from '../client/ParameterDelivery.ts';
 import type HTTPClient from '../client/HTTPClient.ts';
 import httpClientFetch from '../client/HTTPClientFetch.ts';
 import type { OpenAPIOperationElement } from '../document/openapi-types.ts';
@@ -449,6 +450,21 @@ class OpenAPIOperationExecutor {
    * `querystring`, `header`, and `cookie`), which is why the translation lives
    * here, where the assembled document has those parameters dereferenced and
    * inherited.
+   *
+   * The payload travels under {@link ParameterDelivery} keys
+   * (`body.{name}`, `formData.{name}`), never bare names: a bare key would
+   * capture a same-named parameter in another location — 2.0 legally declares
+   * e.g. `petId` in `path` and in `formData` at once — per the lookup order
+   * documented on {@link ParameterDelivery}.
+   *
+   * A *bare* `parameters` entry bearing a payload target's name is rejected
+   * with {@link ClientError} rather than resolved either way: before the
+   * qualified keys the payload silently overwrote it, after them the bare key
+   * would silently outrank the payload at the client's bare-first lookup —
+   * both wrong for somebody, so the ambiguity is reported instead. Such an
+   * entry can come from a direct caller mixing bare parameters with a request
+   * body, or from the runner's own pipeline: the parameter resolver keeps a
+   * `querystring` parameter under its bare name.
    */
   #adaptRequestBody(
     buildOptions: Record<string, unknown>,
@@ -470,11 +486,18 @@ class OpenAPIOperationExecutor {
     ) as ParameterElement2[];
 
     // the body parameter's name is arbitrary, so the payload wins over a
-    // same-named entry the caller supplied
+    // same-keyed entry the caller supplied
     const body = parameters.find((parameter) => toValue(parameter.in) === 'body');
     if (body !== undefined) {
       const name = toValue(body.name) as string;
-      return { ...rest, parameters: { ...callerParameters, [name]: requestBody } };
+      this.#rejectBarePayloadConflicts(callerParameters, [name], jsonPointer);
+      return {
+        ...rest,
+        parameters: {
+          ...callerParameters,
+          [ParameterDelivery.keyFor('body', name)]: requestBody,
+        },
+      };
     }
 
     // formData models each field as its own parameter, so the payload's keys
@@ -488,12 +511,40 @@ class OpenAPIOperationExecutor {
           { operationPath: jsonPointer },
         );
       }
-      return { ...rest, parameters: { ...callerParameters, ...requestBody } };
+      const payload = requestBody as Record<string, unknown>;
+      this.#rejectBarePayloadConflicts(callerParameters, Object.keys(payload), jsonPointer);
+      const merged: Record<string, unknown> = { ...callerParameters };
+      for (const [field, value] of Object.entries(payload)) {
+        merged[ParameterDelivery.keyFor('formData', field)] = value;
+      }
+      return { ...rest, parameters: merged };
     }
 
     throw new ClientError(
       'Request body cannot be sent: the OpenAPI 2.0 operation declares no "body" or ' +
         '"formData" parameter to carry it',
+      { operationPath: jsonPointer },
+    );
+  }
+
+  /**
+   * Rejects bare `parameters` entries bearing the names the payload is about
+   * to be delivered under — the client consults bare names before qualified
+   * keys, so such an entry would silently displace the request body (see
+   * {@link OpenAPIOperationExecutor.#adaptRequestBody}).
+   */
+  #rejectBarePayloadConflicts(
+    callerParameters: Record<string, unknown> | undefined,
+    payloadNames: readonly string[],
+    jsonPointer: string,
+  ): void {
+    if (callerParameters === undefined) return;
+    const conflicts = payloadNames.filter((name) => Object.hasOwn(callerParameters, name));
+    if (conflicts.length === 0) return;
+    throw new ClientError(
+      `Request body cannot be sent: bare parameter ${conflicts.length === 1 ? 'entry' : 'entries'} ` +
+        `[${conflicts.join(', ')}] would displace the payload at delivery. Supply the ` +
+        `parameter under its "{in}.{name}" key, or drop the duplicate`,
       { operationPath: jsonPointer },
     );
   }

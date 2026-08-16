@@ -1,10 +1,9 @@
 import { isArrayElement } from '@speclynx/apidom-datamodel';
-import { type WorkflowElement } from '@speclynx/apidom-ns-arazzo-1';
+import { type StepElement, type WorkflowElement } from '@speclynx/apidom-ns-arazzo-1';
 import { toValue } from '@speclynx/apidom-core';
 import { type Path, traverse } from '@speclynx/apidom-traverse';
 
 import ExtractionError from '../errors/ExtractionError.ts';
-import { ArazzoStepElement } from '../document/arazzo-types.ts';
 
 /**
  * Extracts a step from an Arazzo workflow by stepId.
@@ -17,9 +16,9 @@ class ArazzoStepExtractor {
   /**
    * Extracts a step element by stepId from a workflow.
    */
-  extract(workflow: WorkflowElement, stepId: string): ArazzoStepElement {
+  extract(workflow: WorkflowElement, stepId: string): StepElement {
     const steps = workflow.steps;
-    let step: ArazzoStepElement | undefined;
+    let step: StepElement | undefined;
 
     if (!isArrayElement(steps)) {
       throw new ExtractionError(`Workflow "${toValue(workflow.workflowId)}" has no steps`, {
@@ -28,7 +27,7 @@ class ArazzoStepExtractor {
     }
 
     traverse(workflow, {
-      StepElement(path: Path<ArazzoStepElement>) {
+      StepElement(path: Path<StepElement>) {
         if (!path.node.stepId?.equals(stepId)) return path.skip();
 
         step = path.node;

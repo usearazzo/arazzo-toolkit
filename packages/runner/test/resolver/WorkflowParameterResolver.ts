@@ -2,21 +2,21 @@ import { assert } from 'chai';
 import { StepParametersElement, refractParameter } from '@speclynx/apidom-ns-arazzo-1';
 
 import {
-  ParameterResolver,
+  WorkflowParameterResolver,
   RuntimeExpressionEvaluator,
-  type ParameterValueResolver,
+  type RuntimeExpressionResolver,
 } from '../../src/index.ts';
 
-describe('ParameterResolver', function () {
+describe('WorkflowParameterResolver', function () {
   const runtime = new RuntimeExpressionEvaluator(
     { inputs: { status: 'available', limit: 10 }, steps: { login: { outputs: { token: 'abc' } } } },
     { strict: false },
   );
-  const resolve: ParameterValueResolver = (expression) => runtime.evaluate(expression);
-  let resolver: ParameterResolver;
+  const resolve: RuntimeExpressionResolver = (expression) => runtime.evaluate(expression);
+  let resolver: WorkflowParameterResolver;
 
   beforeEach(function () {
-    resolver = new ParameterResolver();
+    resolver = new WorkflowParameterResolver();
   });
 
   const parameters = (
@@ -107,7 +107,8 @@ describe('ParameterResolver', function () {
     specify('should let the earlier of two same-named parameters win', function () {
       // the list is ordered by precedence, most specific first — as the
       // normalizer leaves it once a step's own parameters have been merged with
-      // the ones it inherits.
+      // the ones it inherits. Inputs are keyed by name alone, an inherited
+      // location notwithstanding.
       const result = resolver.resolve(
         parameters(
           { name: 'trace', in: 'query', value: 'from-step' },
@@ -117,6 +118,20 @@ describe('ParameterResolver', function () {
       );
 
       assert.deepEqual(result, { trace: 'from-step' });
+    });
+
+    specify('should store an input named __proto__ as an own property', function () {
+      // bracket assignment would hit the __proto__ accessor and never create
+      // an own property — silently losing the input, and, for an object value
+      // like this one, additionally polluting the prototype.
+      const result = resolver.resolve(
+        parameters({ name: '__proto__', value: { polluted: true } }),
+        resolve,
+      );
+
+      assert.isTrue(Object.hasOwn(result, '__proto__'));
+      assert.strictEqual(Object.getPrototypeOf(result), Object.prototype);
+      assert.isUndefined(({} as Record<string, unknown>).polluted);
     });
 
     specify('should not mistake a parameter named after an Object property', function () {

@@ -1,0 +1,114 @@
+/**
+ * The outcome of claiming a delivery key: `claimed` for a first claim,
+ * `duplicate` when the same `(name, in)` parameter claims its key again, and
+ * `collision` when a *different* parameter produces an already-claimed key.
+ * @internal
+ */
+export type ParameterClaimOutcome = 'claimed' | 'duplicate' | 'collision';
+
+/**
+ * A parameter claim: the delivery key the `(location, name)` pair encodes to,
+ * and how the claim resolved against the map's earlier entries.
+ * @internal
+ */
+export interface ParameterClaim {
+  readonly key: string;
+  readonly outcome: ParameterClaimOutcome;
+}
+
+/**
+ * The parameters map an OpenAPI operation is executed with — the single owner
+ * of the vendored swagger-client's parameter-addressing scheme.
+ *
+ * The client accepts two key shapes in its `parameters` map and, for each
+ * parameter the operation declares, consults the bare `name` *before* the
+ * qualified `'{in}.{name}'` key (deminified from the vendored bundle:
+ * `r = m[e.name]; if (r === undefined) r = m[`${e.in}.${e.name}`]`). Two
+ * consequences shape everything that feeds the map:
+ *
+ * - qualified keys are what let parameters differing only in their location
+ *   coexist — the client builds the same key from the declared parameter and
+ *   matches it verbatim, never splitting it, so dots in a name are safe;
+ * - a bare key silently outranks the qualified keys of every declared
+ *   parameter bearing that name, so nothing may emit one for a location the
+ *   client can address.
+ *
+ * Arazzo's `querystring` is the one location the client cannot address — it
+ * names no OpenAPI location — so it keeps the bare name, which can still
+ * reach a same-named declared parameter. Every other location is qualified,
+ * including an unrecognized one: an unmatched qualified key is inert, where a
+ * bare one would capture.
+ *
+ * Keys are claimed first-wins. The scheme is not injective, so the map also
+ * discriminates a genuine duplicate from a collision of two different
+ * parameters on one key: given a key, the claimant's name is determined by
+ * its location (the key embeds the name, or is the name), so the location
+ * alone identifies the claimant. A bare key and a qualified key sharing one
+ * name are a collision too, even though the keys differ — the client consults
+ * the bare name first for every declared parameter bearing it, so the bare
+ * entry would silently capture the qualified one. What to do about a
+ * collision is the caller's policy — the map only reports it.
+ *
+ * Diff this against the vendored bundle's lookup when bumping swagger-client.
+ * @internal
+ */
+class ParameterDelivery {
+  /**
+   * The key a `(location, name)` pair is delivered under — `'{in}.{name}'`,
+   * or the bare name for `querystring`. See the class doc for why.
+   */
+  static keyFor(location: string, name: string): string {
+    return location === 'querystring' ? name : `${location}.${name}`;
+  }
+
+  readonly #values: Record<string, unknown> = {};
+  readonly #claimedBy = new Map<string, string>();
+  readonly #bareNames = new Set<string>();
+  readonly #qualifiedNames = new Set<string>();
+
+  /**
+   * Claims the delivery key for a `(location, name)` pair, first-wins.
+   * Only a `claimed` outcome entitles the caller to {@link ParameterDelivery.set}
+   * the key; a `duplicate` means the same parameter already holds it, and a
+   * `collision` means a different parameter does — on the same key, or across
+   * a bare/qualified pair sharing the name (see the class doc).
+   */
+  claim(location: string, name: string): ParameterClaim {
+    const key = ParameterDelivery.keyFor(location, name);
+    const claimant = this.#claimedBy.get(key);
+    if (claimant !== undefined) {
+      return { key, outcome: claimant === location ? 'duplicate' : 'collision' };
+    }
+
+    const bare = key === name;
+    if (bare ? this.#qualifiedNames.has(name) : this.#bareNames.has(name)) {
+      return { key, outcome: 'collision' };
+    }
+
+    (bare ? this.#bareNames : this.#qualifiedNames).add(name);
+    this.#claimedBy.set(key, location);
+    return { key, outcome: 'claimed' };
+  }
+
+  set(key: string, value: unknown): void {
+    // defined rather than assigned: a key like `__proto__` hits the
+    // Object.prototype accessor on bracket assignment, so no own property is
+    // ever created and the parameter is silently lost — and an object value
+    // additionally rewrites the record's prototype
+    Object.defineProperty(this.#values, key, {
+      value,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+
+  /**
+   * The accumulated record, in the shape `buildRequest` consumes.
+   */
+  toRecord(): Record<string, unknown> {
+    return this.#values;
+  }
+}
+
+export default ParameterDelivery;

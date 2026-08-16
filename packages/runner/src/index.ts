@@ -16,7 +16,6 @@ export type { OpenAPIDocumentRegistryProviderOptions } from './registry/provider
 export { default as APIDocument } from './document/APIDocument.ts';
 export { default as ArazzoDocument } from './document/ArazzoDocument.ts';
 export { default as OpenAPIDocument } from './document/OpenAPIDocument.ts';
-export type { ArazzoStepElement } from './document/arazzo-types.ts';
 export type { OpenAPIOperationElement, OpenAPIPathItemElement } from './document/openapi-types.ts';
 
 /* Indexes */
@@ -88,15 +87,14 @@ export { default as WorkflowExecutionState } from './state/WorkflowExecutionStat
 export type { WorkflowExecutionStateOptions } from './state/WorkflowExecutionState.ts';
 
 /* Resolvers */
-export { default as ParameterResolver } from './resolver/ParameterResolver.ts';
-export type { ParameterValueResolver } from './resolver/ParameterResolver.ts';
+export { default as ArazzoValueResolver } from './resolver/ArazzoValueResolver.ts';
+export type { RuntimeExpressionResolver } from './resolver/ArazzoValueResolver.ts';
+export { default as StepParameterResolver } from './resolver/StepParameterResolver.ts';
+export { default as OpenAPIOperationParameterResolver } from './resolver/OpenAPIOperationParameterResolver.ts';
+export { default as WorkflowParameterResolver } from './resolver/WorkflowParameterResolver.ts';
 export { default as OutputResolver } from './resolver/OutputResolver.ts';
-export type { OutputValueResolver } from './resolver/OutputResolver.ts';
 export { default as RequestBodyResolver } from './resolver/RequestBodyResolver.ts';
-export type {
-  RequestBodyValueResolver,
-  ResolvedRequestBody,
-} from './resolver/RequestBodyResolver.ts';
+export type { ResolvedRequestBody } from './resolver/RequestBodyResolver.ts';
 
 /* Actions */
 export { default as ActionResolver } from './action/ActionResolver.ts';

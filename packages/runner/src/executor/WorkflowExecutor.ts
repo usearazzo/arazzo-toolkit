@@ -14,7 +14,7 @@ import RuntimeExpressionEvaluator from '../expression/RuntimeExpressionEvaluator
 import ArazzoWorkflowExtractor from '../extractor/ArazzoWorkflowExtractor.ts';
 import ArazzoWorkflowNormalizer from '../normalizer/ArazzoWorkflowNormalizer.ts';
 import OutputResolver from '../resolver/OutputResolver.ts';
-import ParameterResolver from '../resolver/ParameterResolver.ts';
+import WorkflowParameterResolver from '../resolver/WorkflowParameterResolver.ts';
 import WorkflowExecutionState from '../state/WorkflowExecutionState.ts';
 import StepExecutor, { STEP_TARGET_FIELDS, type StepDefaultActions } from './StepExecutor.ts';
 import StepRetryRunner, { type StepAttemptOutcome } from './StepRetryRunner.ts';
@@ -314,7 +314,7 @@ class WorkflowExecutor {
   readonly #extractor = new ArazzoWorkflowExtractor();
   readonly #normalizer = new ArazzoWorkflowNormalizer();
   readonly #outputResolver = new OutputResolver();
-  readonly #parameterResolver = new ParameterResolver();
+  readonly #parameterResolver = new WorkflowParameterResolver();
   readonly #stepExecutor: StepExecutor;
   readonly #retryRunner: StepRetryRunner;
   readonly #interpreter = new StepTransitionInterpreter();
@@ -707,9 +707,11 @@ class WorkflowExecutor {
     }
 
     const subWorkflowId = this.#subWorkflowId(step, stepId, workflowId);
-    // the sub-workflow's inputs come from the step's parameters, mapped by name —
-    // a workflowId step's parameters carry no `in`, being inputs to a workflow
-    // rather than parts of a request.
+    // the sub-workflow's inputs come from the step's parameters, mapped by bare
+    // name — per the specification, "all parameters map to workflow inputs" for
+    // such a step. That includes an inherited parameter that carries an `in`
+    // (the step's own carry none): it still arrives as an input under its name,
+    // not under the '{in}.{name}' key an operation step would deliver it by.
     //
     // Resolved once here, against the state as the step is entered, rather than
     // per attempt: a retry re-runs *this* invocation of the step, so it must
