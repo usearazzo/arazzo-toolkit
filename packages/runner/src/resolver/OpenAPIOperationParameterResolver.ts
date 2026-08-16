@@ -1,8 +1,7 @@
-import { toValue } from '@speclynx/apidom-core';
 import { isParameterElement, type StepParametersElement } from '@speclynx/apidom-ns-arazzo-1';
 
 import ParameterDelivery from '../client/ParameterDelivery.ts';
-import { parameterLocation } from '../document/parameter-location.ts';
+import ParameterIdentity from '../document/ParameterIdentity.ts';
 import ResolverError from '../errors/ResolverError.ts';
 import StepParameterResolver, { type ParameterValueResolver } from './StepParameterResolver.ts';
 
@@ -52,11 +51,12 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
 
     for (const parameter of parameters) {
       if (!isParameterElement(parameter)) continue;
+      // a parameter without an identity (its name is not a string) is not
+      // resolvable and is skipped, as everywhere else
+      const identity = ParameterIdentity.of(parameter);
+      if (identity === undefined) continue;
 
-      const name = toValue(parameter.name) as string | undefined;
-      if (typeof name !== 'string') continue;
-
-      const location = parameterLocation(parameter);
+      const { name, location } = identity;
       if (location === undefined) {
         throw new ResolverError(
           `Parameter "${name}" declares no location ("in"), which a step targeting an operation requires`,

@@ -3,11 +3,10 @@ import {
   isParameterElement,
   isStepElement,
   StepParametersElement,
-  type ParameterElement,
   type WorkflowElement,
 } from '@speclynx/apidom-ns-arazzo-1';
 import { toValue } from '@speclynx/apidom-core';
-import { isArrayElement, isStringElement, type Element } from '@speclynx/apidom-datamodel';
+import { isArrayElement, isStringElement } from '@speclynx/apidom-datamodel';
 import { dereferenceArazzoElement, defaultDereferenceArazzoOptions } from '@usearazzo/resolver';
 import {
   mergeOptions,
@@ -16,7 +15,7 @@ import {
 import type { PartialDeep } from 'type-fest';
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
-import { parameterLocation } from '../document/parameter-location.ts';
+import ParameterIdentity from '../document/ParameterIdentity.ts';
 import NormalizationError from '../errors/NormalizationError.ts';
 import { providerOptionsOverride as arazzoProviderOptions } from '../registry/providers/ArazzoDocumentRegistryProvider.ts';
 
@@ -31,50 +30,6 @@ export type ArazzoWorkflowNormalizerOptions = PartialDeep<ApiDOMReferenceOptions
  */
 // shallow copy to avoid mutating the provider's shared options
 const normalizerOptionsOverride = mergeOptions(arazzoProviderOptions as ApiDOMReferenceOptions, {});
-
-/**
- * Whether two Parameter Objects name the same location, read through the
- * shared {@link parameterLocation} primitive.
- *
- * Absent on both sides is a match — that is the `workflowId` step case, where
- * parameters are workflow inputs with no location to pair the name with. A
- * malformed location (`in: 1`) reads as `null` and equals nothing, its own
- * duplicate included: it is not a location, so two parameters carrying one are
- * no more "the same parameter" than two unnamed entries are, and deduplicating
- * them would drop authored content the same way.
- */
-const locationEquals = (parameter1: ParameterElement, parameter2: ParameterElement): boolean => {
-  const location1 = parameterLocation(parameter1);
-  // a malformed left side fails here; a malformed right side fails the equality
-  return location1 !== null && location1 === parameterLocation(parameter2);
-};
-
-/**
- * Whether two Arazzo Parameter Objects are the same parameter.
- *
- * Identity is the `(name, in)` pair — the rule ApiDOM's OpenAPI
- * `normalize-parameters` plugin applies when inheriting a Path Item's parameters
- * into an Operation ("a unique parameter is defined by a combination of a name
- * and location"). Arazzo's `in` is optional where OpenAPI's is required, and an
- * absent one compares equal only to another absent one: that is a step naming a
- * `workflowId`, where "all parameters map to workflow inputs" and there is no
- * location to pair the name with. Names are case-sensitive per the
- * specification, so nothing is case-folded.
- *
- * Anything without a well-formed identity is equal to nothing, including itself
- * — an unresolved Reusable Object, a scalar someone put in the list, a parameter
- * with no `name`, or one whose `name` or `in` is not a string. Such an entry has
- * nothing to deduplicate on, and since this feeds a `uniqWith` that rebuilds the
- * step's list, calling it equal to another would delete authored content from
- * the document. The OpenAPI plugin guards the same way and for the same reason.
- */
-const parameterEquals = (parameter1: Element, parameter2: Element): boolean =>
-  isParameterElement(parameter1) &&
-  isParameterElement(parameter2) &&
-  isStringElement(parameter1.name) &&
-  isStringElement(parameter2.name) &&
-  toValue(parameter1.name) === toValue(parameter2.name) &&
-  locationEquals(parameter1, parameter2);
 
 /**
  * Normalizes an extracted Arazzo workflow.
@@ -151,10 +106,10 @@ class ArazzoWorkflowNormalizer {
    * Per Arazzo 1.0.1 a workflow's `parameters` are "applicable for all steps
    * described under this workflow" and a step's own definition "will override it
    * but can never remove it" — so each step ends up with the union, its own
-   * declaration winning wherever the two name the same {@link parameterEquals}
-   * parameter. `uniqWith` keeps the first of each equal pair, so the step's own
-   * list leads, exactly as `inheritParametersToOperation` orders an Operation's
-   * ahead of the Path Item's it inherits.
+   * declaration winning wherever the two are the same parameter by
+   * {@link ParameterIdentity}. `uniqWith` keeps the first of each equal pair,
+   * so the step's own list leads, exactly as `inheritParametersToOperation`
+   * orders an Operation's ahead of the Path Item's it inherits.
    *
    * That leading position is what makes the override effective and not merely
    * present: the parameter resolvers key resolved values first-wins — by the
@@ -170,7 +125,7 @@ class ArazzoWorkflowNormalizer {
    *
    * Not every workflow parameter is applicable to every kind of step: one
    * without a location is a workflow-input mapping (see
-   * {@link parameterLocation}), so it is inherited only into steps targeting a
+   * {@link ParameterIdentity}), so it is inherited only into steps targeting a
    * `workflowId` — on an operation step it names no place in a request, and
    * the resolver reports a location-less parameter there as the step's *own*
    * authoring error, which not synthesizing one is what keeps true. The
@@ -197,7 +152,8 @@ class ArazzoWorkflowNormalizer {
     // what an operation step may inherit — the input-shaped entries filtered
     // out once, ahead of the per-step loop
     const requestShaped = inheritedParameters.filter(
-      (parameter) => !isParameterElement(parameter) || parameterLocation(parameter) !== undefined,
+      (parameter) =>
+        !isParameterElement(parameter) || ParameterIdentity.locationOf(parameter) !== undefined,
     );
 
     for (const step of workflow.steps) {
@@ -209,7 +165,7 @@ class ArazzoWorkflowNormalizer {
 
       const own = isArrayElement(step.parameters) ? [...step.parameters] : [];
       step.parameters = new StepParametersElement(
-        uniqWith(parameterEquals, [...own, ...applicable]),
+        uniqWith(ParameterIdentity.equal, [...own, ...applicable]),
       );
     }
   }
