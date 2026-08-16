@@ -1,4 +1,5 @@
-import type { ArazzoStepElement } from '../document/arazzo-types.ts';
+import type { StepElement } from '@speclynx/apidom-ns-arazzo-1';
+
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
 
 /**
@@ -13,7 +14,7 @@ class ArazzoStepNormalizer {
   /**
    * Normalizes a step element against its parent document.
    */
-  async normalize(step: ArazzoStepElement, _document: ArazzoDocument): Promise<ArazzoStepElement> {
+  async normalize(step: StepElement, _document: ArazzoDocument): Promise<StepElement> {
     return step;
   }
 }
