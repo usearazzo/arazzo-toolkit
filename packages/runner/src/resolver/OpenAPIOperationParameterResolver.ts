@@ -4,14 +4,14 @@ import ParameterDelivery from '../client/ParameterDelivery.ts';
 import ParameterIdentity from '../document/ParameterIdentity.ts';
 import ResolverError from '../errors/ResolverError.ts';
 import StepParameterResolver from './StepParameterResolver.ts';
-import type { RuntimeExpressionResolver } from './ValueResolver.ts';
+import type { RuntimeExpressionResolver } from './ArazzoValueResolver.ts';
 
 /**
  * Resolves the `parameters` of a step targeting an OpenAPI operation into the
  * map the operation is executed with.
  *
  * Values follow the family-wide literal-vs-expression rule of
- * {@link ValueResolver}. Keys and their first-wins claiming are
+ * {@link ArazzoValueResolver}. Keys and their first-wins claiming are
  * {@link ParameterDelivery}'s: `'{in}.{name}'` for a location the client
  * can address — a parameter is unique by `(name, in)`, so keying by name
  * alone would collapse two parameters that differ only in their location into

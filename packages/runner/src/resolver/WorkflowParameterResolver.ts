@@ -2,14 +2,14 @@ import { toValue } from '@speclynx/apidom-core';
 import { isParameterElement, type StepParametersElement } from '@speclynx/apidom-ns-arazzo-1';
 
 import StepParameterResolver from './StepParameterResolver.ts';
-import type { RuntimeExpressionResolver } from './ValueResolver.ts';
+import type { RuntimeExpressionResolver } from './ArazzoValueResolver.ts';
 
 /**
  * Resolves the `parameters` of a step targeting a `workflowId` into the
  * sub-workflow's inputs.
  *
  * Values follow the family-wide literal-vs-expression rule of
- * {@link ValueResolver}. Keys are bare parameter names: per the
+ * {@link ArazzoValueResolver}. Keys are bare parameter names: per the
  * specification, "when the step in context specifies a `workflowId`, then all
  * parameters map to workflow inputs" — which are keyed by name alone, even
  * for an inherited parameter that carries an `in`. Locations are not

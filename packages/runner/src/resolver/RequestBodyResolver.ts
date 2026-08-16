@@ -5,7 +5,7 @@ import { parse as parseJSONPointer, testJSONPointer } from '@swaggerexpert/json-
 import { isPayloadReplacementElement, type RequestBodyElement } from '@speclynx/apidom-ns-arazzo-1';
 
 import ResolverError from '../errors/ResolverError.ts';
-import ValueResolver, { type RuntimeExpressionResolver } from './ValueResolver.ts';
+import ArazzoValueResolver, { type RuntimeExpressionResolver } from './ArazzoValueResolver.ts';
 
 /**
  * Matches a canonical non-negative integer (RFC 6901 array index): no leading
@@ -27,7 +27,7 @@ export interface ResolvedRequestBody {
  * Resolves a step's `requestBody` to a concrete payload.
  *
  * The `payload` is resolved first, by the family-wide literal-vs-expression
- * rule of {@link ValueResolver}. Then each `replacements` entry is applied —
+ * rule of {@link ArazzoValueResolver}. Then each `replacements` entry is applied —
  * its `value` is resolved by the same rule and set into the payload at the
  * replacement's `target` JSON Pointer.
  *
@@ -35,7 +35,7 @@ export interface ResolvedRequestBody {
  * Pointer targets are supported — an XPath target throws {@link ResolverError}.
  * @public
  */
-class RequestBodyResolver extends ValueResolver {
+class RequestBodyResolver extends ArazzoValueResolver {
   /**
    * Resolves the request body, returning its payload and content type. Returns
    * `undefined` when there is no request body.

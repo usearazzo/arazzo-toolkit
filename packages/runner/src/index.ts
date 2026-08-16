@@ -87,8 +87,8 @@ export { default as WorkflowExecutionState } from './state/WorkflowExecutionStat
 export type { WorkflowExecutionStateOptions } from './state/WorkflowExecutionState.ts';
 
 /* Resolvers */
-export { default as ValueResolver } from './resolver/ValueResolver.ts';
-export type { RuntimeExpressionResolver } from './resolver/ValueResolver.ts';
+export { default as ArazzoValueResolver } from './resolver/ArazzoValueResolver.ts';
+export type { RuntimeExpressionResolver } from './resolver/ArazzoValueResolver.ts';
 export { default as StepParameterResolver } from './resolver/StepParameterResolver.ts';
 export { default as OpenAPIOperationParameterResolver } from './resolver/OpenAPIOperationParameterResolver.ts';
 export { default as WorkflowParameterResolver } from './resolver/WorkflowParameterResolver.ts';

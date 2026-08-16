@@ -25,7 +25,7 @@ export type RuntimeExpressionResolver = (expression: string) => unknown;
  * template interpolation.
  * @public
  */
-abstract class ValueResolver {
+abstract class ArazzoValueResolver {
   /**
    * Resolves one authored value element by the rule above.
    */
@@ -35,4 +35,4 @@ abstract class ValueResolver {
   }
 }
 
-export default ValueResolver;
+export default ArazzoValueResolver;

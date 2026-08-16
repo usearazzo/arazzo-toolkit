@@ -1,13 +1,13 @@
 import { toValue } from '@speclynx/apidom-core';
 import type { StepOutputsElement, WorkflowOutputsElement } from '@speclynx/apidom-ns-arazzo-1';
 
-import ValueResolver, { type RuntimeExpressionResolver } from './ValueResolver.ts';
+import ArazzoValueResolver, { type RuntimeExpressionResolver } from './ArazzoValueResolver.ts';
 
 /**
  * Resolves a step's or workflow's `outputs` to a plain map of name → value.
  *
  * Values follow the family-wide literal-vs-expression rule of
- * {@link ValueResolver} (the spec types `outputs` as `Map[string,
+ * {@link ArazzoValueResolver} (the spec types `outputs` as `Map[string,
  * {expression}]`, so a whole runtime expression is the authored norm and
  * anything else is a literal).
  *
@@ -15,7 +15,7 @@ import ValueResolver, { type RuntimeExpressionResolver } from './ValueResolver.t
  * later steps can read `$steps.{id}.outputs.{name}` / `$outputs.{name}`.
  * @public
  */
-class OutputResolver extends ValueResolver {
+class OutputResolver extends ArazzoValueResolver {
   /**
    * Resolves each output value, returning a `name` → value map. Returns an empty
    * object when there are no outputs.
