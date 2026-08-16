@@ -1,14 +1,15 @@
 import { toValue } from '@speclynx/apidom-core';
 import { isParameterElement, type StepParametersElement } from '@speclynx/apidom-ns-arazzo-1';
 
-import StepParameterResolver, { type ParameterValueResolver } from './StepParameterResolver.ts';
+import StepParameterResolver from './StepParameterResolver.ts';
+import type { RuntimeExpressionResolver } from './ValueResolver.ts';
 
 /**
  * Resolves the `parameters` of a step targeting a `workflowId` into the
  * sub-workflow's inputs.
  *
- * Values follow the literal-vs-expression semantics shared through
- * {@link StepParameterResolver}. Keys are bare parameter names: per the
+ * Values follow the family-wide literal-vs-expression rule of
+ * {@link ValueResolver}. Keys are bare parameter names: per the
  * specification, "when the step in context specifies a `workflowId`, then all
  * parameters map to workflow inputs" — which are keyed by name alone, even
  * for an inherited parameter that carries an `in`. Locations are not
@@ -28,7 +29,7 @@ class WorkflowParameterResolver extends StepParameterResolver {
    */
   resolve(
     parameters: StepParametersElement | undefined,
-    resolve: ParameterValueResolver,
+    resolve: RuntimeExpressionResolver,
   ): Record<string, unknown> {
     const result: Record<string, unknown> = {};
     if (parameters === undefined) return result;
@@ -47,7 +48,7 @@ class WorkflowParameterResolver extends StepParameterResolver {
       // `__proto__` would mutate the record's prototype instead of creating an
       // own property, silently losing the input
       Object.defineProperty(result, name, {
-        value: this.resolveValue(parameter, resolve),
+        value: this.resolveValue(parameter.value, resolve),
         enumerable: true,
         writable: true,
         configurable: true,

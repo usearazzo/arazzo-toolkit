@@ -5,7 +5,7 @@ import {
   OpenAPIOperationParameterResolver,
   ResolverError,
   RuntimeExpressionEvaluator,
-  type ParameterValueResolver,
+  type RuntimeExpressionResolver,
 } from '../../src/index.ts';
 
 describe('OpenAPIOperationParameterResolver', function () {
@@ -13,7 +13,7 @@ describe('OpenAPIOperationParameterResolver', function () {
     { inputs: { status: 'available' }, steps: { login: { outputs: { token: 'abc' } } } },
     { strict: false },
   );
-  const resolve: ParameterValueResolver = (expression) => runtime.evaluate(expression);
+  const resolve: RuntimeExpressionResolver = (expression) => runtime.evaluate(expression);
   let resolver: OpenAPIOperationParameterResolver;
 
   beforeEach(function () {

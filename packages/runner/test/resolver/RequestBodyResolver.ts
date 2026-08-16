@@ -5,7 +5,7 @@ import {
   RequestBodyResolver,
   RuntimeExpressionEvaluator,
   ResolverError,
-  type RequestBodyValueResolver,
+  type RuntimeExpressionResolver,
 } from '../../src/index.ts';
 
 describe('RequestBodyResolver', function () {
@@ -13,7 +13,7 @@ describe('RequestBodyResolver', function () {
     { inputs: { petId: 7, order: { item: 'x', qty: 1 } } },
     { strict: false },
   );
-  const resolve: RequestBodyValueResolver = (expression) => runtime.evaluate(expression);
+  const resolve: RuntimeExpressionResolver = (expression) => runtime.evaluate(expression);
   let resolver: RequestBodyResolver;
 
   beforeEach(function () {
@@ -120,7 +120,7 @@ describe('RequestBodyResolver', function () {
       // context object by reference; applying a replacement must not corrupt it.
       const inputs = { order: { item: 'x', qty: 1 } };
       const isolated = new RuntimeExpressionEvaluator({ inputs }, { strict: false });
-      const isolatedResolve: RequestBodyValueResolver = (expression) =>
+      const isolatedResolve: RuntimeExpressionResolver = (expression) =>
         isolated.evaluate(expression);
       const requestBody = refractRequestBody({
         payload: '$inputs.order',

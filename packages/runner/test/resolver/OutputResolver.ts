@@ -4,7 +4,7 @@ import { StepOutputsElement } from '@speclynx/apidom-ns-arazzo-1';
 import {
   OutputResolver,
   RuntimeExpressionEvaluator,
-  type OutputValueResolver,
+  type RuntimeExpressionResolver,
 } from '../../src/index.ts';
 
 describe('OutputResolver', function () {
@@ -15,7 +15,7 @@ describe('OutputResolver', function () {
     },
     { strict: false },
   );
-  const resolve: OutputValueResolver = (expression) => runtime.evaluate(expression);
+  const resolve: RuntimeExpressionResolver = (expression) => runtime.evaluate(expression);
   let resolver: OutputResolver;
 
   beforeEach(function () {
@@ -40,6 +40,19 @@ describe('OutputResolver', function () {
 
     specify('should return an empty object when outputs are absent', function () {
       assert.deepEqual(resolver.resolve(undefined, resolve), {});
+    });
+
+    specify('should store an output named __proto__ as an own property', function () {
+      // bracket assignment would mutate the record's prototype instead of
+      // creating an own property, silently losing the output.
+      // computed key: a literal `__proto__:` would set the object's prototype
+      // instead of authoring a member named __proto__
+      const outputs = new StepOutputsElement({ ['__proto__']: '$response.body#/token' });
+
+      const result = resolver.resolve(outputs, resolve);
+
+      assert.isTrue(Object.hasOwn(result, '__proto__'));
+      assert.strictEqual(Object.getPrototypeOf(result), Object.prototype);
     });
 
     specify('should resolve an unresolvable output to undefined (lenient)', function () {

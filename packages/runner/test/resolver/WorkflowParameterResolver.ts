@@ -4,7 +4,7 @@ import { StepParametersElement, refractParameter } from '@speclynx/apidom-ns-ara
 import {
   WorkflowParameterResolver,
   RuntimeExpressionEvaluator,
-  type ParameterValueResolver,
+  type RuntimeExpressionResolver,
 } from '../../src/index.ts';
 
 describe('WorkflowParameterResolver', function () {
@@ -12,7 +12,7 @@ describe('WorkflowParameterResolver', function () {
     { inputs: { status: 'available', limit: 10 }, steps: { login: { outputs: { token: 'abc' } } } },
     { strict: false },
   );
-  const resolve: ParameterValueResolver = (expression) => runtime.evaluate(expression);
+  const resolve: RuntimeExpressionResolver = (expression) => runtime.evaluate(expression);
   let resolver: WorkflowParameterResolver;
 
   beforeEach(function () {

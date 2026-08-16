@@ -3,22 +3,15 @@ import { toValue } from '@speclynx/apidom-core';
 import { isStringElement } from '@speclynx/apidom-datamodel';
 import { parse as parseJSONPointer, testJSONPointer } from '@swaggerexpert/json-pointer';
 import { isPayloadReplacementElement, type RequestBodyElement } from '@speclynx/apidom-ns-arazzo-1';
-import { test as isRuntimeExpression } from '@swaggerexpert/arazzo-runtime-expression';
 
 import ResolverError from '../errors/ResolverError.ts';
+import ValueResolver, { type RuntimeExpressionResolver } from './ValueResolver.ts';
 
 /**
  * Matches a canonical non-negative integer (RFC 6901 array index): no leading
  * zeros other than `0` itself.
  */
 const ARRAY_INDEX = /^(0|[1-9][0-9]*)$/;
-
-/**
- * Resolves a runtime expression to its value, bridged to a lenient runtime
- * expression evaluator.
- * @public
- */
-export type RequestBodyValueResolver = (expression: string) => unknown;
 
 /**
  * A resolved request body: the payload with all replacements applied, plus the
@@ -33,29 +26,27 @@ export interface ResolvedRequestBody {
 /**
  * Resolves a step's `requestBody` to a concrete payload.
  *
- * The `payload` is resolved first: a string that is a whole runtime expression
- * is evaluated to its typed value, any other string is a literal, and a
- * non-string payload (object, array, scalar) is used as-is. Then each
- * `replacements` entry is applied — its `value` is resolved (a whole runtime
- * expression is evaluated, otherwise it is a literal) and set into the payload
- * at the replacement's `target` JSON Pointer.
+ * The `payload` is resolved first, by the family-wide literal-vs-expression
+ * rule of {@link ValueResolver}. Then each `replacements` entry is applied —
+ * its `value` is resolved by the same rule and set into the payload at the
+ * replacement's `target` JSON Pointer.
  *
  * `target` may be a JSON Pointer or an XPath per the specification; only JSON
  * Pointer targets are supported — an XPath target throws {@link ResolverError}.
  * @public
  */
-class RequestBodyResolver {
+class RequestBodyResolver extends ValueResolver {
   /**
    * Resolves the request body, returning its payload and content type. Returns
    * `undefined` when there is no request body.
    */
   resolve(
     requestBody: RequestBodyElement | undefined,
-    resolve: RequestBodyValueResolver,
+    resolve: RuntimeExpressionResolver,
   ): ResolvedRequestBody | undefined {
     if (requestBody === undefined) return undefined;
 
-    let payload = this.#resolveValue(requestBody.payload, resolve);
+    let payload = this.resolveValue(requestBody.payload, resolve);
 
     if (requestBody.replacements !== undefined) {
       for (const replacement of requestBody.replacements) {
@@ -65,7 +56,7 @@ class RequestBodyResolver {
         payload = this.#applyReplacement(
           payload,
           target,
-          this.#resolveValue(replacement.value, resolve),
+          this.resolveValue(replacement.value, resolve),
         );
       }
     }
@@ -75,18 +66,6 @@ class RequestBodyResolver {
       : undefined;
 
     return contentType === undefined ? { payload } : { payload, contentType };
-  }
-
-  /**
-   * Resolves a payload or replacement value element: a whole runtime expression
-   * string is evaluated, every other value (a non-expression string, or a
-   * non-string literal) is used as-is.
-   */
-  #resolveValue(value: unknown, resolve: RequestBodyValueResolver): unknown {
-    const resolved = toValue(value);
-    return typeof resolved === 'string' && isRuntimeExpression(resolved)
-      ? resolve(resolved)
-      : resolved;
   }
 
   /**

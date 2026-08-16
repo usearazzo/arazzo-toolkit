@@ -3,14 +3,15 @@ import { isParameterElement, type StepParametersElement } from '@speclynx/apidom
 import ParameterDelivery from '../client/ParameterDelivery.ts';
 import ParameterIdentity from '../document/ParameterIdentity.ts';
 import ResolverError from '../errors/ResolverError.ts';
-import StepParameterResolver, { type ParameterValueResolver } from './StepParameterResolver.ts';
+import StepParameterResolver from './StepParameterResolver.ts';
+import type { RuntimeExpressionResolver } from './ValueResolver.ts';
 
 /**
  * Resolves the `parameters` of a step targeting an OpenAPI operation into the
  * map the operation is executed with.
  *
- * Values follow the literal-vs-expression semantics shared through
- * {@link StepParameterResolver}. Keys and their first-wins claiming are
+ * Values follow the family-wide literal-vs-expression rule of
+ * {@link ValueResolver}. Keys and their first-wins claiming are
  * {@link ParameterDelivery}'s: `'{in}.{name}'` for a location the client
  * can address — a parameter is unique by `(name, in)`, so keying by name
  * alone would collapse two parameters that differ only in their location into
@@ -47,7 +48,7 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
    */
   resolve(
     parameters: StepParametersElement | undefined,
-    resolve: ParameterValueResolver,
+    resolve: RuntimeExpressionResolver,
   ): Record<string, unknown> {
     const delivery = new ParameterDelivery();
     if (parameters === undefined) return delivery.toRecord();
@@ -89,7 +90,7 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
         );
       }
 
-      delivery.set(key, this.resolveValue(parameter, resolve));
+      delivery.set(key, this.resolveValue(parameter.value, resolve));
     }
 
     return delivery.toRecord();
