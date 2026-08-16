@@ -456,6 +456,14 @@ class OpenAPIOperationExecutor {
    * capture a same-named parameter in another location — 2.0 legally declares
    * e.g. `petId` in `path` and in `formData` at once — per the lookup order
    * documented on {@link ParameterDelivery}.
+   *
+   * The flip side of the qualified keys: a caller-supplied *bare* `parameters`
+   * entry bearing a payload target's name is no longer overwritten by the
+   * payload (the two occupy different keys now), and the client's bare-first
+   * lookup lets the caller's entry win at delivery. The runner's own pipeline
+   * never produces such an entry — the parameter resolver delivers qualified
+   * keys — so this concerns only direct callers mixing bare parameters with a
+   * request body, an instruction that is ambiguous however resolved.
    */
   #adaptRequestBody(
     buildOptions: Record<string, unknown>,
