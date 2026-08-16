@@ -6,10 +6,13 @@ import ArazzoValueResolver, { type RuntimeExpressionResolver } from './ArazzoVal
 /**
  * Resolves a step's or workflow's `outputs` to a plain map of name → value.
  *
- * Values follow the family-wide literal-vs-expression rule of
- * {@link ArazzoValueResolver} (the spec types `outputs` as `Map[string,
- * {expression}]`, so a whole runtime expression is the authored norm and
- * anything else is a literal).
+ * Values are resolved by the family-wide rule of {@link ArazzoValueResolver},
+ * with one reading peculiar to outputs: the spec types `outputs` as
+ * `Map[string, {expression}]`, so a whole runtime expression is the *only*
+ * authored form — unlike a parameter's `value` or a `requestBody` payload
+ * (typed `Any`), a literal is not a form the spec provides for here. The
+ * shared rule's pass-through branch therefore tolerates an invalid document
+ * by carrying the non-expression value as-is, rather than sanctioning it.
  *
  * The result is the map an executor stores into the workflow execution state so
  * later steps can read `$steps.{id}.outputs.{name}` / `$outputs.{name}`.
