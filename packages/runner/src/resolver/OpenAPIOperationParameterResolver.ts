@@ -1,7 +1,7 @@
 import { toValue } from '@speclynx/apidom-core';
 import { isParameterElement, type StepParametersElement } from '@speclynx/apidom-ns-arazzo-1';
 
-import { deliveryKey } from '../client/delivery-key.ts';
+import ParameterDeliveryMap from '../client/ParameterDeliveryMap.ts';
 import { parameterLocation } from '../document/parameter-location.ts';
 import ResolverError from '../errors/ResolverError.ts';
 import StepParameterResolver, { type ParameterValueResolver } from './StepParameterResolver.ts';
@@ -11,53 +11,44 @@ import StepParameterResolver, { type ParameterValueResolver } from './StepParame
  * map the operation is executed with.
  *
  * Values follow the literal-vs-expression semantics shared through
- * {@link StepParameterResolver}. Keys follow {@link deliveryKey}:
- * `'{in}.{name}'` for a location the client can address — a parameter is
- * unique by `(name, in)`, so keying by name alone would collapse two
- * parameters that differ only in their location into one entry and silently
- * drop the other, where an operation legally declaring `token` both as a
- * header and as a query parameter must receive both — and the bare name for
- * Arazzo's `querystring`, which names no OpenAPI location and can still reach
- * a same-named declared parameter that way.
+ * {@link StepParameterResolver}. Keys and their first-wins claiming are
+ * {@link ParameterDeliveryMap}'s: `'{in}.{name}'` for a location the client
+ * can address — a parameter is unique by `(name, in)`, so keying by name
+ * alone would collapse two parameters that differ only in their location into
+ * one entry and silently drop the other, where an operation legally declaring
+ * `token` both as a header and as a query parameter must receive both — and
+ * the bare name for Arazzo's `querystring`, which names no OpenAPI location.
+ * First-wins is the override order the specification requires: the list is
+ * ordered by precedence, most specific first, as `ArazzoWorkflowNormalizer`
+ * leaves it once a step's own parameters have been merged with the ones it
+ * inherits.
  *
- * The first parameter to claim a key wins: the list is ordered by precedence,
- * most specific first, as `ArazzoWorkflowNormalizer` leaves it once a step's
- * own parameters have been merged with the ones it inherits — the override
- * order the specification requires.
- *
- * A parameter without a location throws {@link ResolverError}: a step
- * targeting an operation requires one (the normalizer does not inherit
- * input-shaped workflow parameters into such steps, so this is the step's own
- * authoring error), and delivering it bare instead would let it capture
- * *every* declared location of that name — see {@link deliveryKey} for the
- * lookup order that makes it so. A non-string location throws for the same
- * reason it deduplicates with nothing in the normalizer: it names no
- * location.
- *
- * The key scheme is not injective — a parameter legally named `header.token`
- * in the `querystring` location and a header parameter named `token` both
- * produce the key `header.token`. Two *different* parameters colliding on one
- * key cannot both be delivered, so that throws {@link ResolverError} rather
- * than silently dropping one; the same parameter declared twice collapses to
- * its first, most specific declaration as everywhere else.
+ * What the map reports, this resolver judges. A parameter without a location
+ * throws {@link ResolverError}: a step targeting an operation requires one
+ * (the normalizer does not inherit input-shaped workflow parameters into such
+ * steps, so this is the step's own authoring error), and delivering it bare
+ * instead would let it capture *every* declared location of that name — see
+ * {@link ParameterDeliveryMap} for the lookup order that makes it so. A
+ * non-string location throws for the same reason it deduplicates with nothing
+ * in the normalizer: it names no location. And two *different* parameters
+ * colliding on one key (the scheme is not injective — a `querystring`
+ * parameter named `header.token` and a header parameter named `token` both
+ * produce `header.token`) cannot both be delivered, so a collision throws
+ * rather than silently dropping one.
  * @public
  */
 class OpenAPIOperationParameterResolver extends StepParameterResolver {
   /**
-   * Resolves each parameter's `value`, returning a {@link deliveryKey}-keyed
-   * map. Returns an empty object when there are no parameters.
+   * Resolves each parameter's `value`, returning a
+   * {@link ParameterDeliveryMap}-keyed record. Returns an empty object when
+   * there are no parameters.
    */
   resolve(
     parameters: StepParametersElement | undefined,
     resolve: ParameterValueResolver,
   ): Record<string, unknown> {
-    const result: Record<string, unknown> = {};
-    if (parameters === undefined) return result;
-
-    // which location claimed each key. Given a key, the claimant's name is
-    // determined by its location (the key embeds the name, or is the name), so
-    // location alone tells a genuine duplicate apart from a key collision.
-    const claimedBy = new Map<string, string>();
+    const delivery = new ParameterDeliveryMap();
+    if (parameters === undefined) return delivery.toRecord();
 
     for (const parameter of parameters) {
       if (!isParameterElement(parameter)) continue;
@@ -79,22 +70,21 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
         });
       }
 
-      const key = deliveryKey(location, name);
-      if (Object.hasOwn(result, key)) {
-        // the same parameter declared again: the earlier, more specific one won
-        if (claimedBy.get(key) === location) continue;
+      const { key, outcome } = delivery.claim(location, name);
+      // the same parameter declared again: the earlier, more specific one won
+      if (outcome === 'duplicate') continue;
+      if (outcome === 'collision') {
         throw new ResolverError(
           `Parameter "${name}" (in: ${location}) collides with another parameter on the ` +
             `delivery key "${key}" and cannot be delivered unambiguously`,
           { target: name, reason: 'ambiguous-delivery' },
         );
       }
-      claimedBy.set(key, location);
 
-      result[key] = this.resolveValue(parameter, resolve);
+      delivery.set(key, this.resolveValue(parameter, resolve));
     }
 
-    return result;
+    return delivery.toRecord();
   }
 }
 

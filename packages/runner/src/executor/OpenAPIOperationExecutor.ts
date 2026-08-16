@@ -11,7 +11,7 @@ import { isPlainObject } from 'ramda-adjunct';
 
 // @ts-expect-error vendored swagger-client bundle has no type declarations
 import { buildRequest, idFromPathMethodLegacy } from '../vendor/swagger-client.mjs';
-import { deliveryKey } from '../client/delivery-key.ts';
+import ParameterDeliveryMap from '../client/ParameterDeliveryMap.ts';
 import type HTTPClient from '../client/HTTPClient.ts';
 import httpClientFetch from '../client/HTTPClientFetch.ts';
 import type { OpenAPIOperationElement } from '../document/openapi-types.ts';
@@ -451,11 +451,11 @@ class OpenAPIOperationExecutor {
    * here, where the assembled document has those parameters dereferenced and
    * inherited.
    *
-   * The payload travels under {@link deliveryKey} keys (`body.{name}`,
-   * `formData.{name}`), never bare names: a bare key would capture a
-   * same-named parameter in another location — 2.0 legally declares e.g.
-   * `petId` in `path` and in `formData` at once — per the lookup order
-   * documented on {@link deliveryKey}.
+   * The payload travels under {@link ParameterDeliveryMap} keys
+   * (`body.{name}`, `formData.{name}`), never bare names: a bare key would
+   * capture a same-named parameter in another location — 2.0 legally declares
+   * e.g. `petId` in `path` and in `formData` at once — per the lookup order
+   * documented on {@link ParameterDeliveryMap}.
    */
   #adaptRequestBody(
     buildOptions: Record<string, unknown>,
@@ -483,7 +483,10 @@ class OpenAPIOperationExecutor {
       const name = toValue(body.name) as string;
       return {
         ...rest,
-        parameters: { ...callerParameters, [deliveryKey('body', name)]: requestBody },
+        parameters: {
+          ...callerParameters,
+          [ParameterDeliveryMap.keyFor('body', name)]: requestBody,
+        },
       };
     }
 
@@ -500,7 +503,7 @@ class OpenAPIOperationExecutor {
       }
       const merged: Record<string, unknown> = { ...callerParameters };
       for (const [field, value] of Object.entries(requestBody as Record<string, unknown>)) {
-        merged[deliveryKey('formData', field)] = value;
+        merged[ParameterDeliveryMap.keyFor('formData', field)] = value;
       }
       return { ...rest, parameters: merged };
     }
