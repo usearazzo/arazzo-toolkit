@@ -1,7 +1,7 @@
 import { toValue } from '@speclynx/apidom-core';
 import { isParameterElement, type StepParametersElement } from '@speclynx/apidom-ns-arazzo-1';
 
-import ParameterDeliveryMap from '../client/ParameterDeliveryMap.ts';
+import ParameterDelivery from '../client/ParameterDelivery.ts';
 import { parameterLocation } from '../document/parameter-location.ts';
 import ResolverError from '../errors/ResolverError.ts';
 import StepParameterResolver, { type ParameterValueResolver } from './StepParameterResolver.ts';
@@ -12,7 +12,7 @@ import StepParameterResolver, { type ParameterValueResolver } from './StepParame
  *
  * Values follow the literal-vs-expression semantics shared through
  * {@link StepParameterResolver}. Keys and their first-wins claiming are
- * {@link ParameterDeliveryMap}'s: `'{in}.{name}'` for a location the client
+ * {@link ParameterDelivery}'s: `'{in}.{name}'` for a location the client
  * can address — a parameter is unique by `(name, in)`, so keying by name
  * alone would collapse two parameters that differ only in their location into
  * one entry and silently drop the other, where an operation legally declaring
@@ -28,7 +28,7 @@ import StepParameterResolver, { type ParameterValueResolver } from './StepParame
  * (the normalizer does not inherit input-shaped workflow parameters into such
  * steps, so this is the step's own authoring error), and delivering it bare
  * instead would let it capture *every* declared location of that name — see
- * {@link ParameterDeliveryMap} for the lookup order that makes it so. A
+ * {@link ParameterDelivery} for the lookup order that makes it so. A
  * non-string location throws for the same reason it deduplicates with nothing
  * in the normalizer: it names no location. And two *different* parameters
  * colliding on one key (the scheme is not injective — a `querystring`
@@ -40,14 +40,14 @@ import StepParameterResolver, { type ParameterValueResolver } from './StepParame
 class OpenAPIOperationParameterResolver extends StepParameterResolver {
   /**
    * Resolves each parameter's `value`, returning a
-   * {@link ParameterDeliveryMap}-keyed record. Returns an empty object when
+   * {@link ParameterDelivery}-keyed record. Returns an empty object when
    * there are no parameters.
    */
   resolve(
     parameters: StepParametersElement | undefined,
     resolve: ParameterValueResolver,
   ): Record<string, unknown> {
-    const delivery = new ParameterDeliveryMap();
+    const delivery = new ParameterDelivery();
     if (parameters === undefined) return delivery.toRecord();
 
     for (const parameter of parameters) {

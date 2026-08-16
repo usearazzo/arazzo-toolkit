@@ -49,7 +49,7 @@ export interface ParameterClaim {
  * Diff this against the vendored bundle's lookup when bumping swagger-client.
  * @internal
  */
-class ParameterDeliveryMap {
+class ParameterDelivery {
   /**
    * The key a `(location, name)` pair is delivered under — `'{in}.{name}'`,
    * or the bare name for `querystring`. See the class doc for why.
@@ -63,12 +63,12 @@ class ParameterDeliveryMap {
 
   /**
    * Claims the delivery key for a `(location, name)` pair, first-wins.
-   * Only a `claimed` outcome entitles the caller to {@link ParameterDeliveryMap.set}
+   * Only a `claimed` outcome entitles the caller to {@link ParameterDelivery.set}
    * the key; a `duplicate` means the same parameter already holds it, and a
    * `collision` means a different parameter does.
    */
   claim(location: string, name: string): ParameterClaim {
-    const key = ParameterDeliveryMap.keyFor(location, name);
+    const key = ParameterDelivery.keyFor(location, name);
     const claimant = this.#claimedBy.get(key);
     if (claimant === undefined) {
       this.#claimedBy.set(key, location);
@@ -89,4 +89,4 @@ class ParameterDeliveryMap {
   }
 }
 
-export default ParameterDeliveryMap;
+export default ParameterDelivery;
