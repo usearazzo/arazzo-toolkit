@@ -43,8 +43,11 @@ export interface ParameterClaim {
  * discriminates a genuine duplicate from a collision of two different
  * parameters on one key: given a key, the claimant's name is determined by
  * its location (the key embeds the name, or is the name), so the location
- * alone identifies the claimant. What to do about a collision is the
- * caller's policy — the map only reports it.
+ * alone identifies the claimant. A bare key and a qualified key sharing one
+ * name are a collision too, even though the keys differ — the client consults
+ * the bare name first for every declared parameter bearing it, so the bare
+ * entry would silently capture the qualified one. What to do about a
+ * collision is the caller's policy — the map only reports it.
  *
  * Diff this against the vendored bundle's lookup when bumping swagger-client.
  * @internal
@@ -60,25 +63,43 @@ class ParameterDelivery {
 
   readonly #values: Record<string, unknown> = {};
   readonly #claimedBy = new Map<string, string>();
+  readonly #bareNames = new Set<string>();
+  readonly #qualifiedNames = new Set<string>();
 
   /**
    * Claims the delivery key for a `(location, name)` pair, first-wins.
    * Only a `claimed` outcome entitles the caller to {@link ParameterDelivery.set}
    * the key; a `duplicate` means the same parameter already holds it, and a
-   * `collision` means a different parameter does.
+   * `collision` means a different parameter does — on the same key, or across
+   * a bare/qualified pair sharing the name (see the class doc).
    */
   claim(location: string, name: string): ParameterClaim {
     const key = ParameterDelivery.keyFor(location, name);
     const claimant = this.#claimedBy.get(key);
-    if (claimant === undefined) {
-      this.#claimedBy.set(key, location);
-      return { key, outcome: 'claimed' };
+    if (claimant !== undefined) {
+      return { key, outcome: claimant === location ? 'duplicate' : 'collision' };
     }
-    return { key, outcome: claimant === location ? 'duplicate' : 'collision' };
+
+    const bare = key === name;
+    if (bare ? this.#qualifiedNames.has(name) : this.#bareNames.has(name)) {
+      return { key, outcome: 'collision' };
+    }
+
+    (bare ? this.#bareNames : this.#qualifiedNames).add(name);
+    this.#claimedBy.set(key, location);
+    return { key, outcome: 'claimed' };
   }
 
   set(key: string, value: unknown): void {
-    this.#values[key] = value;
+    // defined rather than assigned: bracket assignment under a key like
+    // `__proto__` would mutate the record's prototype instead of creating an
+    // own property, silently losing the parameter
+    Object.defineProperty(this.#values, key, {
+      value,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
   }
 
   /**

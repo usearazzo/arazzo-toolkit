@@ -1,5 +1,5 @@
 import { toValue } from '@speclynx/apidom-core';
-import { isStringElement, type Element } from '@speclynx/apidom-datamodel';
+import { isNullElement, isStringElement, type Element } from '@speclynx/apidom-datamodel';
 import { isParameterElement, type ParameterElement } from '@speclynx/apidom-ns-arazzo-1';
 
 /**
@@ -21,9 +21,11 @@ import { isParameterElement, type ParameterElement } from '@speclynx/apidom-ns-a
  * The location side is read three-way:
  *
  * - a string — the declared location, e.g. `'query'`;
- * - `undefined` — no location is declared: the shape of a workflow-input
- *   mapping, meaningful for a step targeting a `workflowId` but naming no
- *   place in a request;
+ * - `undefined` — no location: the shape of a workflow-input mapping,
+ *   meaningful for a step targeting a `workflowId` but naming no place in a
+ *   request. An explicitly empty `in:` (a YAML null) reads the same as an
+ *   omitted one — both say "no location", and treating the explicit spelling
+ *   as malformed would fail a run its `in`-omitted twin completes;
  * - `null` — a location is declared but is not a string (`in: 1`), which
  *   names no location and equals no other, its own duplicate included.
  *
@@ -65,7 +67,7 @@ class ParameterIdentity {
    */
   static locationOf(parameter: ParameterElement): string | undefined | null {
     const location = parameter.in;
-    if (location === undefined) return undefined;
+    if (location === undefined || isNullElement(location)) return undefined;
     return isStringElement(location) ? (toValue(location) as string) : null;
   }
 

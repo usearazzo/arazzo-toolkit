@@ -160,8 +160,12 @@ class ArazzoWorkflowNormalizer {
       if (!isStepElement(step)) continue;
       if (step.parameters !== undefined && !isArrayElement(step.parameters)) continue;
 
+      // when nothing applicable remains AND the step declares no list of its
+      // own, there is nothing to synthesize. A step with its own list is still
+      // rebuilt, so its duplicates collapse the same way whichever kind of
+      // step it is — not depending on what the workflow happened to contribute
       const applicable = isStringElement(step.workflowId) ? inheritedParameters : requestShaped;
-      if (applicable.length === 0) continue;
+      if (applicable.length === 0 && step.parameters === undefined) continue;
 
       const own = isArrayElement(step.parameters) ? [...step.parameters] : [];
       step.parameters = new StepParametersElement(

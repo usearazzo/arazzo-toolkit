@@ -120,6 +120,20 @@ describe('WorkflowParameterResolver', function () {
       assert.deepEqual(result, { trace: 'from-step' });
     });
 
+    specify('should store an input named __proto__ as an own property', function () {
+      // bracket assignment would mutate the record's prototype instead of
+      // creating an own property, silently losing the input (and, for an
+      // object value, polluting the prototype).
+      const result = resolver.resolve(
+        parameters({ name: '__proto__', value: { polluted: true } }),
+        resolve,
+      );
+
+      assert.isTrue(Object.hasOwn(result, '__proto__'));
+      assert.strictEqual(Object.getPrototypeOf(result), Object.prototype);
+      assert.isUndefined(({} as Record<string, unknown>).polluted);
+    });
+
     specify('should not mistake a parameter named after an Object property', function () {
       const result = resolver.resolve(
         parameters({ name: 'toString', value: 'first' }, { name: 'toString', value: 'second' }),

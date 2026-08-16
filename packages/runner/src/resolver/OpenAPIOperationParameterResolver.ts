@@ -51,10 +51,15 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
 
     for (const parameter of parameters) {
       if (!isParameterElement(parameter)) continue;
-      // a parameter without an identity (its name is not a string) is not
-      // resolvable and is skipped, as everywhere else
+      // a Parameter Object without an identity has a missing or non-string
+      // name — reported as loudly as a malformed location below, rather than
+      // silently dropped from the request
       const identity = ParameterIdentity.of(parameter);
-      if (identity === undefined) continue;
+      if (identity === undefined) {
+        throw new ResolverError('Parameter has a missing or non-string name', {
+          reason: 'missing-name',
+        });
+      }
 
       const { name, location } = identity;
       if (location === undefined) {

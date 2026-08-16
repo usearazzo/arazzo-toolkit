@@ -108,6 +108,67 @@ describe('OpenAPIOperationParameterResolver', function () {
       );
     });
 
+    specify('should throw when a querystring parameter shadows a qualified one', function () {
+      // the two produce different keys ('token' and 'header.token'), so this
+      // is not a key collision — but the client consults the bare name first
+      // for every declared parameter bearing it, so the querystring entry
+      // would silently capture the header's value.
+      assert.throws(
+        () =>
+          resolver.resolve(
+            parameters(
+              { name: 'token', in: 'querystring', value: 'qs' },
+              { name: 'token', in: 'header', value: 'secret' },
+            ),
+            resolve,
+          ),
+        ResolverError,
+        /cannot be delivered unambiguously/,
+      );
+    });
+
+    specify('should throw for the shadowing pair in either order', function () {
+      assert.throws(
+        () =>
+          resolver.resolve(
+            parameters(
+              { name: 'token', in: 'header', value: 'secret' },
+              { name: 'token', in: 'querystring', value: 'qs' },
+            ),
+            resolve,
+          ),
+        ResolverError,
+        /cannot be delivered unambiguously/,
+      );
+    });
+
+    specify('should throw ResolverError for a missing or non-string name', function () {
+      // as loud as a malformed location: a silently dropped parameter would
+      // surface only as a downstream request failure with nothing pointing at
+      // the cause.
+      assert.throws(
+        () =>
+          resolver.resolve(
+            parameters({ name: 1 as unknown as string, in: 'query', value: 'v' }),
+            resolve,
+          ),
+        ResolverError,
+        /missing or non-string name/,
+      );
+    });
+
+    specify('should store a bare parameter named __proto__ as an own property', function () {
+      // bracket assignment would mutate the record's prototype instead of
+      // creating an own property, silently losing the parameter.
+      const result = resolver.resolve(
+        parameters({ name: '__proto__', in: 'querystring', value: 'x' }),
+        resolve,
+      );
+
+      assert.isTrue(Object.hasOwn(result, '__proto__'));
+      assert.strictEqual(Object.getPrototypeOf(result), Object.prototype);
+    });
+
     specify('should throw ResolverError when two parameters collide on one key', function () {
       // the '{in}.{name}' scheme is the client's and is not injective: a
       // querystring parameter named `query.id` and a query parameter named

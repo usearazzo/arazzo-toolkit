@@ -187,6 +187,40 @@ describe('ArazzoWorkflowNormalizer', function () {
       },
     );
 
+    specify(
+      "should still collapse a step's own duplicates when nothing applicable remains",
+      async function () {
+        // whether a step's own duplicate (name, in) entries collapse must not
+        // depend on the unrelated question of what the workflow happened to
+        // contribute to that kind of step.
+        const [step] = await inherit([{ name: 'petId', value: '7' }], {
+          stepId: 'a',
+          parameters: [
+            { name: 'q', in: 'query', value: 1 },
+            { name: 'q', in: 'query', value: 2 },
+          ],
+        });
+
+        assert.deepEqual(step, [{ name: 'q', in: 'query', value: 1 }]);
+      },
+    );
+
+    specify('should treat an explicitly null location as absent', async function () {
+      // `in:` with an empty value (a YAML null) says "no location" the same
+      // way omitting the field does — an input-shaped parameter, inherited
+      // only into workflowId steps, not a malformed location that would fail
+      // an operation step's run.
+      const workflow = refractWorkflow({
+        workflowId: 'w',
+        parameters: [{ name: 'petId', in: null, value: '7' }],
+        steps: [{ stepId: 'a', operationId: 'getInventory' }],
+      }) as WorkflowElement;
+
+      const normalized = await normalizer.normalize(workflow, entryDoc);
+
+      assert.isUndefined((toValue(normalized.steps) as { parameters?: unknown }[])[0].parameters);
+    });
+
     specify('should inherit an input-shaped parameter into a workflowId step', async function () {
       // for a step targeting a workflowId, "all parameters map to workflow
       // inputs" — the input-shaped parameter is exactly what such a step

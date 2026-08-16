@@ -76,7 +76,7 @@
           },
           {
             "in": "body",
-            "name": "body",
+            "name": "orderId",
             "required": true,
             "schema": {
               "$ref": "#/definitions/Order"
@@ -119,6 +119,12 @@
             "name": "status",
             "in": "formData",
             "type": "string"
+          },
+          {
+            "name": "petId",
+            "in": "formData",
+            "type": "integer",
+            "format": "int64"
           }
         ],
         "responses": {

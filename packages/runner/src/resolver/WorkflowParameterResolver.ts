@@ -43,7 +43,15 @@ class WorkflowParameterResolver extends StepParameterResolver {
       // for one already resolved.
       if (Object.hasOwn(result, name)) continue;
 
-      result[name] = this.resolveValue(parameter, resolve);
+      // defined rather than assigned: bracket assignment under a name like
+      // `__proto__` would mutate the record's prototype instead of creating an
+      // own property, silently losing the input
+      Object.defineProperty(result, name, {
+        value: this.resolveValue(parameter, resolve),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     }
 
     return result;

@@ -457,13 +457,14 @@ class OpenAPIOperationExecutor {
    * e.g. `petId` in `path` and in `formData` at once — per the lookup order
    * documented on {@link ParameterDelivery}.
    *
-   * The flip side of the qualified keys: a caller-supplied *bare* `parameters`
-   * entry bearing a payload target's name is no longer overwritten by the
-   * payload (the two occupy different keys now), and the client's bare-first
-   * lookup lets the caller's entry win at delivery. The runner's own pipeline
-   * never produces such an entry — the parameter resolver delivers qualified
-   * keys — so this concerns only direct callers mixing bare parameters with a
-   * request body, an instruction that is ambiguous however resolved.
+   * A *bare* `parameters` entry bearing a payload target's name is rejected
+   * with {@link ClientError} rather than resolved either way: before the
+   * qualified keys the payload silently overwrote it, after them the bare key
+   * would silently outrank the payload at the client's bare-first lookup —
+   * both wrong for somebody, so the ambiguity is reported instead. Such an
+   * entry can come from a direct caller mixing bare parameters with a request
+   * body, or from the runner's own pipeline: the parameter resolver keeps a
+   * `querystring` parameter under its bare name.
    */
   #adaptRequestBody(
     buildOptions: Record<string, unknown>,
@@ -489,6 +490,7 @@ class OpenAPIOperationExecutor {
     const body = parameters.find((parameter) => toValue(parameter.in) === 'body');
     if (body !== undefined) {
       const name = toValue(body.name) as string;
+      this.#rejectBarePayloadConflicts(callerParameters, [name], jsonPointer);
       return {
         ...rest,
         parameters: {
@@ -509,8 +511,10 @@ class OpenAPIOperationExecutor {
           { operationPath: jsonPointer },
         );
       }
+      const payload = requestBody as Record<string, unknown>;
+      this.#rejectBarePayloadConflicts(callerParameters, Object.keys(payload), jsonPointer);
       const merged: Record<string, unknown> = { ...callerParameters };
-      for (const [field, value] of Object.entries(requestBody as Record<string, unknown>)) {
+      for (const [field, value] of Object.entries(payload)) {
         merged[ParameterDelivery.keyFor('formData', field)] = value;
       }
       return { ...rest, parameters: merged };
@@ -519,6 +523,28 @@ class OpenAPIOperationExecutor {
     throw new ClientError(
       'Request body cannot be sent: the OpenAPI 2.0 operation declares no "body" or ' +
         '"formData" parameter to carry it',
+      { operationPath: jsonPointer },
+    );
+  }
+
+  /**
+   * Rejects bare `parameters` entries bearing the names the payload is about
+   * to be delivered under — the client consults bare names before qualified
+   * keys, so such an entry would silently displace the request body (see
+   * {@link OpenAPIOperationExecutor.#adaptRequestBody}).
+   */
+  #rejectBarePayloadConflicts(
+    callerParameters: Record<string, unknown> | undefined,
+    payloadNames: readonly string[],
+    jsonPointer: string,
+  ): void {
+    if (callerParameters === undefined) return;
+    const conflicts = payloadNames.filter((name) => Object.hasOwn(callerParameters, name));
+    if (conflicts.length === 0) return;
+    throw new ClientError(
+      `Request body cannot be sent: bare parameter ${conflicts.length === 1 ? 'entry' : 'entries'} ` +
+        `[${conflicts.join(', ')}] would displace the payload at delivery. Supply the ` +
+        `parameter under its "{in}.{name}" key, or drop the duplicate`,
       { operationPath: jsonPointer },
     );
   }

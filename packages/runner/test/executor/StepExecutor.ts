@@ -490,10 +490,12 @@ describe('StepExecutor', function () {
     specify(
       "should deliver a step's parameters alongside the adapted body parameter",
       async function () {
-        // the 2.0 body adaptation delivers the payload under the declared body
-        // parameter's qualified 'body.{name}' key, next to the step's own
-        // '{in}.{name}' keys — one uniform shape, so a payload key cannot
-        // capture a same-named parameter in another location.
+        // the declared body parameter is *named* `orderId` — the same name as
+        // the path parameter, which 2.0 legally allows since uniqueness is
+        // (name, in). The payload travels under the qualified 'body.orderId'
+        // key next to the step's own '{in}.{name}' keys, so each reaches its
+        // own place; a bare payload key would instead capture the path
+        // parameter and corrupt the URL.
         const { executor, requests } = makeExecutorFor(entry2, registry2);
 
         const step = refractStep({

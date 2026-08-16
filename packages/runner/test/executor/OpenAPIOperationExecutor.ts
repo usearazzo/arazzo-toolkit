@@ -605,11 +605,12 @@ describe('OpenAPIOperationExecutor', function () {
     specify(
       'should spread a formData payload alongside qualified parameter keys',
       async function () {
-        // the formData adaptation spreads the payload into the parameters map
-        // under qualified 'formData.{name}' keys, next to the caller's other
-        // '{in}.{name}' keys — one uniform shape, so a payload field cannot
-        // capture a same-named parameter in another location (2.0 legally
-        // declares e.g. petId in path and in formData at once).
+        // the operation declares petId BOTH in path and in formData (legal —
+        // uniqueness is (name, in)), with different values supplied to each.
+        // The payload travels under qualified 'formData.{name}' keys next to
+        // the caller's other '{in}.{name}' keys, so each petId reaches its own
+        // place; the old bare spread would have captured the path parameter
+        // and built /pet/7/form.
         const formLocator = await locatorNormalizer2.normalizeOperationId(
           'updatePetWithForm',
           entry2,
@@ -618,19 +619,61 @@ describe('OpenAPIOperationExecutor', function () {
 
         await executor.execute(formLocator, {
           parameters: { 'path.petId': 42, 'header.x-trace': 'abc' },
-          requestBody: { name: 'Rex', status: 'sold' },
+          requestBody: { name: 'Rex', status: 'sold', petId: 7 },
           requestContentType: 'application/x-www-form-urlencoded',
         });
 
         assert.include(requests[0].url, '/pet/42/form');
         assert.strictEqual(requests[0].headers['x-trace'], 'abc');
-        // the spread payload keys matched the declared formData parameters and
-        // were form-encoded into the body.
+        // the payload keys matched the declared formData parameters and were
+        // form-encoded into the body, the colliding name included.
         const body = new URLSearchParams(requests[0].body as string);
         assert.strictEqual(body.get('name'), 'Rex');
         assert.strictEqual(body.get('status'), 'sold');
+        assert.strictEqual(body.get('petId'), '7');
       },
     );
+
+    specify('should reject a bare caller entry that would displace the payload', async function () {
+      // a bare `orderId` entry occupies the name the body payload is
+      // delivered under; the client consults bare names first, so it would
+      // silently displace the requestBody — reported instead of resolved
+      // either way.
+      const orderLocator = await locatorNormalizer2.normalizeOperationId('updateOrder', entry2);
+      const { executor, requests } = makeExecutor();
+
+      const thrown = await rejects(
+        executor.execute(orderLocator, {
+          parameters: { orderId: 1, 'header.x-trace': 'abc' },
+          requestBody: { petId: 7, quantity: 2 },
+          requestContentType: 'application/json',
+        }),
+        ClientError,
+      );
+
+      assert.match((thrown as ClientError).message, /would displace the payload/);
+      assert.strictEqual(requests.length, 0);
+    });
+
+    specify('should reject a bare caller entry colliding with a formData field', async function () {
+      const formLocator = await locatorNormalizer2.normalizeOperationId(
+        'updatePetWithForm',
+        entry2,
+      );
+      const { executor, requests } = makeExecutor();
+
+      const thrown = await rejects(
+        executor.execute(formLocator, {
+          parameters: { 'path.petId': 42, name: 'bare-entry' },
+          requestBody: { name: 'Rex' },
+          requestContentType: 'application/x-www-form-urlencoded',
+        }),
+        ClientError,
+      );
+
+      assert.match((thrown as ClientError).message, /would displace the payload/);
+      assert.strictEqual(requests.length, 0);
+    });
 
     specify('should throw when the 2.0 operation declares no parameters at all', async function () {
       // an operation declaring none leaves `parameters` absent rather than
