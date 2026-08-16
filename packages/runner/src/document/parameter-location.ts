@@ -15,8 +15,8 @@ import type { ParameterElement } from '@speclynx/apidom-ns-arazzo-1';
  *
  * This is the one reading of a parameter's side of the `(name, in)` identity,
  * shared by `ArazzoWorkflowNormalizer` (which merges a workflow's parameters
- * into its steps by that identity) and `ParameterResolver` (which keys
- * delivery by it) — so the two cannot drift apart.
+ * into its steps by that identity) and `OpenAPIOperationParameterResolver`
+ * (which keys delivery by it) — so the two cannot drift apart.
  * @internal
  */
 export const parameterLocation = (parameter: ParameterElement): string | undefined | null => {

@@ -157,10 +157,12 @@ class ArazzoWorkflowNormalizer {
    * ahead of the Path Item's it inherits.
    *
    * That leading position is what makes the override effective and not merely
-   * present: {@link ParameterResolver} keys resolved values first-wins — by the
-   * same `(name, in)` identity for an operation step, and by bare name for a
-   * `workflowId` step's inputs — so wherever the two collapse to one key, the
-   * earlier survives, which must be the step's.
+   * present: the parameter resolvers key resolved values first-wins — by the
+   * same `(name, in)` identity for an operation step
+   * ({@link OpenAPIOperationParameterResolver}), and by bare name for a
+   * `workflowId` step's inputs ({@link WorkflowParameterResolver}) — so
+   * wherever the two collapse to one key, the earlier survives, which must be
+   * the step's.
    *
    * Inheriting the elements here rather than the resolved values is what lets a
    * workflow-level `value` that is a runtime expression still be evaluated once
@@ -182,8 +184,8 @@ class ArazzoWorkflowNormalizer {
    * that makes the document invalid and leave nothing to report. An entry
    * *within* either list that is not a Parameter Object is carried across
    * untouched rather than filtered out, for the same reason: rebuilding a step's
-   * list is no licence to drop what its author wrote, and `ParameterResolver`
-   * ignores it anyway. A parameter whose location is malformed (`in: 1`) is
+   * list is no licence to drop what its author wrote, and the parameter
+   * resolvers ignore it anyway. A parameter whose location is malformed (`in: 1`) is
    * likewise carried, for the resolver to report loudly.
    */
   #inheritParametersToSteps(workflow: WorkflowElement): void {

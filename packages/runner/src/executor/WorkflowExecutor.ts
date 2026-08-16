@@ -14,7 +14,7 @@ import RuntimeExpressionEvaluator from '../expression/RuntimeExpressionEvaluator
 import ArazzoWorkflowExtractor from '../extractor/ArazzoWorkflowExtractor.ts';
 import ArazzoWorkflowNormalizer from '../normalizer/ArazzoWorkflowNormalizer.ts';
 import OutputResolver from '../resolver/OutputResolver.ts';
-import ParameterResolver from '../resolver/ParameterResolver.ts';
+import WorkflowParameterResolver from '../resolver/WorkflowParameterResolver.ts';
 import WorkflowExecutionState from '../state/WorkflowExecutionState.ts';
 import StepExecutor, { STEP_TARGET_FIELDS, type StepDefaultActions } from './StepExecutor.ts';
 import StepRetryRunner, { type StepAttemptOutcome } from './StepRetryRunner.ts';
@@ -314,7 +314,7 @@ class WorkflowExecutor {
   readonly #extractor = new ArazzoWorkflowExtractor();
   readonly #normalizer = new ArazzoWorkflowNormalizer();
   readonly #outputResolver = new OutputResolver();
-  readonly #parameterResolver = new ParameterResolver();
+  readonly #parameterResolver = new WorkflowParameterResolver();
   readonly #stepExecutor: StepExecutor;
   readonly #retryRunner: StepRetryRunner;
   readonly #interpreter = new StepTransitionInterpreter();
@@ -722,7 +722,7 @@ class WorkflowExecutor {
     // likewise identical across attempts — there, because nothing mutates the
     // state mid-retry.
     const preContext = state.toContext();
-    const inputs = this.#parameterResolver.resolveWorkflowInputs(step.parameters, (expression) =>
+    const inputs = this.#parameterResolver.resolve(step.parameters, (expression) =>
       this.#evaluate(preContext, expression),
     );
 

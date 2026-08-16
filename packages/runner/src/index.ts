@@ -88,8 +88,9 @@ export { default as WorkflowExecutionState } from './state/WorkflowExecutionStat
 export type { WorkflowExecutionStateOptions } from './state/WorkflowExecutionState.ts';
 
 /* Resolvers */
-export { default as ParameterResolver } from './resolver/ParameterResolver.ts';
-export type { ParameterValueResolver } from './resolver/ParameterResolver.ts';
+export { default as OpenAPIOperationParameterResolver } from './resolver/OpenAPIOperationParameterResolver.ts';
+export { default as WorkflowParameterResolver } from './resolver/WorkflowParameterResolver.ts';
+export type { ParameterValueResolver } from './resolver/parameter-value.ts';
 export { default as OutputResolver } from './resolver/OutputResolver.ts';
 export type { OutputValueResolver } from './resolver/OutputResolver.ts';
 export { default as RequestBodyResolver } from './resolver/RequestBodyResolver.ts';

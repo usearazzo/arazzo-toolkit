@@ -18,7 +18,7 @@ import type {
 } from '../expression/RuntimeExpressionContext.ts';
 import RuntimeExpressionEvaluator from '../expression/RuntimeExpressionEvaluator.ts';
 import CriterionEvaluator from '../criterion/CriterionEvaluator.ts';
-import ParameterResolver from '../resolver/ParameterResolver.ts';
+import OpenAPIOperationParameterResolver from '../resolver/OpenAPIOperationParameterResolver.ts';
 import RequestBodyResolver, { type ResolvedRequestBody } from '../resolver/RequestBodyResolver.ts';
 import OutputResolver from '../resolver/OutputResolver.ts';
 import ActionResolver, { type SelectedAction } from '../action/ActionResolver.ts';
@@ -143,7 +143,7 @@ class StepExecutor {
   readonly #registry: DocumentRegistry;
   readonly #locatorNormalizer: OpenAPIOperationLocatorNormalizer;
   readonly #operationExecutor: OpenAPIOperationExecutor;
-  readonly #parameterResolver = new ParameterResolver();
+  readonly #parameterResolver = new OpenAPIOperationParameterResolver();
   readonly #requestBodyResolver = new RequestBodyResolver();
   readonly #outputResolver = new OutputResolver();
   readonly #criterionEvaluator = new CriterionEvaluator();
@@ -209,9 +209,8 @@ class StepExecutor {
     // keyed by '{in}.{name}' rather than bare name, so two parameters that
     // legally differ only in their location each reach their own place.
     const preContext = state.toContext();
-    const parameters = this.#parameterResolver.resolveRequestParameters(
-      step.parameters,
-      (expression) => this.#evaluate(preContext, expression),
+    const parameters = this.#parameterResolver.resolve(step.parameters, (expression) =>
+      this.#evaluate(preContext, expression),
     );
     const requestBody = this.#requestBodyResolver.resolve(step.requestBody, (expression) =>
       this.#evaluate(preContext, expression),
