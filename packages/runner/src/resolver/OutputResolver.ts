@@ -32,9 +32,10 @@ class OutputResolver extends ArazzoValueResolver {
 
     outputs.forEach((value, key) => {
       const name = toValue(key) as string;
-      // defined rather than assigned: bracket assignment under a name like
-      // `__proto__` would mutate the record's prototype instead of creating an
-      // own property, silently losing the output
+      // defined rather than assigned: a name like `__proto__` hits the
+      // Object.prototype accessor on bracket assignment, so no own property is
+      // ever created and the output is silently lost — and an object value
+      // additionally rewrites the record's prototype
       Object.defineProperty(result, name, {
         value: this.resolveValue(value, resolve),
         enumerable: true,

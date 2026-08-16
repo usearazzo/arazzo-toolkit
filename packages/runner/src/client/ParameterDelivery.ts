@@ -91,9 +91,10 @@ class ParameterDelivery {
   }
 
   set(key: string, value: unknown): void {
-    // defined rather than assigned: bracket assignment under a key like
-    // `__proto__` would mutate the record's prototype instead of creating an
-    // own property, silently losing the parameter
+    // defined rather than assigned: a key like `__proto__` hits the
+    // Object.prototype accessor on bracket assignment, so no own property is
+    // ever created and the parameter is silently lost — and an object value
+    // additionally rewrites the record's prototype
     Object.defineProperty(this.#values, key, {
       value,
       enumerable: true,

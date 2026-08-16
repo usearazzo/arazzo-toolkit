@@ -121,9 +121,9 @@ describe('WorkflowParameterResolver', function () {
     });
 
     specify('should store an input named __proto__ as an own property', function () {
-      // bracket assignment would mutate the record's prototype instead of
-      // creating an own property, silently losing the input (and, for an
-      // object value, polluting the prototype).
+      // bracket assignment would hit the __proto__ accessor and never create
+      // an own property — silently losing the input, and, for an object value
+      // like this one, additionally polluting the prototype.
       const result = resolver.resolve(
         parameters({ name: '__proto__', value: { polluted: true } }),
         resolve,

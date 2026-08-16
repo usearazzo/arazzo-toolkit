@@ -43,8 +43,8 @@ describe('OutputResolver', function () {
     });
 
     specify('should store an output named __proto__ as an own property', function () {
-      // bracket assignment would mutate the record's prototype instead of
-      // creating an own property, silently losing the output.
+      // bracket assignment would hit the __proto__ accessor and never create
+      // an own property — silently losing the output, whatever its value.
       // computed key: a literal `__proto__:` would set the object's prototype
       // instead of authoring a member named __proto__
       const outputs = new StepOutputsElement({ ['__proto__']: '$response.body#/token' });

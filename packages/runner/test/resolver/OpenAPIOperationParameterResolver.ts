@@ -158,8 +158,8 @@ describe('OpenAPIOperationParameterResolver', function () {
     });
 
     specify('should store a bare parameter named __proto__ as an own property', function () {
-      // bracket assignment would mutate the record's prototype instead of
-      // creating an own property, silently losing the parameter.
+      // bracket assignment would hit the __proto__ accessor and never create
+      // an own property — silently losing the parameter, whatever its value.
       const result = resolver.resolve(
         parameters({ name: '__proto__', in: 'querystring', value: 'x' }),
         resolve,

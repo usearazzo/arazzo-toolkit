@@ -44,9 +44,10 @@ class WorkflowParameterResolver extends StepParameterResolver {
       // for one already resolved.
       if (Object.hasOwn(result, name)) continue;
 
-      // defined rather than assigned: bracket assignment under a name like
-      // `__proto__` would mutate the record's prototype instead of creating an
-      // own property, silently losing the input
+      // defined rather than assigned: a name like `__proto__` hits the
+      // Object.prototype accessor on bracket assignment, so no own property is
+      // ever created and the input is silently lost — and an object value
+      // additionally rewrites the record's prototype
       Object.defineProperty(result, name, {
         value: this.resolveValue(parameter.value, resolve),
         enumerable: true,
