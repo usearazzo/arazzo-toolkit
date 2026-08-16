@@ -29,11 +29,14 @@ import StepParameterResolver, { type ParameterValueResolver } from './StepParame
  * instead would let it capture *every* declared location of that name — see
  * {@link ParameterDelivery} for the lookup order that makes it so. A
  * non-string location throws for the same reason it deduplicates with nothing
- * in the normalizer: it names no location. And two *different* parameters
- * colliding on one key (the scheme is not injective — a `querystring`
- * parameter named `header.token` and a header parameter named `token` both
- * produce `header.token`) cannot both be delivered, so a collision throws
- * rather than silently dropping one.
+ * in the normalizer: it names no location. And two *different* parameters the
+ * map reports as colliding cannot both be delivered, so a collision throws
+ * rather than silently dropping one — whether they collide on one key (the
+ * scheme is not injective: a `querystring` parameter named `header.token` and
+ * a header parameter named `token` both produce `header.token`) or across a
+ * bare/qualified pair sharing a name (a `querystring` `token` next to a
+ * header `token`), where the client would consult the bare name first and
+ * silently capture the qualified value.
  * @public
  */
 class OpenAPIOperationParameterResolver extends StepParameterResolver {
