@@ -1,14 +1,14 @@
 import { toValue } from '@speclynx/apidom-core';
 import { isParameterElement, type StepParametersElement } from '@speclynx/apidom-ns-arazzo-1';
 
-import { resolveParameterValue, type ParameterValueResolver } from './parameter-value.ts';
+import StepParameterResolver, { type ParameterValueResolver } from './StepParameterResolver.ts';
 
 /**
  * Resolves the `parameters` of a step targeting a `workflowId` into the
  * sub-workflow's inputs.
  *
- * Values follow the shared literal-vs-expression semantics of
- * {@link resolveParameterValue}. Keys are bare parameter names: per the
+ * Values follow the literal-vs-expression semantics shared through
+ * {@link StepParameterResolver}. Keys are bare parameter names: per the
  * specification, "when the step in context specifies a `workflowId`, then all
  * parameters map to workflow inputs" — which are keyed by name alone, even
  * for an inherited parameter that carries an `in`. Locations are not
@@ -21,7 +21,7 @@ import { resolveParameterValue, type ParameterValueResolver } from './parameter-
  * the override order the specification requires.
  * @public
  */
-class WorkflowParameterResolver {
+class WorkflowParameterResolver extends StepParameterResolver {
   /**
    * Resolves each parameter's `value`, returning a `name` → value map.
    * Returns an empty object when there are no parameters.
@@ -43,7 +43,7 @@ class WorkflowParameterResolver {
       // for one already resolved.
       if (Object.hasOwn(result, name)) continue;
 
-      result[name] = resolveParameterValue(parameter, resolve);
+      result[name] = this.resolveValue(parameter, resolve);
     }
 
     return result;

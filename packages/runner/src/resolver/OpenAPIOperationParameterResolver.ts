@@ -4,14 +4,14 @@ import { isParameterElement, type StepParametersElement } from '@speclynx/apidom
 import { deliveryKey } from '../client/delivery-key.ts';
 import { parameterLocation } from '../document/parameter-location.ts';
 import ResolverError from '../errors/ResolverError.ts';
-import { resolveParameterValue, type ParameterValueResolver } from './parameter-value.ts';
+import StepParameterResolver, { type ParameterValueResolver } from './StepParameterResolver.ts';
 
 /**
  * Resolves the `parameters` of a step targeting an OpenAPI operation into the
  * map the operation is executed with.
  *
- * Values follow the shared literal-vs-expression semantics of
- * {@link resolveParameterValue}. Keys follow {@link deliveryKey}:
+ * Values follow the literal-vs-expression semantics shared through
+ * {@link StepParameterResolver}. Keys follow {@link deliveryKey}:
  * `'{in}.{name}'` for a location the client can address — a parameter is
  * unique by `(name, in)`, so keying by name alone would collapse two
  * parameters that differ only in their location into one entry and silently
@@ -42,7 +42,7 @@ import { resolveParameterValue, type ParameterValueResolver } from './parameter-
  * its first, most specific declaration as everywhere else.
  * @public
  */
-class OpenAPIOperationParameterResolver {
+class OpenAPIOperationParameterResolver extends StepParameterResolver {
   /**
    * Resolves each parameter's `value`, returning a {@link deliveryKey}-keyed
    * map. Returns an empty object when there are no parameters.
@@ -91,7 +91,7 @@ class OpenAPIOperationParameterResolver {
       }
       claimedBy.set(key, location);
 
-      result[key] = resolveParameterValue(parameter, resolve);
+      result[key] = this.resolveValue(parameter, resolve);
     }
 
     return result;
