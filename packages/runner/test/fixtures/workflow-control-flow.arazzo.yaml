@@ -452,6 +452,35 @@ workflows:
       second: $steps.second.outputs.secondStatus
       third: $steps.third.outputs.thirdStatus
 
+  # both steps inherit the *same* workflow-level retry action element, having
+  # declared no onFailure of their own. Retry budgets are keyed by action
+  # element, so sharing one instance must not mean sharing one budget.
+  - workflowId: inheritedRetryPerStepBudget
+    failureActions:
+      - name: retryOnce
+        type: retry
+        retryLimit: 1
+    steps:
+      - stepId: first
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          firstStatus: $statusCode
+      - stepId: second
+        operationId: findPetsByStatus
+        parameters:
+          - name: status
+            in: query
+            value: available
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          secondStatus: $statusCode
+    outputs:
+      first: $steps.first.outputs.firstStatus
+      second: $steps.second.outputs.secondStatus
+
   # the workflow's parameters are applicable to every step: the first inherits
   # `status` having declared none of its own, the second overrides it with its
   # own value.

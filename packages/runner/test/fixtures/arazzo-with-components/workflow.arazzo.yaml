@@ -9,6 +9,8 @@ sourceDescriptions:
 workflows:
   - workflowId: testWorkflow
     summary: Test workflow using component references
+    successActions:
+      - reference: $components.successActions.finish
     steps:
       - stepId: getPet
         operationId: getPetById
@@ -20,3 +22,7 @@ components:
       name: petId
       in: path
       value: "123"
+  successActions:
+    finish:
+      name: finish
+      type: end

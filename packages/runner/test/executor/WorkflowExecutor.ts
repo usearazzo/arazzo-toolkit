@@ -421,6 +421,29 @@ describe('WorkflowExecutor', function () {
       assert.isUndefined(result.outputs.second);
       assert.strictEqual(result.outputs.third, 200);
     });
+
+    specify('should give each step inheriting one retry action its own budget', async function () {
+      // 500, 200, 500, 200 — each step fails once and recovers within its own
+      // retryLimit of 1. Both steps inherit the same retry action *instance*,
+      // and a retry budget is keyed by that instance, so a shared budget would
+      // leave the second step's retry already exhausted and break the run.
+      const { executor, calls } = makeExecutor([
+        serverErrorResponse,
+        okResponse,
+        serverErrorResponse,
+        okResponse,
+      ]);
+
+      const result = await executor.execute('inheritedRetryPerStepBudget');
+
+      assert.strictEqual(result.status, 'completed');
+      assert.deepEqual(
+        result.steps.map((step) => step.attempts),
+        [2, 2],
+      );
+      assert.strictEqual(calls.length, 4);
+      assert.strictEqual(result.outputs.second, 200);
+    });
   });
 
   context('malformed control flow', function () {
