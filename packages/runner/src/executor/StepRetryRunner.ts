@@ -271,7 +271,7 @@ class StepRetryRunner {
    */
   #rejectReference(context: StepRetryRunContext): void {
     throw new ExecutionError(
-      `retry action on step "${context.stepId}" in workflow "${context.workflowId}" carries a stepId/workflowId reference; not supported yet`,
+      `retry action on step "${context.stepId}" in workflow "${context.workflowId}" carries a stepId/workflowId reference, but no runReference was given to run it`,
       {
         stepId: context.stepId,
         workflowId: context.workflowId,
