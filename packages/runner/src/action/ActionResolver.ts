@@ -11,6 +11,7 @@ import {
 } from '@speclynx/apidom-ns-arazzo-1';
 
 import ResolverError from '../errors/ResolverError.ts';
+import type { StepScope } from '../resolver/ResolverScope.ts';
 
 /**
  * Determines whether a single criterion is met.
@@ -72,18 +73,21 @@ class ActionResolver {
    * `field` names which of the step's two lists this is. The resolver is handed
    * the list, not the step, and the one case that needs the name — a list that
    * is present but not a list — is exactly the case where the element's own type
-   * no longer distinguishes them.
+   * no longer distinguishes them. `scope` names the step itself, for the same
+   * reason, in a thrown {@link ResolverError}.
    */
   resolveAll(
     actions: StepOnSuccessElement | StepOnFailureElement | undefined,
     isCriterionMet: CriterionPredicate,
     field: StepActionsField,
+    scope: StepScope,
   ): SelectedAction[] {
     if (actions === undefined) return [];
     // present but scalar: walking it would fail as a bare
     // `TypeError: actions is not iterable`.
     if (!isArrayElement(actions)) {
       throw new ResolverError(`\`${field}\` is present but is not a list`, {
+        ...scope,
         target: field,
         reason: 'malformed-actions',
       });
@@ -92,7 +96,7 @@ class ActionResolver {
     const matched: SelectedAction[] = [];
     for (const action of actions) {
       if (!isSuccessActionElement(action) && !isFailureActionElement(action)) continue;
-      if (this.#criteriaMet(action, isCriterionMet)) {
+      if (this.#criteriaMet(action, isCriterionMet, scope)) {
         matched.push(action);
       }
     }
@@ -110,11 +114,16 @@ class ActionResolver {
    * whereas a container it cannot read is a document that does not say what its
    * author meant — the same distinction the list-shaped fields draw elsewhere.
    */
-  #criteriaMet(action: SelectedAction, isCriterionMet: CriterionPredicate): boolean {
+  #criteriaMet(
+    action: SelectedAction,
+    isCriterionMet: CriterionPredicate,
+    scope: StepScope,
+  ): boolean {
     const criteria = action.criteria;
     if (criteria === undefined) return true;
     if (!isArrayElement(criteria)) {
       throw new ResolverError("An action's `criteria` is present but is not a list", {
+        ...scope,
         target: 'criteria',
         reason: 'malformed-criteria',
       });

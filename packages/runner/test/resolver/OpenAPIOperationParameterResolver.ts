@@ -14,6 +14,7 @@ describe('OpenAPIOperationParameterResolver', function () {
     { strict: false },
   );
   const resolve: RuntimeExpressionResolver = (expression) => runtime.evaluate(expression);
+  const scope = { stepId: 'step1' };
   let resolver: OpenAPIOperationParameterResolver;
 
   beforeEach(function () {
@@ -36,13 +37,14 @@ describe('OpenAPIOperationParameterResolver', function () {
           { name: 'token', in: 'query', value: 'legacy' },
         ),
         resolve,
+        scope,
       );
 
       assert.deepEqual(result, { 'header.token': 'abc', 'query.token': 'legacy' });
     });
 
     specify('should return an empty object when parameters are absent', function () {
-      assert.deepEqual(resolver.resolve(undefined, resolve), {});
+      assert.deepEqual(resolver.resolve(undefined, resolve, scope), {});
     });
 
     specify('should let the earlier of two same-(name, in) parameters win', function () {
@@ -55,6 +57,7 @@ describe('OpenAPIOperationParameterResolver', function () {
           { name: 'trace', in: 'query', value: 'from-workflow' },
         ),
         resolve,
+        scope,
       );
 
       assert.deepEqual(result, { 'query.trace': 'from-step' });
@@ -68,6 +71,7 @@ describe('OpenAPIOperationParameterResolver', function () {
       const result = resolver.resolve(
         parameters({ name: 'filter.name', in: 'query', value: 'rex' }),
         resolve,
+        scope,
       );
 
       assert.deepEqual(result, { 'query.filter.name': 'rex' });
@@ -80,6 +84,7 @@ describe('OpenAPIOperationParameterResolver', function () {
       const result = resolver.resolve(
         parameters({ name: 'filter', in: 'querystring', value: 'x' }),
         resolve,
+        scope,
       );
 
       assert.deepEqual(result, { filter: 'x' });
@@ -90,7 +95,7 @@ describe('OpenAPIOperationParameterResolver', function () {
       // instead would let it capture every declared location of that name,
       // since the client consults bare names before qualified ones.
       assert.throws(
-        () => resolver.resolve(parameters({ name: 'token', value: 'wf' }), resolve),
+        () => resolver.resolve(parameters({ name: 'token', value: 'wf' }), resolve, scope),
         ResolverError,
         /declares no location/,
       );
@@ -102,6 +107,7 @@ describe('OpenAPIOperationParameterResolver', function () {
           resolver.resolve(
             parameters({ name: 'x', in: 1 as unknown as string, value: 'v' }),
             resolve,
+            scope,
           ),
         ResolverError,
         /non-string location/,
@@ -121,6 +127,7 @@ describe('OpenAPIOperationParameterResolver', function () {
               { name: 'token', in: 'header', value: 'secret' },
             ),
             resolve,
+            scope,
           ),
         ResolverError,
         /cannot be delivered unambiguously/,
@@ -136,6 +143,7 @@ describe('OpenAPIOperationParameterResolver', function () {
               { name: 'token', in: 'querystring', value: 'qs' },
             ),
             resolve,
+            scope,
           ),
         ResolverError,
         /cannot be delivered unambiguously/,
@@ -151,6 +159,7 @@ describe('OpenAPIOperationParameterResolver', function () {
           resolver.resolve(
             parameters({ name: 1 as unknown as string, in: 'query', value: 'v' }),
             resolve,
+            scope,
           ),
         ResolverError,
         /missing or non-string name/,
@@ -163,6 +172,7 @@ describe('OpenAPIOperationParameterResolver', function () {
       const result = resolver.resolve(
         parameters({ name: '__proto__', in: 'querystring', value: 'x' }),
         resolve,
+        scope,
       );
 
       assert.isTrue(Object.hasOwn(result, '__proto__'));
@@ -182,6 +192,7 @@ describe('OpenAPIOperationParameterResolver', function () {
               { name: 'id', in: 'query', value: 'b' },
             ),
             resolve,
+            scope,
           ),
         ResolverError,
         /cannot be delivered unambiguously/,
@@ -193,13 +204,14 @@ describe('OpenAPIOperationParameterResolver', function () {
       // — raised by the language, naming an internal variable, and carrying
       // nothing a caller can branch on.
       const error = assert.throws(
-        () => resolver.resolve('not-a-list' as never, resolve),
+        () => resolver.resolve('not-a-list' as never, resolve, scope),
         ResolverError,
         /is present but is not a list/,
       ) as unknown as ResolverError;
 
       assert.strictEqual(error.reason, 'malformed-parameters');
       assert.strictEqual(error.target, 'parameters');
+      assert.strictEqual(error.stepId, scope.stepId);
     });
   });
 });

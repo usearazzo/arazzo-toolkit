@@ -14,6 +14,7 @@ describe('WorkflowParameterResolver', function () {
     { strict: false },
   );
   const resolve: RuntimeExpressionResolver = (expression) => runtime.evaluate(expression);
+  const scope = { stepId: 'step1' };
   let resolver: WorkflowParameterResolver;
 
   beforeEach(function () {
@@ -30,6 +31,7 @@ describe('WorkflowParameterResolver', function () {
       const result = resolver.resolve(
         parameters({ name: 'status', value: '$inputs.status' }),
         resolve,
+        scope,
       );
 
       assert.deepEqual(result, { status: 'available' });
@@ -39,6 +41,7 @@ describe('WorkflowParameterResolver', function () {
       const result = resolver.resolve(
         parameters({ name: 'limit', value: '$inputs.limit' }),
         resolve,
+        scope,
       );
 
       assert.strictEqual(result.limit, 10);
@@ -48,13 +51,18 @@ describe('WorkflowParameterResolver', function () {
       const result = resolver.resolve(
         parameters({ name: 'token', value: '$steps.login.outputs.token' }),
         resolve,
+        scope,
       );
 
       assert.deepEqual(result, { token: 'abc' });
     });
 
     specify('should use a literal string as-is', function () {
-      const result = resolver.resolve(parameters({ name: 'q', value: 'available' }), resolve);
+      const result = resolver.resolve(
+        parameters({ name: 'q', value: 'available' }),
+        resolve,
+        scope,
+      );
 
       assert.deepEqual(result, { q: 'available' });
     });
@@ -63,6 +71,7 @@ describe('WorkflowParameterResolver', function () {
       const result = resolver.resolve(
         parameters({ name: 'n', value: 42 }, { name: 'b', value: true }),
         resolve,
+        scope,
       );
 
       assert.deepEqual(result, { n: 42, b: true });
@@ -72,7 +81,11 @@ describe('WorkflowParameterResolver', function () {
       'should not interpolate a non-expression string (no embedded expressions in 1.0.1)',
       function () {
         // `{$inputs.x}` is a literal string in 1.0.1, not an embedded expression.
-        const result = resolver.resolve(parameters({ name: 'raw', value: '{$inputs.x}' }), resolve);
+        const result = resolver.resolve(
+          parameters({ name: 'raw', value: '{$inputs.x}' }),
+          resolve,
+          scope,
+        );
 
         assert.deepEqual(result, { raw: '{$inputs.x}' });
       },
@@ -82,6 +95,7 @@ describe('WorkflowParameterResolver', function () {
       const result = resolver.resolve(
         parameters({ name: 'obj', value: { a: 1, b: '$inputs.status' } }),
         resolve,
+        scope,
       );
 
       // the object is a literal; its string members are not resolved in 1.0.1.
@@ -96,13 +110,14 @@ describe('WorkflowParameterResolver', function () {
           { name: 'page', value: 1 },
         ),
         resolve,
+        scope,
       );
 
       assert.deepEqual(result, { status: 'available', limit: 10, page: 1 });
     });
 
     specify('should return an empty object when parameters are absent', function () {
-      assert.deepEqual(resolver.resolve(undefined, resolve), {});
+      assert.deepEqual(resolver.resolve(undefined, resolve, scope), {});
     });
 
     specify('should let the earlier of two same-named parameters win', function () {
@@ -116,6 +131,7 @@ describe('WorkflowParameterResolver', function () {
           { name: 'trace', in: 'header', value: 'from-workflow' },
         ),
         resolve,
+        scope,
       );
 
       assert.deepEqual(result, { trace: 'from-step' });
@@ -128,6 +144,7 @@ describe('WorkflowParameterResolver', function () {
       const result = resolver.resolve(
         parameters({ name: '__proto__', value: { polluted: true } }),
         resolve,
+        scope,
       );
 
       assert.isTrue(Object.hasOwn(result, '__proto__'));
@@ -139,6 +156,7 @@ describe('WorkflowParameterResolver', function () {
       const result = resolver.resolve(
         parameters({ name: 'toString', value: 'first' }, { name: 'toString', value: 'second' }),
         resolve,
+        scope,
       );
 
       // `'toString' in {}` is true, so a naive presence check would drop the
@@ -152,6 +170,7 @@ describe('WorkflowParameterResolver', function () {
         const result = resolver.resolve(
           parameters({ name: 'x', value: '$inputs.missing' }),
           resolve,
+          scope,
         );
 
         assert.deepEqual(result, { x: undefined });
@@ -160,12 +179,13 @@ describe('WorkflowParameterResolver', function () {
 
     specify('should throw ResolverError for a present but non-list parameters', function () {
       const error = assert.throws(
-        () => resolver.resolve('not-a-list' as never, resolve),
+        () => resolver.resolve('not-a-list' as never, resolve, scope),
         ResolverError,
         /is present but is not a list/,
       ) as unknown as ResolverError;
 
       assert.strictEqual(error.reason, 'malformed-parameters');
+      assert.strictEqual(error.stepId, scope.stepId);
     });
   });
 });

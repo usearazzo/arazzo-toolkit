@@ -708,9 +708,12 @@ class WorkflowExecutor {
     // drift from one attempt to the next. An operation step's parameters are
     // likewise identical across attempts — there, because nothing mutates the
     // state mid-retry.
+    const stepScope = { stepId };
     const preContext = state.toContext();
-    const inputs = this.#parameterResolver.resolve(step.parameters, (expression) =>
-      this.#evaluate(preContext, expression),
+    const inputs = this.#parameterResolver.resolve(
+      step.parameters,
+      (expression) => this.#evaluate(preContext, expression),
+      stepScope,
     );
 
     return async () => {
@@ -722,8 +725,10 @@ class WorkflowExecutor {
       // out of `$workflows.{subWorkflowId}.outputs`. There is no `$response` for
       // such a step — the context is purely the accumulated run state.
       const context = state.toContext();
-      const outputs = this.#outputResolver.resolve(step.outputs, (expression) =>
-        this.#evaluate(context, expression),
+      const outputs = this.#outputResolver.resolve(
+        step.outputs,
+        (expression) => this.#evaluate(context, expression),
+        stepScope,
       );
       // an `end`ed sub-workflow returned to its caller with outputs, so it took
       // the success path like a completed one; only `failed` is a failure. The
@@ -842,8 +847,10 @@ class WorkflowExecutor {
     state: WorkflowExecutionState,
   ): Record<string, unknown> {
     const context = state.toContext();
-    return this.#outputResolver.resolve(workflow.outputs, (expression) =>
-      this.#evaluate(context, expression),
+    return this.#outputResolver.resolve(
+      workflow.outputs,
+      (expression) => this.#evaluate(context, expression),
+      { workflowId: toValue(workflow.workflowId) as string },
     );
   }
 

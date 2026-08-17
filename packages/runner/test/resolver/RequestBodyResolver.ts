@@ -14,6 +14,7 @@ describe('RequestBodyResolver', function () {
     { strict: false },
   );
   const resolve: RuntimeExpressionResolver = (expression) => runtime.evaluate(expression);
+  const scope = { stepId: 'step1' };
   let resolver: RequestBodyResolver;
 
   beforeEach(function () {
@@ -22,13 +23,13 @@ describe('RequestBodyResolver', function () {
 
   context('resolve', function () {
     specify('should return undefined when there is no request body', function () {
-      assert.isUndefined(resolver.resolve(undefined, resolve));
+      assert.isUndefined(resolver.resolve(undefined, resolve, scope));
     });
 
     specify('should resolve a whole-expression payload to its typed value', function () {
       const requestBody = refractRequestBody({ payload: '$inputs.order' });
 
-      assert.deepEqual(resolver.resolve(requestBody, resolve), {
+      assert.deepEqual(resolver.resolve(requestBody, resolve, scope), {
         payload: { item: 'x', qty: 1 },
       });
     });
@@ -36,7 +37,9 @@ describe('RequestBodyResolver', function () {
     specify('should use a literal object payload as-is', function () {
       const requestBody = refractRequestBody({ payload: { a: 1, b: 'two' } });
 
-      assert.deepEqual(resolver.resolve(requestBody, resolve), { payload: { a: 1, b: 'two' } });
+      assert.deepEqual(resolver.resolve(requestBody, resolve, scope), {
+        payload: { a: 1, b: 'two' },
+      });
     });
 
     specify('should include the declared content type', function () {
@@ -45,7 +48,7 @@ describe('RequestBodyResolver', function () {
         payload: { a: 1 },
       });
 
-      assert.deepEqual(resolver.resolve(requestBody, resolve), {
+      assert.deepEqual(resolver.resolve(requestBody, resolve, scope), {
         payload: { a: 1 },
         contentType: 'application/json',
       });
@@ -60,7 +63,7 @@ describe('RequestBodyResolver', function () {
         ],
       });
 
-      assert.deepEqual(resolver.resolve(requestBody, resolve), {
+      assert.deepEqual(resolver.resolve(requestBody, resolve, scope), {
         payload: { petId: 7, qty: 10 },
       });
     });
@@ -71,7 +74,7 @@ describe('RequestBodyResolver', function () {
         replacements: [{ target: '/order/item', value: '$inputs.order' }],
       });
 
-      const result = resolver.resolve(requestBody, resolve) as {
+      const result = resolver.resolve(requestBody, resolve, scope) as {
         payload: { order: { item: unknown } };
       };
       assert.deepEqual(result.payload.order.item, { item: 'x', qty: 1 });
@@ -83,7 +86,7 @@ describe('RequestBodyResolver', function () {
         replacements: [{ target: '', value: '$inputs.order' }],
       });
 
-      assert.deepEqual(resolver.resolve(requestBody, resolve), {
+      assert.deepEqual(resolver.resolve(requestBody, resolve, scope), {
         payload: { item: 'x', qty: 1 },
       });
     });
@@ -96,7 +99,11 @@ describe('RequestBodyResolver', function () {
         replacements: [{ target: 'a/b', value: 1 }],
       });
 
-      assert.throws(() => resolver.resolve(requestBody, resolve), ResolverError, /JSON Pointer/);
+      assert.throws(
+        () => resolver.resolve(requestBody, resolve, scope),
+        ResolverError,
+        /JSON Pointer/,
+      );
     });
 
     specify(
@@ -108,7 +115,7 @@ describe('RequestBodyResolver', function () {
         });
 
         assert.throws(
-          () => resolver.resolve(requestBody, resolve),
+          () => resolver.resolve(requestBody, resolve, scope),
           ResolverError,
           /does not resolve/,
         );
@@ -127,7 +134,9 @@ describe('RequestBodyResolver', function () {
         replacements: [{ target: '/qty', value: 999 }],
       });
 
-      const result = resolver.resolve(requestBody, isolatedResolve) as { payload: { qty: number } };
+      const result = resolver.resolve(requestBody, isolatedResolve, scope) as {
+        payload: { qty: number };
+      };
 
       assert.strictEqual(result.payload.qty, 999);
       assert.strictEqual(inputs.order.qty, 1, 'the source $inputs.order must be untouched');
@@ -140,7 +149,7 @@ describe('RequestBodyResolver', function () {
       });
 
       assert.throws(
-        () => resolver.resolve(requestBody, resolve),
+        () => resolver.resolve(requestBody, resolve, scope),
         ResolverError,
         /does not resolve/,
       );
@@ -155,13 +164,14 @@ describe('RequestBodyResolver', function () {
       });
 
       const error = assert.throws(
-        () => resolver.resolve(requestBody as never, resolve),
+        () => resolver.resolve(requestBody as never, resolve, scope),
         ResolverError,
         /is present but is not a list/,
       ) as unknown as ResolverError;
 
       assert.strictEqual(error.reason, 'malformed-replacements');
       assert.strictEqual(error.target, 'requestBody.replacements');
+      assert.strictEqual(error.stepId, scope.stepId);
     });
 
     specify('should throw ResolverError for a present but non-map requestBody', function () {
@@ -169,13 +179,14 @@ describe('RequestBodyResolver', function () {
       // `.replacements` and `.contentType` are all plain `undefined` — without
       // this guard the step would silently send no body and report success.
       const error = assert.throws(
-        () => resolver.resolve('not-an-object' as never, resolve),
+        () => resolver.resolve('not-an-object' as never, resolve, scope),
         ResolverError,
         /is present but is not a map/,
       ) as unknown as ResolverError;
 
       assert.strictEqual(error.reason, 'malformed-request-body');
       assert.strictEqual(error.target, 'requestBody');
+      assert.strictEqual(error.stepId, scope.stepId);
     });
   });
 });

@@ -17,6 +17,7 @@ describe('OutputResolver', function () {
     { strict: false },
   );
   const resolve: RuntimeExpressionResolver = (expression) => runtime.evaluate(expression);
+  const stepScope = { stepId: 'step1' };
   let resolver: OutputResolver;
 
   beforeEach(function () {
@@ -30,17 +31,20 @@ describe('OutputResolver', function () {
         userId: '$response.body#/user/id',
       });
 
-      assert.deepEqual(resolver.resolve(outputs, resolve), { token: 'abc', userId: 42 });
+      assert.deepEqual(resolver.resolve(outputs, resolve, stepScope), {
+        token: 'abc',
+        userId: 42,
+      });
     });
 
     specify('should resolve an output referencing a prior step', function () {
       const outputs = new StepOutputsElement({ session: '$steps.login.outputs.session' });
 
-      assert.deepEqual(resolver.resolve(outputs, resolve), { session: 's-1' });
+      assert.deepEqual(resolver.resolve(outputs, resolve, stepScope), { session: 's-1' });
     });
 
     specify('should return an empty object when outputs are absent', function () {
-      assert.deepEqual(resolver.resolve(undefined, resolve), {});
+      assert.deepEqual(resolver.resolve(undefined, resolve, stepScope), {});
     });
 
     specify('should store an output named __proto__ as an own property', function () {
@@ -50,7 +54,7 @@ describe('OutputResolver', function () {
       // instead of authoring a member named __proto__
       const outputs = new StepOutputsElement({ ['__proto__']: '$response.body#/token' });
 
-      const result = resolver.resolve(outputs, resolve);
+      const result = resolver.resolve(outputs, resolve, stepScope);
 
       assert.isTrue(Object.hasOwn(result, '__proto__'));
       assert.strictEqual(Object.getPrototypeOf(result), Object.prototype);
@@ -59,7 +63,7 @@ describe('OutputResolver', function () {
     specify('should resolve an unresolvable output to undefined (lenient)', function () {
       const outputs = new StepOutputsElement({ missing: '$response.body#/nope' });
 
-      assert.deepEqual(resolver.resolve(outputs, resolve), { missing: undefined });
+      assert.deepEqual(resolver.resolve(outputs, resolve, stepScope), { missing: undefined });
     });
 
     specify(
@@ -67,7 +71,9 @@ describe('OutputResolver', function () {
       function () {
         const outputs = new StepOutputsElement({ raw: '{$response.body#/token}' });
 
-        assert.deepEqual(resolver.resolve(outputs, resolve), { raw: '{$response.body#/token}' });
+        assert.deepEqual(resolver.resolve(outputs, resolve, stepScope), {
+          raw: '{$response.body#/token}',
+        });
       },
     );
 
@@ -75,13 +81,30 @@ describe('OutputResolver', function () {
       // the map-shaped counterpart: the walk is a `forEach`, so this would
       // otherwise fail as `outputs.forEach is not a function`.
       const error = assert.throws(
-        () => resolver.resolve('not-a-map' as never, resolve),
+        () => resolver.resolve('not-a-map' as never, resolve, stepScope),
         ResolverError,
         /is present but is not a map/,
       ) as unknown as ResolverError;
 
       assert.strictEqual(error.reason, 'malformed-outputs');
       assert.strictEqual(error.target, 'outputs');
+      assert.strictEqual(error.stepId, stepScope.stepId);
     });
+
+    specify(
+      'should attribute a thrown ResolverError to the workflow when resolving workflow outputs',
+      function () {
+        const workflowScope = { workflowId: 'wf1' };
+
+        const error = assert.throws(
+          () => resolver.resolve('not-a-map' as never, resolve, workflowScope),
+          ResolverError,
+          /is present but is not a map/,
+        ) as unknown as ResolverError;
+
+        assert.strictEqual(error.workflowId, workflowScope.workflowId);
+        assert.isUndefined(error.stepId);
+      },
+    );
   });
 });
