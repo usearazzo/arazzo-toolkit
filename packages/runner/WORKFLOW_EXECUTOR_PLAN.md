@@ -46,7 +46,7 @@ Target spec: 1.0.1, same as StepExecutor.
   retry advances to the _next_ matching failure action — which may be another
   `retry` with its own **independent budget**, or a terminal `end` / `goto`; if
   none remains, the break-default applies. Implemented by having `StepExecutor`
-  return **all** matching actions (`matchedActions`, via `ActionResolver.resolveAll`)
+  return **all** matching actions (`matchedActions`, via `ActionResolver.resolveOnSuccess`/`resolveOnFailure`)
   and `WorkflowExecutor.#runStepWithRetry` walking that list — no re-evaluating
   criteria in the loop. `attempts` is surfaced in the `StepRunRecord` trace.
 - A `retry` carrying a `stepId` / `workflowId` reference throws

@@ -16,7 +16,10 @@ import CriterionEvaluator from '../criterion/CriterionEvaluator.ts';
 import OpenAPIOperationParameterResolver from '../resolver/OpenAPIOperationParameterResolver.ts';
 import RequestBodyResolver, { type ResolvedRequestBody } from '../resolver/RequestBodyResolver.ts';
 import OutputResolver from '../resolver/OutputResolver.ts';
-import ActionResolver, { type SelectedAction } from '../action/ActionResolver.ts';
+import ActionResolver, {
+  type CriterionPredicate,
+  type SelectedAction,
+} from '../action/ActionResolver.ts';
 import OpenAPIOperationExecutor from './OpenAPIOperationExecutor.ts';
 import OpenAPIOperationLocatorNormalizer, {
   type OpenAPIOperationLocator,
@@ -325,19 +328,15 @@ class StepExecutor {
     successful: boolean,
     context: RuntimeExpressionContext,
   ): SelectedAction[] {
-    const [field, actions] = successful
-      ? (['onSuccess', step.onSuccess] as const)
-      : (['onFailure', step.onFailure] as const);
+    const isCriterionMet: CriterionPredicate = (criterion) =>
+      this.#criterionEvaluator.evaluate(criterion, (expression) =>
+        this.#evaluate(context, expression),
+      );
+    const scope = { stepId: toValue(step.stepId) as string };
 
-    return this.#actionResolver.resolveAll(
-      actions,
-      (criterion) =>
-        this.#criterionEvaluator.evaluate(criterion, (expression) =>
-          this.#evaluate(context, expression),
-        ),
-      field,
-      { stepId: toValue(step.stepId) as string },
-    );
+    return successful
+      ? this.#actionResolver.resolveOnSuccess(step.onSuccess, isCriterionMet, scope)
+      : this.#actionResolver.resolveOnFailure(step.onFailure, isCriterionMet, scope);
   }
 
   /**

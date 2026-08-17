@@ -45,7 +45,7 @@ describe('ActionResolver', function () {
         { name: 'c', type: 'goto', stepId: 'third', criteria: [{ condition: 'pass' }] },
       );
 
-      const selected = resolver.resolveAll(actions, byCondition, 'onSuccess', scope)[0];
+      const selected = resolver.resolveOnSuccess(actions, byCondition, scope)[0];
       assert.isTrue(isSuccessActionElement(selected));
       assert.strictEqual(toValue(selected?.stepId), 'second');
     });
@@ -57,14 +57,13 @@ describe('ActionResolver', function () {
         criteria: [{ condition: 'pass' }, { condition: 'fail' }],
       });
 
-      assert.isUndefined(resolver.resolveAll(actions, byCondition, 'onSuccess', scope)[0]);
+      assert.isUndefined(resolver.resolveOnSuccess(actions, byCondition, scope)[0]);
     });
 
     specify('should treat an action with no criteria as always matching', function () {
-      const selected = resolver.resolveAll(
+      const selected = resolver.resolveOnSuccess(
         onSuccess({ name: 'a', type: 'end' }),
         byCondition,
-        'onSuccess',
         scope,
       )[0];
 
@@ -72,10 +71,9 @@ describe('ActionResolver', function () {
     });
 
     specify('should treat an action with an empty criteria list as matching', function () {
-      const selected = resolver.resolveAll(
+      const selected = resolver.resolveOnSuccess(
         onSuccess({ name: 'a', type: 'end', criteria: [] }),
         byCondition,
-        'onSuccess',
         scope,
       )[0];
 
@@ -85,23 +83,22 @@ describe('ActionResolver', function () {
     specify('should return undefined when no action matches', function () {
       const actions = onSuccess({ name: 'a', type: 'end', criteria: [{ condition: 'fail' }] });
 
-      assert.isUndefined(resolver.resolveAll(actions, byCondition, 'onSuccess', scope)[0]);
+      assert.isUndefined(resolver.resolveOnSuccess(actions, byCondition, scope)[0]);
     });
 
     specify('should return undefined when the action list is absent', function () {
-      assert.isUndefined(resolver.resolveAll(undefined, always, 'onSuccess', scope)[0]);
+      assert.isUndefined(resolver.resolveOnSuccess(undefined, always, scope)[0]);
     });
   });
 
   context('selected action element', function () {
     const select = (action: unknown, predicate = always): SelectedAction | undefined =>
-      resolver.resolveAll(onFailure(action), predicate, 'onFailure', scope)[0];
+      resolver.resolveOnFailure(onFailure(action), predicate, scope)[0];
 
     specify('should return the goto action element with its target', function () {
-      const selected = resolver.resolveAll(
+      const selected = resolver.resolveOnSuccess(
         onSuccess({ name: 'a', type: 'goto', stepId: 'next' }),
         always,
-        'onSuccess',
         scope,
       )[0];
 
@@ -127,7 +124,7 @@ describe('ActionResolver', function () {
     specify('should throw ResolverError for a present but non-list action list', function () {
       // walking it would fail as a bare `TypeError: actions is not iterable`.
       const error = assert.throws(
-        () => resolver.resolveAll('not-a-list' as never, byCondition, 'onFailure', scope),
+        () => resolver.resolveOnFailure('not-a-list' as never, byCondition, scope),
         ResolverError,
         /is present but is not a list/,
       ) as unknown as ResolverError;
@@ -144,7 +141,7 @@ describe('ActionResolver', function () {
         ]);
 
         const error = assert.throws(
-          () => resolver.resolveAll(actions, byCondition, 'onSuccess', scope),
+          () => resolver.resolveOnSuccess(actions, byCondition, scope),
           ResolverError,
           /is present but is not a list/,
         ) as unknown as ResolverError;
@@ -161,7 +158,7 @@ describe('ActionResolver', function () {
         const actions = onSuccess({ name: 'a', type: 'end' }, 'not-an-action');
 
         const error = assert.throws(
-          () => resolver.resolveAll(actions, always, 'onSuccess', scope),
+          () => resolver.resolveOnSuccess(actions, always, scope),
           ResolverError,
           /contains an entry that is not a Success\/Failure Action Object/,
         ) as unknown as ResolverError;
@@ -180,7 +177,7 @@ describe('ActionResolver', function () {
         ]);
 
         const error = assert.throws(
-          () => resolver.resolveAll(actions, byCondition, 'onSuccess', scope),
+          () => resolver.resolveOnSuccess(actions, byCondition, scope),
           ResolverError,
           /contains an entry that is not a Criterion Object/,
         ) as unknown as ResolverError;

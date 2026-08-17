@@ -22,7 +22,8 @@ abstract class StepParameterResolver extends ArazzoValueResolver {
    *
    * `scope` names the step these parameters belong to, so a thrown
    * {@link ResolverError} can say which step it came from — the caller always
-   * has it, the same way {@link ActionResolver.resolveAll} is handed `field`.
+   * has it, the same way {@link ActionResolver.resolveOnSuccess} is handed
+   * `scope`.
    */
   abstract resolve(
     parameters: StepParametersElement | undefined,
