@@ -201,13 +201,13 @@ class StepRetryRunner {
         const spent = retriesSpent.get(action) ?? 0;
         if (spent >= this.#retryLimit(action)) continue; // exhausted — try the next action
 
-        const reference = this.#referenced(action);
+        const carriesReference = this.#carriesReference(action);
         // narrowed once here rather than asserted at the call site below: by
         // the time `runReference` is invoked, its absence would already have
         // thrown on the line above, so the type reflects that instead of
         // relying on a non-null assertion to say so.
-        const runReference = reference ? context.runReference : undefined;
-        if (reference && runReference === undefined) this.#rejectReference(context);
+        const runReference = carriesReference ? context.runReference : undefined;
+        if (carriesReference && runReference === undefined) this.#rejectReference(context);
         retriesSpent.set(action, spent + 1);
         // only sleep for a real, positive delay — skip the event-loop yield of
         // sleep(0) for immediate retries, and never hand a custom sleep a
@@ -259,7 +259,7 @@ class StepRetryRunner {
    * execute before retrying ("the reference is executed and the context is
    * returned, after which the current step is retried").
    */
-  #referenced(action: FailureActionElement): boolean {
+  #carriesReference(action: FailureActionElement): boolean {
     return isStringElement(action.stepId) || isStringElement(action.workflowId);
   }
 
