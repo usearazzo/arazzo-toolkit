@@ -32,13 +32,14 @@ export type SelectedAction = SuccessActionElement | FailureActionElement;
 /**
  * Which of a step's two action lists is being resolved.
  *
- * Named by the caller rather than read off the element: a well-formed list
- * carries its own type (`StepOnSuccessElement` / `StepOnFailureElement`), but a
- * malformed one is whatever the author wrote — and that is precisely the case
- * that needs the name.
- * @public
+ * Named by {@link ActionResolver}'s public method rather than read off the
+ * element: a well-formed list carries its own type (`StepOnSuccessElement` /
+ * `StepOnFailureElement`), but a malformed one is whatever the author wrote —
+ * and that is precisely the case that needs the name. Internal: baked into
+ * `resolveOnSuccess` / `resolveOnFailure` rather than taken from the caller,
+ * so it never leaks into the public API.
  */
-export type StepActionsField = 'onSuccess' | 'onFailure';
+type StepActionsField = 'onSuccess' | 'onFailure';
 
 /**
  * Selects the actions to take for a step outcome from its `onSuccess` /
@@ -62,7 +63,7 @@ export type StepActionsField = 'onSuccess' | 'onFailure';
  */
 class ActionResolver {
   /**
-   * Returns every action whose criteria are all met, in list order.
+   * Returns every `onSuccess` action whose criteria are all met, in list order.
    *
    * The whole matching chain rather than only the first, because the caller
    * needs both: it acts on `[0]`, and the one honoring "retryLimit exhausted
@@ -70,11 +71,8 @@ class ActionResolver {
    * exhausted `retry` to the next matching action without re-evaluating
    * criteria. Empty when the list is absent or nothing matches.
    *
-   * `field` names which of the step's two lists this is. The resolver is handed
-   * the list, not the step, and the one case that needs the name — a list that
-   * is present but not a list — is exactly the case where the element's own type
-   * no longer distinguishes them. `scope` names the step itself, for the same
-   * reason, in a thrown {@link ResolverError}.
+   * `scope` names the step this list belongs to, for a thrown
+   * {@link ResolverError}.
    *
    * A well-formed list whose entry is not a Success/Failure Action Object
    * throws rather than being skipped: an unrecognized entry is indistinguishable
@@ -82,7 +80,39 @@ class ActionResolver {
    * `end` its author was reaching for would otherwise never happen without a
    * word said about why.
    */
-  resolveAll(
+  resolveOnSuccess(
+    actions: StepOnSuccessElement | undefined,
+    isCriterionMet: CriterionPredicate,
+    scope: StepScope,
+  ): SuccessActionElement[] {
+    return this.#resolveAll(actions, isCriterionMet, 'onSuccess', scope) as SuccessActionElement[];
+  }
+
+  /**
+   * Returns every `onFailure` action whose criteria are all met, in list order.
+   *
+   * Same matching and error behavior as {@link ActionResolver.resolveOnSuccess} —
+   * see there for the full rationale — mirrored for the step's other list.
+   */
+  resolveOnFailure(
+    actions: StepOnFailureElement | undefined,
+    isCriterionMet: CriterionPredicate,
+    scope: StepScope,
+  ): FailureActionElement[] {
+    return this.#resolveAll(actions, isCriterionMet, 'onFailure', scope) as FailureActionElement[];
+  }
+
+  /**
+   * Shared implementation behind {@link ActionResolver.resolveOnSuccess} and
+   * {@link ActionResolver.resolveOnFailure}.
+   *
+   * `field` names which of the step's two lists this is, for the same
+   * `ResolverError` reason `scope` names the step: the one case that needs it —
+   * a list that is present but not a list — is exactly the case where the
+   * element's own type no longer distinguishes them. Baked in by the public
+   * method rather than taken from the caller.
+   */
+  #resolveAll(
     actions: StepOnSuccessElement | StepOnFailureElement | undefined,
     isCriterionMet: CriterionPredicate,
     field: StepActionsField,

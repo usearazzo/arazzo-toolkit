@@ -99,11 +99,7 @@ export type { ResolvedRequestBody } from './resolver/RequestBodyResolver.ts';
 
 /* Actions */
 export { default as ActionResolver } from './action/ActionResolver.ts';
-export type {
-  CriterionPredicate,
-  SelectedAction,
-  StepActionsField,
-} from './action/ActionResolver.ts';
+export type { CriterionPredicate, SelectedAction } from './action/ActionResolver.ts';
 
 /* Executor */
 export { default as WorkflowExecutor } from './executor/WorkflowExecutor.ts';
