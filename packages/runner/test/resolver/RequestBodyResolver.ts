@@ -163,5 +163,19 @@ describe('RequestBodyResolver', function () {
       assert.strictEqual(error.reason, 'malformed-replacements');
       assert.strictEqual(error.target, 'requestBody.replacements');
     });
+
+    specify('should throw ResolverError for a present but non-map requestBody', function () {
+      // a scalar requestBody refracts to a StringElement, on which `.payload`,
+      // `.replacements` and `.contentType` are all plain `undefined` — without
+      // this guard the step would silently send no body and report success.
+      const error = assert.throws(
+        () => resolver.resolve('not-an-object' as never, resolve),
+        ResolverError,
+        /is present but is not a map/,
+      ) as unknown as ResolverError;
+
+      assert.strictEqual(error.reason, 'malformed-request-body');
+      assert.strictEqual(error.target, 'requestBody');
+    });
   });
 });
