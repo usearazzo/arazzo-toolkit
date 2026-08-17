@@ -98,15 +98,28 @@ class StepTransitionInterpreter {
   }
 
   /**
-   * The index of a `goto` target within the workflow's steps; a target that names
-   * no step in this workflow is an authoring error.
+   * The index of a step within the workflow's steps, by `stepId`; a target that
+   * names no step in this workflow is an authoring error.
+   *
+   * Used for a `goto` target by default. A `retry` action's `stepId` reference
+   * is the same lookup against the same list — reused here, via `descriptor`,
+   * rather than duplicated, so both report a miss the same way except for the
+   * reason and wording that name which one it was.
    */
-  indexOfStep(steps: readonly StepElement[], stepId: string, workflowId: string): number {
+  indexOfStep(
+    steps: readonly StepElement[],
+    stepId: string,
+    workflowId: string,
+    descriptor: { readonly reason: string; readonly label: string } = {
+      reason: 'goto-target-not-found',
+      label: 'goto target',
+    },
+  ): number {
     const index = steps.findIndex((step) => (toValue(step.stepId) as string) === stepId);
     if (index === -1) {
       throw new ExecutionError(
-        `goto target step "${stepId}" not found in workflow "${workflowId}"`,
-        { stepId, workflowId, reason: 'goto-target-not-found' },
+        `${descriptor.label} step "${stepId}" not found in workflow "${workflowId}"`,
+        { stepId, workflowId, reason: descriptor.reason },
       );
     }
     return index;

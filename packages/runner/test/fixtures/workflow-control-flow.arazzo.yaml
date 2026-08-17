@@ -303,8 +303,8 @@ workflows:
             criteria:
               - condition: $statusCode == 503
 
-  # a retry action carrying a stepId reference to run before retrying — not yet
-  # supported.
+  # a retry action carrying a stepId reference to the step's own id — one more
+  # attempt at "doomed" fires before each of its own retries.
   - workflowId: retryWithReference
     steps:
       - stepId: doomed
@@ -315,6 +315,107 @@ workflows:
           - name: tryAgain
             type: retry
             retryLimit: 2
+            stepId: doomed
+
+  # login re-runs (via the retry reference) between the failing call's
+  # attempts, and its outputs — read by the workflow's own outputs — reflect
+  # the reference's run, not the original one: proof "context transfers back".
+  - workflowId: retryWithRepairStep
+    steps:
+      - stepId: login
+        operationId: getInventory
+        outputs:
+          token: $response.body#/token
+      - stepId: call
+        operationId: findPetsByStatus
+        parameters:
+          - name: status
+            in: query
+            value: available
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: reLogin
+            type: retry
+            retryLimit: 2
+            stepId: login
+        outputs:
+          status: $statusCode
+    outputs:
+      token: $steps.login.outputs.token
+      status: $steps.call.outputs.status
+
+  # the retry references a stepId this workflow does not declare.
+  - workflowId: retryReferenceTargetMissing
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: badRef
+            type: retry
+            retryLimit: 2
+            stepId: nonexistent
+
+  # run to completion by a retry's workflowId reference, before the retried
+  # step's own next attempt.
+  - workflowId: repairFlow
+    steps:
+      - stepId: refresh
+        operationId: getInventory
+        outputs:
+          refreshed: $statusCode
+    outputs:
+      refreshed: $steps.refresh.outputs.refreshed
+
+  - workflowId: retryWithWorkflowReference
+    steps:
+      - stepId: call
+        operationId: findPetsByStatus
+        parameters:
+          - name: status
+            in: query
+            value: available
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: repair
+            type: retry
+            retryLimit: 1
+            workflowId: repairFlow
+        outputs:
+          status: $statusCode
+    outputs:
+      status: $steps.call.outputs.status
+      repaired: $workflows.repairFlow.outputs.refreshed
+
+  # a retry's workflowId reference into another document — not yet supported.
+  - workflowId: retryReferenceCrossDocument
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: crossDoc
+            type: retry
+            retryLimit: 1
+            workflowId: $sourceDescriptions.petstoreAPI.someWorkflow
+
+  # a self-reference with a retryAfter delay, so a test can abort during the
+  # wait and assert the reference itself never ran.
+  - workflowId: retryWithReferenceDelay
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: tryAgain
+            type: retry
+            retryLimit: 2
+            retryAfter: 3
             stepId: doomed
 
   # the step declares no onFailure, so it inherits the workflow-level

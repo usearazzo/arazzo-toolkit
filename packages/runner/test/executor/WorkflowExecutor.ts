@@ -858,17 +858,157 @@ describe('WorkflowExecutor', function () {
       );
     });
 
-    specify('should throw for a retry carrying a stepId/workflowId reference', async function () {
-      // the 500 makes the step fail so its onFailure retry (with a stepId
-      // reference) is selected — the reference form is not yet supported.
-      const { executor } = makeExecutor([serverErrorResponse]);
+    specify(
+      'should throw for a retry workflowId reference into another document',
+      async function () {
+        const { executor } = makeExecutor([serverErrorResponse]);
 
-      await rejects(
-        executor.execute('retryWithReference'),
-        ExecutionError,
-        /carries a stepId\/workflowId reference; not supported yet/,
-      );
+        await rejects(
+          executor.execute('retryReferenceCrossDocument'),
+          ExecutionError,
+          /points to another document; not supported yet/,
+        );
+      },
+    );
+  });
+
+  context('retry reference', function () {
+    specify('should run a self-referencing stepId reference before each retry', async function () {
+      // always 500, retryLimit 2: the retry fires twice, so its self-reference
+      // (one more "doomed" attempt) runs twice too — 3 step attempts + 2
+      // reference attempts = 5 calls. A failed reference does not break the
+      // chain: the run still falls to the break-default once retries exhaust.
+      const { executor, calls } = makeExecutor([serverErrorResponse]);
+
+      const result = await executor.execute('retryWithReference');
+
+      assert.strictEqual(result.status, 'failed');
+      assert.strictEqual(calls.length, 5);
+      assert.strictEqual(result.steps[0].attempts, 3);
+      assert.strictEqual(result.steps[0].retryReferences?.length, 2);
+      for (const reference of result.steps[0].retryReferences ?? []) {
+        assert.strictEqual(reference.kind, 'step');
+        assert.strictEqual(reference.id, 'doomed');
+        assert.isFalse(reference.successful);
+      }
     });
+
+    specify(
+      "should run a stepId reference and have the next attempt read the reference's outputs",
+      async function () {
+        // login (initial) → token A; call (attempt 1) → 500, firing the retry
+        // reference, which re-runs login → token B; call (attempt 2) → 200.
+        // The workflow's own outputs must read token B: the reference's run
+        // overwrote login's recorded outputs — "context transfers back".
+        const { executor, calls } = makeExecutor([
+          { status: 200, statusText: 'OK', body: { token: 'A' } },
+          serverErrorResponse,
+          { status: 200, statusText: 'OK', body: { token: 'B' } },
+          okResponse,
+        ]);
+
+        const result = await executor.execute('retryWithRepairStep');
+
+        assert.strictEqual(result.status, 'completed');
+        assert.strictEqual(calls.length, 4);
+        assert.deepEqual(
+          result.steps.map((step) => step.stepId),
+          ['login', 'call'],
+        );
+        assert.strictEqual(result.steps[0].attempts, 1); // login's own run
+        assert.strictEqual(result.steps[1].attempts, 2); // call: initial + 1 retry
+        assert.strictEqual(result.steps[1].retryReferences?.length, 1);
+        assert.deepEqual(result.steps[1].retryReferences?.[0], {
+          kind: 'step',
+          id: 'login',
+          successful: true,
+        });
+        assert.strictEqual(result.outputs.token, 'B');
+        assert.strictEqual(result.outputs.status, 200);
+      },
+    );
+
+    specify(
+      'should throw when a retry references a stepId this workflow does not declare',
+      async function () {
+        // the first attempt fails (500), firing the retry, whose reference names
+        // a step that does not exist — checked lazily, only once the action
+        // actually fires.
+        const { executor } = makeExecutor([serverErrorResponse]);
+
+        const error = await captureError(executor.execute('retryReferenceTargetMissing'));
+
+        assert.strictEqual(error.reason, 'retry-target-not-found');
+        // names the missing target, matching the goto-target-not-found convention
+        // this reuses (`indexOfStep`) — not the step whose retry referenced it.
+        assert.strictEqual(error.stepId, 'nonexistent');
+        assert.strictEqual(error.workflowId, 'retryReferenceTargetMissing');
+        assert.match(error.message, /retry reference step "nonexistent" not found/);
+      },
+    );
+
+    specify(
+      'should run a workflowId reference to completion before the next attempt',
+      async function () {
+        // call fails once (500), firing the retry, whose workflowId reference
+        // (repairFlow) runs to completion; call then succeeds (200).
+        const { executor, calls } = makeExecutor([serverErrorResponse, okResponse]);
+
+        const result = await executor.execute('retryWithWorkflowReference');
+
+        assert.strictEqual(result.status, 'completed');
+        assert.strictEqual(calls.length, 3); // call attempt 1, repairFlow's step, call attempt 2
+        assert.strictEqual(result.steps[0].attempts, 2);
+        assert.strictEqual(result.steps[0].retryReferences?.length, 1);
+        const reference = result.steps[0].retryReferences?.[0];
+        assert.strictEqual(reference?.kind, 'workflow');
+        assert.strictEqual(reference?.id, 'repairFlow');
+        assert.isTrue(reference?.successful);
+        assert.strictEqual(reference?.subWorkflow?.workflowId, 'repairFlow');
+        assert.strictEqual(reference?.subWorkflow?.status, 'completed');
+        // recorded under $workflows too, readable from the parent's own outputs.
+        assert.strictEqual(result.outputs.repaired, 200);
+      },
+    );
+
+    specify(
+      'should charge the step budget for a reference the same as any other attempt',
+      async function () {
+        // maxSteps: 2 covers login's own attempt and call's first attempt; the
+        // reference's attempt at login is the one that trips it — proving the
+        // reference is charged, not free.
+        const { executor, calls } = makeExecutor(
+          [{ status: 200, statusText: 'OK', body: { token: 'A' } }, serverErrorResponse],
+          { maxSteps: 2 },
+        );
+
+        const error = await captureError(executor.execute('retryWithRepairStep'));
+
+        assert.strictEqual(error.reason, 'step-budget');
+        assert.strictEqual(calls.length, 2);
+      },
+    );
+
+    specify(
+      'should not run the reference when aborted during the retryAfter wait',
+      async function () {
+        // the injected sleep ignores the signal, as in the other cancellation
+        // tests, so it is still asked to wait once — but the reference itself,
+        // checked before it runs, never gets to make a request.
+        const controller = new AbortController();
+        const { executor, calls, sleeps } = makeExecutor([serverErrorResponse], {
+          onCall: () => controller.abort(),
+        });
+
+        const error = await captureError(
+          executor.execute('retryWithReferenceDelay', { signal: controller.signal }),
+        );
+
+        assert.strictEqual(error.reason, 'aborted');
+        assert.strictEqual(calls.length, 1);
+        assert.deepEqual(sleeps, [3000]);
+      },
+    );
   });
 
   context('malformed step declarations', function () {

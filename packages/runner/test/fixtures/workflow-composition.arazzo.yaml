@@ -464,6 +464,25 @@ workflows:
       - stepId: backToA
         workflowId: crossA
 
+  # a cycle formed through a retry's workflowId reference: the parent's failing
+  # step retries by running refCycleChild, whose own step calls back into the
+  # parent — a call cycle (via 'retry' then 'step'), not a dependency one.
+  - workflowId: retryRefCycleParent
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: repair
+            type: retry
+            retryLimit: 1
+            workflowId: refCycleChild
+  - workflowId: refCycleChild
+    steps:
+      - stepId: backToParent
+        workflowId: retryRefCycleParent
+
   # a sub-workflow step referencing another document — not yet supported.
   - workflowId: crossDocumentStep
     steps:

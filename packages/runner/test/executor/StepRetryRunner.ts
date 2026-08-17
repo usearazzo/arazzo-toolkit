@@ -286,24 +286,154 @@ describe('StepRetryRunner', function () {
   });
 
   context('not yet supported', function () {
-    specify('should reject a retry carrying a stepId/workflowId reference', async function () {
+    specify(
+      'should reject a retry carrying a stepId/workflowId reference when no runReference is given',
+      async function () {
+        const { runner } = makeRunner();
+        const target = step([
+          {
+            successful: false,
+            matchedActions: matched({ name: 'again', type: 'retry', stepId: 'other' }),
+          },
+        ]);
+
+        let caught: unknown;
+        try {
+          await runner.run(target.attempt, runContext);
+        } catch (error) {
+          caught = error;
+        }
+
+        assert.instanceOf(caught, ExecutionError);
+        assert.strictEqual((caught as ExecutionError).reason, 'retry-reference-unsupported');
+      },
+    );
+  });
+
+  context('retry reference', function () {
+    specify('should call runReference once per firing, not once per chain', async function () {
+      const { runner } = makeRunner();
+      const retry = matched({ name: 'again', type: 'retry', retryLimit: 2, stepId: 'other' });
+      const target = step([
+        { successful: false, matchedActions: retry },
+        { successful: false, matchedActions: retry },
+        { successful: true },
+      ]);
+      const referenced: SelectedAction[] = [];
+
+      const result = await runner.run(target.attempt, {
+        ...runContext,
+        runReference: async (action) => {
+          referenced.push(action);
+        },
+      });
+
+      assert.strictEqual(result.attempts, 3);
+      // the same action element both times — a firing per attempt the action
+      // grants, not one call for the whole chain.
+      assert.strictEqual(referenced.length, 2);
+      assert.strictEqual(referenced[0], retry[0]);
+      assert.strictEqual(referenced[1], retry[0]);
+    });
+
+    specify(
+      'should run the reference after the retryAfter wait, before the next attempt',
+      async function () {
+        const order: string[] = [];
+        const runner = new StepRetryRunner({
+          sleep: async (ms) => {
+            order.push(`sleep:${ms}`);
+          },
+        });
+        const retry = matched({
+          name: 'again',
+          type: 'retry',
+          retryLimit: 1,
+          retryAfter: 2,
+          stepId: 'other',
+        });
+        const target = step([{ successful: false, matchedActions: retry }, { successful: true }]);
+
+        await runner.run(target.attempt, {
+          ...runContext,
+          runReference: async () => {
+            order.push('reference');
+          },
+        });
+
+        assert.deepEqual(order, ['sleep:2000', 'reference']);
+      },
+    );
+
+    specify('should not call runReference for a retry without a reference', async function () {
       const { runner } = makeRunner();
       const target = step([
         {
           successful: false,
-          matchedActions: matched({ name: 'again', type: 'retry', stepId: 'other' }),
+          matchedActions: matched({ name: 'again', type: 'retry', retryLimit: 1 }),
+        },
+        { successful: true },
+      ]);
+      let called = false;
+
+      await runner.run(target.attempt, {
+        ...runContext,
+        runReference: async () => {
+          called = true;
+        },
+      });
+
+      assert.isFalse(called);
+    });
+
+    specify('should not call runReference once the retry is exhausted', async function () {
+      const { runner } = makeRunner();
+      const actions = matched(
+        { name: 'again', type: 'retry', retryLimit: 1, stepId: 'other' },
+        { name: 'stop', type: 'end' },
+      );
+      const target = step([{ successful: false, matchedActions: actions }]);
+      const referenced: SelectedAction[] = [];
+
+      const result = await runner.run(target.attempt, {
+        ...runContext,
+        runReference: async (action) => {
+          referenced.push(action);
+        },
+      });
+
+      // initial + 1 retry (firing the reference once), then exhausted → the
+      // terminal `end` — no further reference call.
+      assert.strictEqual(result.attempts, 2);
+      assert.strictEqual(referenced.length, 1);
+      assert.strictEqual(result.action, actions[1]);
+    });
+
+    specify('should propagate a throw from runReference and stop retrying', async function () {
+      const { runner } = makeRunner();
+      const failure = new Error('reference failed');
+      const target = step([
+        {
+          successful: false,
+          matchedActions: matched({ name: 'again', type: 'retry', retryLimit: 5, stepId: 'other' }),
         },
       ]);
 
-      let caught: unknown;
-      try {
-        await runner.run(target.attempt, runContext);
-      } catch (error) {
-        caught = error;
-      }
-
-      assert.instanceOf(caught, ExecutionError);
-      assert.strictEqual((caught as ExecutionError).reason, 'retry-reference-unsupported');
+      await runner
+        .run(target.attempt, {
+          ...runContext,
+          runReference: async () => {
+            throw failure;
+          },
+        })
+        .then(
+          () => assert.fail('expected the error to propagate'),
+          (error: unknown) => {
+            assert.strictEqual(error, failure);
+            // it stopped after the one attempt whose retry fired the reference.
+            assert.strictEqual(target.calls, 1);
+          },
+        );
     });
   });
 });

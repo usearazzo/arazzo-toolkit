@@ -524,6 +524,25 @@ describe('WorkflowExecutor composition', function () {
       assert.strictEqual(error.reason, 'workflow-cycle');
       assert.deepEqual(error.path, ['crossA', 'crossB', 'crossA']);
     });
+
+    specify(
+      'should classify a cycle formed through a retry workflowId reference as a call cycle',
+      async function () {
+        // the parent's failing step retries by running refCycleChild, whose own
+        // step calls back into the parent — grouped with 'step' for cycle
+        // classification, not 'dependsOn', so this reports workflow-cycle.
+        const { executor } = makeExecutor(serverErrorResponse);
+
+        const error = await captureError(executor.execute('retryRefCycleParent'));
+
+        assert.strictEqual(error.reason, 'workflow-cycle');
+        assert.deepEqual(error.path, [
+          'retryRefCycleParent',
+          'refCycleChild',
+          'retryRefCycleParent',
+        ]);
+      },
+    );
   });
 
   context('cancellation across the call tree', function () {

@@ -4,6 +4,7 @@ import {
   isStepElement,
   type WorkflowElement,
   type StepElement,
+  type FailureActionElement,
 } from '@speclynx/apidom-ns-arazzo-1';
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
@@ -150,6 +151,38 @@ export interface WorkflowExecuteOptions {
 }
 
 /**
+ * One run of a `retry` action's `stepId` / `workflowId` reference — "the
+ * reference is executed and the context is returned, after which the current
+ * step is retried". Fires once per firing of its action (i.e. once before every
+ * attempt the action grants, not once for the whole retry chain).
+ * @public
+ */
+export interface RetryReferenceRecord {
+  /**
+   * Which field the action carried: `stepId` runs one step of the current
+   * workflow; `workflowId` runs another workflow to completion.
+   */
+  readonly kind: 'step' | 'workflow';
+  /**
+   * The referenced `stepId` or `workflowId`.
+   */
+  readonly id: string;
+  /**
+   * Whether the reference completed successfully. For `kind: 'workflow'`, this
+   * is `status !== 'failed'`. Does not gate the retry: the retry proceeds
+   * either way, since the spec speaks of the reference's *completion*, not its
+   * success.
+   */
+  readonly successful: boolean;
+  /**
+   * The nested run, when the reference invoked a workflow — either directly
+   * (`kind: 'workflow'`) or because the referenced step itself targets a
+   * `workflowId` (`kind: 'step'`).
+   */
+  readonly subWorkflow?: WorkflowExecutionResult;
+}
+
+/**
  * The trace of a single step execution within a workflow run.
  * @public
  */
@@ -177,6 +210,14 @@ export interface StepRunRecord {
    * last entry is the run this record's `successful` / `action` describe.
    */
   readonly subWorkflows?: readonly WorkflowExecutionResult[];
+  /**
+   * The `retry` reference runs this step's attempts produced, in firing order —
+   * present only when a `retry` failure action that fired carried a `stepId` /
+   * `workflowId` reference. Kept separate from {@link StepRunRecord.subWorkflows}
+   * because a reference is a repair the *retry* invokes, not the step's own
+   * target.
+   */
+  readonly retryReferences?: readonly RetryReferenceRecord[];
 }
 
 /**
@@ -286,8 +327,8 @@ interface WorkflowInvocation {
  * draws.
  *
  * Not yet supported, throwing rather than behaving incorrectly: a step-level
- * `goto` to a workflow, a `retry` carrying a `stepId` / `workflowId` reference,
- * and cross-document workflow references.
+ * `goto` to a workflow, and cross-document workflow references (including one
+ * named by a `retry` action's reference).
  * @public
  */
 class WorkflowExecutor {
@@ -453,28 +494,16 @@ class WorkflowExecutor {
       // the sub-workflow runs this step produces — one per attempt, so a retried
       // sub-workflow step keeps every attempt's trace rather than only the last.
       const subWorkflows: WorkflowExecutionResult[] = [];
-      const runAttempt = this.#stepAttempt(step, stepId, invocation, scope, subWorkflows);
-      // the budget is charged inside the attempt itself, so the retry runner
-      // needs no notion of one: whatever re-invokes the step pays for it, and a
-      // spent budget throws before the step runs again. Cancellation rides the
-      // same seam — checked here, it covers the boundary between two steps and
-      // the one between two attempts of the same step alike, so a run abandoned
-      // mid-retry stops instead of spending the rest of the chain.
-      const attempt = async (): Promise<StepAttemptOutcome> => {
-        throwIfAborted(scope.signal, { workflowId, stepId, callStack: nested });
-        this.#chargeBudget(scope, invocation, stepId);
-        try {
-          return await runAttempt();
-        } catch (error: unknown) {
-          // a cancellation noticed inside the step knows only which step it was
-          // — StepExecutor is handed no workflow and no call chain. Naming them
-          // here, where they are known, keeps the abort raised mid-request (the
-          // likeliest moment, since requests dominate a run's wall time) as
-          // informative as one raised between two attempts.
-          throwIfAborted(scope.signal, { workflowId, stepId, callStack: nested });
-          throw error;
-        }
-      };
+      // the retry reference runs this step's attempts produced, one per firing —
+      // separate from `subWorkflows` because a reference belongs to the retry
+      // that invoked it, not to the step's own target.
+      const retryReferences: RetryReferenceRecord[] = [];
+      const attempt = this.#chargedAttempt(
+        this.#stepAttempt(step, stepId, invocation, scope, subWorkflows),
+        invocation,
+        scope,
+        stepId,
+      );
 
       // the retry runner settles any `retry` actions, so `action` is the terminal
       // action a retry chain resolved to and `attempts` is how many times the step
@@ -483,6 +512,7 @@ class WorkflowExecutor {
         stepId,
         workflowId,
         signal: scope.signal,
+        runReference: this.#retryReference(steps, stepId, invocation, scope, retryReferences),
       });
       state.setStepOutputs(outcome.stepId, outcome.outputs);
       trace.push({
@@ -492,6 +522,7 @@ class WorkflowExecutor {
         attempts,
         durationMs: this.#now() - stepStartedAt,
         ...(subWorkflows.length > 0 ? { subWorkflows } : {}),
+        ...(retryReferences.length > 0 ? { retryReferences } : {}),
       });
 
       const transition = this.#interpreter.interpret(action, outcome.successful, {
@@ -567,6 +598,118 @@ class WorkflowExecutor {
         path: invocation.callStack.path,
       },
     );
+  }
+
+  /**
+   * Wraps a step-attempt thunk with the checks every attempt needs at its
+   * boundary: charge the run-wide budget, and check for cancellation both
+   * before the attempt runs and, if it throws, again on the way out — a
+   * cancellation noticed inside the attempt (StepExecutor is handed no
+   * workflow or call chain) is re-raised here with both attached, which keeps
+   * an abort surfacing mid-request as informative as one caught between two
+   * attempts.
+   *
+   * Shared by the step's own attempts and a `retry` action's `stepId`
+   * reference, which is itself one more step attempt against this same run.
+   */
+  #chargedAttempt(
+    runAttempt: () => Promise<StepAttemptOutcome>,
+    invocation: WorkflowInvocation,
+    scope: RunScope,
+    stepId: string,
+  ): () => Promise<StepAttemptOutcome> {
+    const { workflowId, callStack } = invocation;
+    return async () => {
+      throwIfAborted(scope.signal, { workflowId, stepId, callStack });
+      this.#chargeBudget(scope, invocation, stepId);
+      try {
+        return await runAttempt();
+      } catch (error: unknown) {
+        throwIfAborted(scope.signal, { workflowId, stepId, callStack });
+        throw error;
+      }
+    };
+  }
+
+  /**
+   * Builds the {@link StepRetryRunContext.runReference} callback a `retry`
+   * action's `stepId` / `workflowId` reference is run through.
+   *
+   * The runner that calls this back owns *when* — once per firing, after the
+   * `retryAfter` wait, before the step is re-run; this owns *how*:
+   *
+   * - a `workflowId` reference runs that workflow to completion through
+   *   `#run`, on the same shared budget, call stack, and cycle/depth guards as
+   *   a sub-workflow step — entered via `'retry'` so a loop closed through it is
+   *   named a call cycle, not a dependency one. It runs with no inputs: the
+   *   Arazzo Specification gives a retry reference no input-mapping mechanism
+   *   of its own (the same gap `dependsOn` has), and `{}` is the only
+   *   spec-honest fallback — see issue `#62`. Its outputs are recorded via
+   *   `state.setWorkflow`, which *is* "context transfers back".
+   * - a `stepId` reference must name a step of the current workflow (checked
+   *   lazily, at fire time, via the same lookup a `goto` target uses) and runs
+   *   as one more attempt at that step, through {@link WorkflowExecutor.#stepAttempt}
+   *   and {@link WorkflowExecutor.#chargedAttempt} — so a step referencing a
+   *   `workflowId` itself is handled the normal way, and the reference counts
+   *   against the same budget. Its outputs are recorded via
+   *   `state.setStepOutputs`.
+   *
+   * Neither kind's own `onSuccess` / `onFailure` (or, for a step reference, its
+   * `successCriteria`-derived action) is acted on: "context transfers back upon
+   * completion" makes a reference a call, not a redirect, and a failed
+   * reference does not break the retry chain — the spec speaks of the
+   * reference's *completion*, not its success, and a retry that turns out
+   * futile is bounded by `retryLimit` regardless.
+   */
+  #retryReference(
+    steps: readonly StepElement[],
+    stepId: string,
+    invocation: WorkflowInvocation,
+    scope: RunScope,
+    retryReferences: RetryReferenceRecord[],
+  ): (action: FailureActionElement) => Promise<void> {
+    const { workflowId, state, callStack } = invocation;
+
+    return async (action: FailureActionElement): Promise<void> => {
+      throwIfAborted(scope.signal, { workflowId, stepId, callStack });
+
+      if (isStringElement(action.workflowId)) {
+        const refId = toValue(action.workflowId) as string;
+        this.#rejectCrossDocumentWorkflow(refId, workflowId, stepId);
+        const result = await this.#run(refId, {}, scope, callStack, 'retry');
+        state.setWorkflow(refId, { inputs: {}, outputs: result.outputs });
+        retryReferences.push({
+          kind: 'workflow',
+          id: refId,
+          successful: result.status !== 'failed',
+          subWorkflow: result,
+        });
+        return;
+      }
+
+      const refStepId = toValue(action.stepId) as string;
+      const refIndex = this.#interpreter.indexOfStep(steps, refStepId, workflowId, {
+        reason: 'retry-target-not-found',
+        label: 'retry reference',
+      });
+      const refStep = steps[refIndex];
+
+      const refSubWorkflows: WorkflowExecutionResult[] = [];
+      const runRefAttempt = this.#chargedAttempt(
+        this.#stepAttempt(refStep, refStepId, invocation, scope, refSubWorkflows),
+        invocation,
+        scope,
+        refStepId,
+      );
+      const outcome = await runRefAttempt();
+      state.setStepOutputs(outcome.stepId, outcome.outputs);
+      retryReferences.push({
+        kind: 'step',
+        id: refStepId,
+        successful: outcome.successful,
+        ...(refSubWorkflows.length > 0 ? { subWorkflow: refSubWorkflows[0] } : {}),
+      });
+    };
   }
 
   /**

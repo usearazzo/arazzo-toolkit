@@ -5,10 +5,13 @@ import ExecutionError from '../errors/ExecutionError.ts';
  *
  * Recorded per call so a detected loop can be named for the mechanism that formed
  * it: a repeat reached purely through `dependsOn` edges is a dependency cycle,
- * one involving a sub-workflow step call is a call cycle.
+ * one involving a sub-workflow step call — or a `retry` action's `workflowId`
+ * reference — is a call cycle. `retry` is grouped with `step` for that
+ * classification, not `dependsOn`: a reference is a call the current step makes
+ * on its way to being retried, not a stated precondition.
  * @internal
  */
-export type WorkflowCallVia = 'root' | 'step' | 'dependsOn';
+export type WorkflowCallVia = 'root' | 'step' | 'dependsOn' | 'retry';
 
 /**
  * One workflow invocation in progress.

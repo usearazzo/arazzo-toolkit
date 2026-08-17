@@ -70,6 +70,21 @@ export interface StepRetryRunContext {
   readonly stepId: string;
   readonly workflowId: string;
   readonly signal?: AbortSignal;
+  /**
+   * Runs a `retry` action's `stepId` / `workflowId` reference — "the reference
+   * is executed and the context is returned, after which the current step is
+   * retried". Called once per firing (i.e. before every attempt the action
+   * grants, not once per chain), after the `retryAfter` wait and before the
+   * step is re-run.
+   *
+   * This runner owns *when* a reference runs, never *what* it is — it does not
+   * inspect `stepId` / `workflowId` itself, so a caller that omits this
+   * callback gets the standalone `retry-reference-unsupported` rejection
+   * below instead of a silently ignored reference. A caller that supplies it
+   * is trusted to run the right thing; a throw from it ends the step, the
+   * same as a throw from `attempt`.
+   */
+  readonly runReference?: (action: FailureActionElement) => Promise<void>;
 }
 
 /**
@@ -95,6 +110,13 @@ export interface StepRetryRunContext {
  * caller whose per-attempt check is about to fail (a spent budget, say) still
  * pays that delay before its error surfaces. Keeping the seam this narrow is
  * worth one bounded wait on a run that was already doomed.
+ *
+ * A `retry` action's `stepId` / `workflowId` reference works the same way: this
+ * class only decides *when* one fires (once per firing, after the `retryAfter`
+ * wait, before the step is re-run) — it hands the action to
+ * {@link StepRetryRunContext.runReference} and knows nothing about *what* the
+ * reference is or how it runs. A caller that omits that callback gets the
+ * standalone rejection instead of a silently ignored reference.
  *
  * Cancellation is the one thing it will not wait out: the run's `AbortSignal`
  * reaches the timer, which returns early, and the next attempt then trips the
@@ -179,13 +201,15 @@ class StepRetryRunner {
         const spent = retriesSpent.get(action) ?? 0;
         if (spent >= this.#retryLimit(action)) continue; // exhausted — try the next action
 
-        this.#rejectReference(action, context);
+        const reference = this.#referenced(action);
+        if (reference && context.runReference === undefined) this.#rejectReference(context);
         retriesSpent.set(action, spent + 1);
         // only sleep for a real, positive delay — skip the event-loop yield of
         // sleep(0) for immediate retries, and never hand a custom sleep a
         // zero/negative/NaN value.
         const delayMs = this.#retryAfterMs(action);
         if (delayMs > 0) await this.#sleep(delayMs, context.signal);
+        if (reference) await context.runReference!(action);
         fired = true;
         break;
       }
@@ -226,22 +250,29 @@ class StepRetryRunner {
   }
 
   /**
-   * Rejects a `retry` action that carries a `stepId` / `workflowId` reference to
-   * execute before retrying — a defined feature ("the reference is executed and
-   * the context is returned, after which the current step is retried") that is
-   * not yet supported, so it throws rather than silently ignoring the reference.
+   * Whether a `retry` action carries a `stepId` / `workflowId` reference to
+   * execute before retrying ("the reference is executed and the context is
+   * returned, after which the current step is retried").
    */
-  #rejectReference(action: FailureActionElement, context: StepRetryRunContext): void {
-    if (isStringElement(action.stepId) || isStringElement(action.workflowId)) {
-      throw new ExecutionError(
-        `retry action on step "${context.stepId}" in workflow "${context.workflowId}" carries a stepId/workflowId reference; not supported yet`,
-        {
-          stepId: context.stepId,
-          workflowId: context.workflowId,
-          reason: 'retry-reference-unsupported',
-        },
-      );
-    }
+  #referenced(action: FailureActionElement): boolean {
+    return isStringElement(action.stepId) || isStringElement(action.workflowId);
+  }
+
+  /**
+   * Rejects a referenced `retry` action when the caller supplied no
+   * {@link StepRetryRunContext.runReference}, so an unsupported caller
+   * (or a step retried directly against this runner in isolation) fails
+   * loudly rather than silently ignoring the reference.
+   */
+  #rejectReference(context: StepRetryRunContext): void {
+    throw new ExecutionError(
+      `retry action on step "${context.stepId}" in workflow "${context.workflowId}" carries a stepId/workflowId reference; not supported yet`,
+      {
+        stepId: context.stepId,
+        workflowId: context.workflowId,
+        reason: 'retry-reference-unsupported',
+      },
+    );
   }
 }
 
