@@ -887,6 +887,8 @@ describe('WorkflowExecutor', function () {
 
       assert.instanceOf(caught, ResolverError);
       assert.strictEqual((caught as ResolverError).reason, 'malformed-actions');
+      // names the step the malformed onSuccess belongs to, not just the field.
+      assert.strictEqual((caught as ResolverError).stepId, 'broken');
       // the message names the key its author actually wrote, not both candidates.
       assert.match((caught as Error).message, /`onSuccess` is present but is not a list/);
     });

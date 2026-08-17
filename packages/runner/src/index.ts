@@ -93,6 +93,7 @@ export { default as StepParameterResolver } from './resolver/StepParameterResolv
 export { default as OpenAPIOperationParameterResolver } from './resolver/OpenAPIOperationParameterResolver.ts';
 export { default as WorkflowParameterResolver } from './resolver/WorkflowParameterResolver.ts';
 export { default as OutputResolver } from './resolver/OutputResolver.ts';
+export type { StepScope, ResolverScope } from './resolver/ResolverScope.ts';
 export { default as RequestBodyResolver } from './resolver/RequestBodyResolver.ts';
 export type { ResolvedRequestBody } from './resolver/RequestBodyResolver.ts';
 

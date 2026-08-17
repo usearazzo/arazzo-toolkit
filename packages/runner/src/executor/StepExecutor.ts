@@ -180,12 +180,17 @@ class StepExecutor {
     // resolve parameters and request body against the pre-request context.
     // keyed by '{in}.{name}' rather than bare name, so two parameters that
     // legally differ only in their location each reach their own place.
+    const scope = { stepId };
     const preContext = state.toContext();
-    const parameters = this.#parameterResolver.resolve(step.parameters, (expression) =>
-      this.#evaluate(preContext, expression),
+    const parameters = this.#parameterResolver.resolve(
+      step.parameters,
+      (expression) => this.#evaluate(preContext, expression),
+      scope,
     );
-    const requestBody = this.#requestBodyResolver.resolve(step.requestBody, (expression) =>
-      this.#evaluate(preContext, expression),
+    const requestBody = this.#requestBodyResolver.resolve(
+      step.requestBody,
+      (expression) => this.#evaluate(preContext, expression),
+      scope,
     );
 
     // checked here rather than on entry: locating the operation and resolving
@@ -224,8 +229,10 @@ class StepExecutor {
       this.#responseContext(response),
     );
     const successful = this.evaluateCriteria(step, postContext);
-    const outputs = this.#outputResolver.resolve(step.outputs, (expression) =>
-      this.#evaluate(postContext, expression),
+    const outputs = this.#outputResolver.resolve(
+      step.outputs,
+      (expression) => this.#evaluate(postContext, expression),
+      scope,
     );
     const matchedActions = this.selectActions(step, successful, postContext);
 
@@ -329,6 +336,7 @@ class StepExecutor {
           this.#evaluate(context, expression),
         ),
       field,
+      { stepId: toValue(step.stepId) as string },
     );
   }
 

@@ -5,6 +5,7 @@ import { isParameterElement, type StepParametersElement } from '@speclynx/apidom
 import ResolverError from '../errors/ResolverError.ts';
 import StepParameterResolver from './StepParameterResolver.ts';
 import type { RuntimeExpressionResolver } from './ArazzoValueResolver.ts';
+import type { StepScope } from './ResolverScope.ts';
 
 /**
  * Resolves the `parameters` of a step targeting a `workflowId` into the
@@ -28,10 +29,13 @@ class WorkflowParameterResolver extends StepParameterResolver {
   /**
    * Resolves each parameter's `value`, returning a `name` → value map.
    * Returns an empty object when there are no parameters.
+   *
+   * `scope` names the step in a thrown {@link ResolverError}.
    */
   resolve(
     parameters: StepParametersElement | undefined,
     resolve: RuntimeExpressionResolver,
+    scope: StepScope,
   ): Record<string, unknown> {
     const result: Record<string, unknown> = {};
     if (parameters === undefined) return result;
@@ -39,6 +43,7 @@ class WorkflowParameterResolver extends StepParameterResolver {
     // `TypeError: parameters is not iterable`.
     if (!isArrayElement(parameters)) {
       throw new ResolverError('`parameters` is present but is not a list', {
+        ...scope,
         target: 'parameters',
         reason: 'malformed-parameters',
       });

@@ -4,6 +4,7 @@ import type { StepOutputsElement, WorkflowOutputsElement } from '@speclynx/apido
 
 import ResolverError from '../errors/ResolverError.ts';
 import ArazzoValueResolver, { type RuntimeExpressionResolver } from './ArazzoValueResolver.ts';
+import type { ResolverScope } from './ResolverScope.ts';
 
 /**
  * Resolves a step's or workflow's `outputs` to a plain map of name → value.
@@ -24,10 +25,14 @@ class OutputResolver extends ArazzoValueResolver {
   /**
    * Resolves each output value, returning a `name` → value map. Returns an empty
    * object when there are no outputs.
+   *
+   * `scope` names the step or workflow the outputs belong to, for a thrown
+   * {@link ResolverError}.
    */
   resolve(
     outputs: StepOutputsElement | WorkflowOutputsElement | undefined,
     resolve: RuntimeExpressionResolver,
+    scope: ResolverScope,
   ): Record<string, unknown> {
     const result: Record<string, unknown> = {};
     if (outputs === undefined) return result;
@@ -35,6 +40,7 @@ class OutputResolver extends ArazzoValueResolver {
     // `TypeError: outputs.forEach is not a function`.
     if (!isObjectElement(outputs)) {
       throw new ResolverError('`outputs` is present but is not a map', {
+        ...scope,
         target: 'outputs',
         reason: 'malformed-outputs',
       });

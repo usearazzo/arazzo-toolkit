@@ -6,6 +6,7 @@ import ParameterIdentity from '../document/ParameterIdentity.ts';
 import ResolverError from '../errors/ResolverError.ts';
 import StepParameterResolver from './StepParameterResolver.ts';
 import type { RuntimeExpressionResolver } from './ArazzoValueResolver.ts';
+import type { StepScope } from './ResolverScope.ts';
 
 /**
  * Resolves the `parameters` of a step targeting an OpenAPI operation into the
@@ -46,10 +47,13 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
    * Resolves each parameter's `value`, returning a
    * {@link ParameterDelivery}-keyed record. Returns an empty object when
    * there are no parameters.
+   *
+   * `scope` names the step in a thrown {@link ResolverError}.
    */
   resolve(
     parameters: StepParametersElement | undefined,
     resolve: RuntimeExpressionResolver,
+    scope: StepScope,
   ): Record<string, unknown> {
     const delivery = new ParameterDelivery();
     if (parameters === undefined) return delivery.toRecord();
@@ -58,6 +62,7 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
     // than the runner. Reported here as the authoring error it is.
     if (!isArrayElement(parameters)) {
       throw new ResolverError('`parameters` is present but is not a list', {
+        ...scope,
         target: 'parameters',
         reason: 'malformed-parameters',
       });
@@ -71,6 +76,7 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
       const identity = ParameterIdentity.of(parameter);
       if (identity === undefined) {
         throw new ResolverError('Parameter has a missing or non-string name', {
+          ...scope,
           reason: 'missing-name',
         });
       }
@@ -79,11 +85,12 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
       if (location === undefined) {
         throw new ResolverError(
           `Parameter "${name}" declares no location ("in"), which a step targeting an operation requires`,
-          { target: name, reason: 'missing-location' },
+          { ...scope, target: name, reason: 'missing-location' },
         );
       }
       if (location === null) {
         throw new ResolverError(`Parameter "${name}" has a non-string location ("in")`, {
+          ...scope,
           target: name,
           reason: 'malformed-location',
         });
@@ -96,7 +103,7 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
         throw new ResolverError(
           `Parameter "${name}" (in: ${location}) collides with another parameter on the ` +
             `delivery key "${key}" and cannot be delivered unambiguously`,
-          { target: name, reason: 'ambiguous-delivery' },
+          { ...scope, target: name, reason: 'ambiguous-delivery' },
         );
       }
 

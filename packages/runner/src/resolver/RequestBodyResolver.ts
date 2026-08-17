@@ -6,6 +6,7 @@ import { isPayloadReplacementElement, type RequestBodyElement } from '@speclynx/
 
 import ResolverError from '../errors/ResolverError.ts';
 import ArazzoValueResolver, { type RuntimeExpressionResolver } from './ArazzoValueResolver.ts';
+import type { StepScope } from './ResolverScope.ts';
 
 /**
  * Matches a canonical non-negative integer (RFC 6901 array index): no leading
@@ -39,10 +40,13 @@ class RequestBodyResolver extends ArazzoValueResolver {
   /**
    * Resolves the request body, returning its payload and content type. Returns
    * `undefined` when there is no request body.
+   *
+   * `scope` names the step in a thrown {@link ResolverError}.
    */
   resolve(
     requestBody: RequestBodyElement | undefined,
     resolve: RuntimeExpressionResolver,
+    scope: StepScope,
   ): ResolvedRequestBody | undefined {
     if (requestBody === undefined) return undefined;
 
@@ -51,6 +55,7 @@ class RequestBodyResolver extends ArazzoValueResolver {
     // send no body and report success.
     if (!isObjectElement(requestBody)) {
       throw new ResolverError('`requestBody` is present but is not a map', {
+        ...scope,
         target: 'requestBody',
         reason: 'malformed-request-body',
       });
@@ -63,6 +68,7 @@ class RequestBodyResolver extends ArazzoValueResolver {
       // `TypeError: requestBody.replacements is not iterable`.
       if (!isArrayElement(requestBody.replacements)) {
         throw new ResolverError('`requestBody.replacements` is present but is not a list', {
+          ...scope,
           target: 'requestBody.replacements',
           reason: 'malformed-replacements',
         });
@@ -75,6 +81,7 @@ class RequestBodyResolver extends ArazzoValueResolver {
           payload,
           target,
           this.resolveValue(replacement.value, resolve),
+          scope,
         );
       }
     }
@@ -93,11 +100,12 @@ class RequestBodyResolver extends ArazzoValueResolver {
    * corrupted). Throws {@link ResolverError} for a non-JSON-Pointer target
    * (e.g. XPath) or a target that does not resolve within the payload.
    */
-  #applyReplacement(payload: unknown, target: string, value: unknown): unknown {
+  #applyReplacement(payload: unknown, target: string, value: unknown, scope: StepScope): unknown {
     if (!testJSONPointer(target)) {
       throw new ResolverError(
         `Unsupported requestBody replacement target "${target}" (expected JSON Pointer)`,
         {
+          ...scope,
           target,
           reason: 'unsupported-target',
         },
@@ -114,6 +122,7 @@ class RequestBodyResolver extends ArazzoValueResolver {
       throw new ResolverError(
         `requestBody replacement target "${target}" does not resolve in the payload`,
         {
+          ...scope,
           target,
           reason: 'unresolved-target',
         },
