@@ -1,6 +1,8 @@
 import { toValue } from '@speclynx/apidom-core';
+import { isArrayElement } from '@speclynx/apidom-datamodel';
 import { isParameterElement, type StepParametersElement } from '@speclynx/apidom-ns-arazzo-1';
 
+import ResolverError from '../errors/ResolverError.ts';
 import StepParameterResolver from './StepParameterResolver.ts';
 import type { RuntimeExpressionResolver } from './ArazzoValueResolver.ts';
 
@@ -33,6 +35,14 @@ class WorkflowParameterResolver extends StepParameterResolver {
   ): Record<string, unknown> {
     const result: Record<string, unknown> = {};
     if (parameters === undefined) return result;
+    // present but scalar: walking it would fail as a bare
+    // `TypeError: parameters is not iterable`.
+    if (!isArrayElement(parameters)) {
+      throw new ResolverError('`parameters` is present but is not a list', {
+        target: 'parameters',
+        reason: 'malformed-parameters',
+      });
+    }
 
     for (const parameter of parameters) {
       if (!isParameterElement(parameter)) continue;
