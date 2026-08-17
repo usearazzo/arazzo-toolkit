@@ -543,3 +543,11 @@ workflows:
   # a present but non-list "steps" — malformed, an authoring error (not a no-op).
   - workflowId: scalarSteps
     steps: not-a-list
+
+  # a present but non-list step `onSuccess` — malformed. Reported as a
+  # ResolverError naming the field, not as a raw TypeError.
+  - workflowId: malformedStepOnSuccess
+    steps:
+      - stepId: broken
+        operationId: getInventory
+        onSuccess: not-a-list

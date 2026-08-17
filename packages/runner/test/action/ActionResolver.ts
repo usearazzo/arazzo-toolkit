@@ -11,7 +11,12 @@ import {
 } from '@speclynx/apidom-ns-arazzo-1';
 import { toValue } from '@speclynx/apidom-core';
 
-import { ActionResolver, type CriterionPredicate, type SelectedAction } from '../../src/index.ts';
+import {
+  ActionResolver,
+  ResolverError,
+  type CriterionPredicate,
+  type SelectedAction,
+} from '../../src/index.ts';
 
 describe('ActionResolver', function () {
   let resolver: ActionResolver;
@@ -38,7 +43,7 @@ describe('ActionResolver', function () {
         { name: 'c', type: 'goto', stepId: 'third', criteria: [{ condition: 'pass' }] },
       );
 
-      const selected = resolver.resolve(actions, byCondition);
+      const selected = resolver.resolveAll(actions, byCondition, 'onSuccess')[0];
       assert.isTrue(isSuccessActionElement(selected));
       assert.strictEqual(toValue(selected?.stepId), 'second');
     });
@@ -50,20 +55,25 @@ describe('ActionResolver', function () {
         criteria: [{ condition: 'pass' }, { condition: 'fail' }],
       });
 
-      assert.isUndefined(resolver.resolve(actions, byCondition));
+      assert.isUndefined(resolver.resolveAll(actions, byCondition, 'onSuccess')[0]);
     });
 
     specify('should treat an action with no criteria as always matching', function () {
-      const selected = resolver.resolve(onSuccess({ name: 'a', type: 'end' }), byCondition);
+      const selected = resolver.resolveAll(
+        onSuccess({ name: 'a', type: 'end' }),
+        byCondition,
+        'onSuccess',
+      )[0];
 
       assert.strictEqual(toValue(selected?.type), 'end');
     });
 
     specify('should treat an action with an empty criteria list as matching', function () {
-      const selected = resolver.resolve(
+      const selected = resolver.resolveAll(
         onSuccess({ name: 'a', type: 'end', criteria: [] }),
         byCondition,
-      );
+        'onSuccess',
+      )[0];
 
       assert.strictEqual(toValue(selected?.type), 'end');
     });
@@ -71,23 +81,24 @@ describe('ActionResolver', function () {
     specify('should return undefined when no action matches', function () {
       const actions = onSuccess({ name: 'a', type: 'end', criteria: [{ condition: 'fail' }] });
 
-      assert.isUndefined(resolver.resolve(actions, byCondition));
+      assert.isUndefined(resolver.resolveAll(actions, byCondition, 'onSuccess')[0]);
     });
 
     specify('should return undefined when the action list is absent', function () {
-      assert.isUndefined(resolver.resolve(undefined, always));
+      assert.isUndefined(resolver.resolveAll(undefined, always, 'onSuccess')[0]);
     });
   });
 
   context('selected action element', function () {
     const select = (action: unknown, predicate = always): SelectedAction | undefined =>
-      resolver.resolve(onFailure(action), predicate);
+      resolver.resolveAll(onFailure(action), predicate, 'onFailure')[0];
 
     specify('should return the goto action element with its target', function () {
-      const selected = resolver.resolve(
+      const selected = resolver.resolveAll(
         onSuccess({ name: 'a', type: 'goto', stepId: 'next' }),
         always,
-      );
+        'onSuccess',
+      )[0];
 
       assert.strictEqual(toValue(selected?.type), 'goto');
       assert.strictEqual(toValue(selected?.stepId), 'next');
@@ -107,5 +118,34 @@ describe('ActionResolver', function () {
 
       assert.strictEqual(toValue(selected?.workflowId), 'wf');
     });
+
+    specify('should throw ResolverError for a present but non-list action list', function () {
+      // walking it would fail as a bare `TypeError: actions is not iterable`.
+      const error = assert.throws(
+        () => resolver.resolveAll('not-a-list' as never, byCondition, 'onFailure'),
+        ResolverError,
+        /is present but is not a list/,
+      ) as unknown as ResolverError;
+
+      assert.strictEqual(error.reason, 'malformed-actions');
+    });
+
+    specify(
+      "should throw ResolverError for an action's present but non-list criteria",
+      function () {
+        const actions = new StepOnSuccessElement([
+          refractSuccessAction({ name: 'a', type: 'end', criteria: 'not-a-list' }),
+        ]);
+
+        const error = assert.throws(
+          () => resolver.resolveAll(actions, byCondition, 'onSuccess'),
+          ResolverError,
+          /is present but is not a list/,
+        ) as unknown as ResolverError;
+
+        assert.strictEqual(error.reason, 'malformed-criteria');
+        assert.strictEqual(error.target, 'criteria');
+      },
+    );
   });
 });

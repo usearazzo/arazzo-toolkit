@@ -1,6 +1,8 @@
 import { toValue } from '@speclynx/apidom-core';
+import { isObjectElement } from '@speclynx/apidom-datamodel';
 import type { StepOutputsElement, WorkflowOutputsElement } from '@speclynx/apidom-ns-arazzo-1';
 
+import ResolverError from '../errors/ResolverError.ts';
 import ArazzoValueResolver, { type RuntimeExpressionResolver } from './ArazzoValueResolver.ts';
 
 /**
@@ -29,6 +31,14 @@ class OutputResolver extends ArazzoValueResolver {
   ): Record<string, unknown> {
     const result: Record<string, unknown> = {};
     if (outputs === undefined) return result;
+    // present but not a map: the walk below would fail as a bare
+    // `TypeError: outputs.forEach is not a function`.
+    if (!isObjectElement(outputs)) {
+      throw new ResolverError('`outputs` is present but is not a map', {
+        target: 'outputs',
+        reason: 'malformed-outputs',
+      });
+    }
 
     outputs.forEach((value, key) => {
       const name = toValue(key) as string;

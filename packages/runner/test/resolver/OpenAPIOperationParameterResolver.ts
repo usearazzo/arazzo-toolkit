@@ -187,5 +187,19 @@ describe('OpenAPIOperationParameterResolver', function () {
         /cannot be delivered unambiguously/,
       );
     });
+
+    specify('should throw ResolverError for a present but non-list parameters', function () {
+      // walking it would fail as a bare `TypeError: parameters is not iterable`
+      // — raised by the language, naming an internal variable, and carrying
+      // nothing a caller can branch on.
+      const error = assert.throws(
+        () => resolver.resolve('not-a-list' as never, resolve),
+        ResolverError,
+        /is present but is not a list/,
+      ) as unknown as ResolverError;
+
+      assert.strictEqual(error.reason, 'malformed-parameters');
+      assert.strictEqual(error.target, 'parameters');
+    });
   });
 });

@@ -10,6 +10,7 @@ import {
   StepExecutor,
   OpenAPIOperationExecutor,
   ExecutionError,
+  ResolverError,
   type HTTPClient,
   type OpenAPIOperationRequest,
   type WorkflowExecuteOptions,
@@ -867,6 +868,27 @@ describe('WorkflowExecutor', function () {
         ExecutionError,
         /carries a stepId\/workflowId reference; not supported yet/,
       );
+    });
+  });
+
+  context('malformed step declarations', function () {
+    specify('should report a malformed onSuccess as a typed error', async function () {
+      // `onSuccess: not-a-list` used to surface as a bare
+      // `TypeError: actions is not iterable` — raised by the language, naming an
+      // internal variable, with no `reason` a caller could branch on.
+      const { executor } = makeExecutor();
+
+      let caught: unknown;
+      try {
+        await executor.execute('malformedStepOnSuccess');
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.instanceOf(caught, ResolverError);
+      assert.strictEqual((caught as ResolverError).reason, 'malformed-actions');
+      // the message names the key its author actually wrote, not both candidates.
+      assert.match((caught as Error).message, /`onSuccess` is present but is not a list/);
     });
   });
 });

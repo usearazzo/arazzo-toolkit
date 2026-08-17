@@ -318,12 +318,17 @@ class StepExecutor {
     successful: boolean,
     context: RuntimeExpressionContext,
   ): SelectedAction[] {
+    const [field, actions] = successful
+      ? (['onSuccess', step.onSuccess] as const)
+      : (['onFailure', step.onFailure] as const);
+
     return this.#actionResolver.resolveAll(
-      successful ? step.onSuccess : step.onFailure,
+      actions,
       (criterion) =>
         this.#criterionEvaluator.evaluate(criterion, (expression) =>
           this.#evaluate(context, expression),
         ),
+      field,
     );
   }
 

@@ -1,3 +1,4 @@
+import { isArrayElement } from '@speclynx/apidom-datamodel';
 import { isParameterElement, type StepParametersElement } from '@speclynx/apidom-ns-arazzo-1';
 
 import ParameterDelivery from '../client/ParameterDelivery.ts';
@@ -52,6 +53,15 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
   ): Record<string, unknown> {
     const delivery = new ParameterDelivery();
     if (parameters === undefined) return delivery.toRecord();
+    // present but scalar: walking it would fail as a bare
+    // `TypeError: parameters is not iterable`, raised by the language rather
+    // than the runner. Reported here as the authoring error it is.
+    if (!isArrayElement(parameters)) {
+      throw new ResolverError('`parameters` is present but is not a list', {
+        target: 'parameters',
+        reason: 'malformed-parameters',
+      });
+    }
 
     for (const parameter of parameters) {
       if (!isParameterElement(parameter)) continue;

@@ -3,6 +3,7 @@ import { StepOutputsElement } from '@speclynx/apidom-ns-arazzo-1';
 
 import {
   OutputResolver,
+  ResolverError,
   RuntimeExpressionEvaluator,
   type RuntimeExpressionResolver,
 } from '../../src/index.ts';
@@ -69,5 +70,18 @@ describe('OutputResolver', function () {
         assert.deepEqual(resolver.resolve(outputs, resolve), { raw: '{$response.body#/token}' });
       },
     );
+
+    specify('should throw ResolverError for a present but non-map outputs', function () {
+      // the map-shaped counterpart: the walk is a `forEach`, so this would
+      // otherwise fail as `outputs.forEach is not a function`.
+      const error = assert.throws(
+        () => resolver.resolve('not-a-map' as never, resolve),
+        ResolverError,
+        /is present but is not a map/,
+      ) as unknown as ResolverError;
+
+      assert.strictEqual(error.reason, 'malformed-outputs');
+      assert.strictEqual(error.target, 'outputs');
+    });
   });
 });

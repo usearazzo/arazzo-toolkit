@@ -3,6 +3,7 @@ import { StepParametersElement, refractParameter } from '@speclynx/apidom-ns-ara
 
 import {
   WorkflowParameterResolver,
+  ResolverError,
   RuntimeExpressionEvaluator,
   type RuntimeExpressionResolver,
 } from '../../src/index.ts';
@@ -156,5 +157,15 @@ describe('WorkflowParameterResolver', function () {
         assert.deepEqual(result, { x: undefined });
       },
     );
+
+    specify('should throw ResolverError for a present but non-list parameters', function () {
+      const error = assert.throws(
+        () => resolver.resolve('not-a-list' as never, resolve),
+        ResolverError,
+        /is present but is not a list/,
+      ) as unknown as ResolverError;
+
+      assert.strictEqual(error.reason, 'malformed-parameters');
+    });
   });
 });

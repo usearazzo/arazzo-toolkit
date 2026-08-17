@@ -146,5 +146,22 @@ describe('RequestBodyResolver', function () {
       );
       assert.isUndefined(({} as Record<string, unknown>).polluted);
     });
+
+    specify('should throw ResolverError for present but non-list replacements', function () {
+      const requestBody = refractRequestBody({
+        contentType: 'application/json',
+        payload: {},
+        replacements: 'not-a-list',
+      });
+
+      const error = assert.throws(
+        () => resolver.resolve(requestBody as never, resolve),
+        ResolverError,
+        /is present but is not a list/,
+      ) as unknown as ResolverError;
+
+      assert.strictEqual(error.reason, 'malformed-replacements');
+      assert.strictEqual(error.target, 'requestBody.replacements');
+    });
   });
 });

@@ -1,6 +1,6 @@
 import { assocPath, hasPath } from 'ramda';
 import { toValue } from '@speclynx/apidom-core';
-import { isStringElement } from '@speclynx/apidom-datamodel';
+import { isArrayElement, isStringElement } from '@speclynx/apidom-datamodel';
 import { parse as parseJSONPointer, testJSONPointer } from '@swaggerexpert/json-pointer';
 import { isPayloadReplacementElement, type RequestBodyElement } from '@speclynx/apidom-ns-arazzo-1';
 
@@ -49,6 +49,14 @@ class RequestBodyResolver extends ArazzoValueResolver {
     let payload = this.resolveValue(requestBody.payload, resolve);
 
     if (requestBody.replacements !== undefined) {
+      // present but scalar: walking it would fail as a bare
+      // `TypeError: requestBody.replacements is not iterable`.
+      if (!isArrayElement(requestBody.replacements)) {
+        throw new ResolverError('`requestBody.replacements` is present but is not a list', {
+          target: 'requestBody.replacements',
+          reason: 'malformed-replacements',
+        });
+      }
       for (const replacement of requestBody.replacements) {
         if (!isPayloadReplacementElement(replacement)) continue;
         const target = toValue(replacement.target) as string | undefined;
