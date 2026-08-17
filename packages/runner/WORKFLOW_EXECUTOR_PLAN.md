@@ -2,12 +2,17 @@
 
 Status: the design below is implemented, across four PRs — the backbone
 (`#290`), retry (`#2`), sub-workflow steps + `dependsOn` (`#3`), and
-cancellation (`#4`). §0 tracks
+cancellation (`#4`) — plus a train of follow-ups (`#40`–`#61`, summarized in
+§0). §0 tracks
 what shipped, what deliberately still throws, and **what to build next**;
 the numbered sections after it are the design and its spec citations, kept
 because the reasoning outlives the code. Grounds on the merged StepExecutor
 (`#279`) and the Arazzo 1.0.1 spec (control-flow semantics quoted inline below).
-Target spec: 1.0.1, same as StepExecutor.
+Target spec: 1.0.1, same as StepExecutor. (Arazzo 1.1.0, released 2026-05-17,
+leaves the retry-reference and `goto` wording quoted below unchanged — the
+ambiguities flagged in this plan stand in both versions. Its additions —
+step-level `dependsOn` / `timeout`, AsyncAPI steps, new criterion types,
+`querystring` already noted in issue `#33` — are out of this plan's scope.)
 
 ## 0. Implementation status
 
@@ -359,6 +364,43 @@ the request it was told to drop surfaces as `aborted`, while the same rejection
 without a cancellation stays a `ClientError`. A bag value that is not a usable
 signal is ignored rather than taken for a cancellation.
 
+### Shipped (follow-up PRs `#40`–`#61`)
+
+Fixes and refactors after the four feature PRs, recorded here because two of
+them moved semantics this plan had placed elsewhere:
+
+- **Workflow-level `parameters` (§7, open question #2 — resolved differently
+  than the plan leaned):** shipped in `#40` as inheritance in
+  `ArazzoWorkflowNormalizer`, NOT via the `additionalParameters` arg §7
+  preferred — normalization-time inheritance mirrors how the OpenAPI
+  normalizers fold a Path Item's parameters into an Operation. Identity is the
+  `(name, in)` pair with an absent `in` equal only to another absent `in` (a
+  `workflowId` step's inputs are keyed by name alone and must stay
+  overridable); the step's own parameters lead the merged list. `#42` then made
+  `ParameterResolver` deliver by the same `(name, in)` identity.
+- **Actions inheritance moved to the normalizer too (`#49`):** the
+  `defaultActions` wiring §7 records as "as built" is gone — the normalizer
+  copies workflow `successActions` / `failureActions` into each step that does
+  not declare the corresponding key (`hasKey`, so an explicit `onSuccess: []`
+  still suppresses the default), and `StepDefaultActions`, the fourth
+  `StepExecutor.execute` / `selectActions` parameter, and `ActionResolver`'s
+  workflow-typed arms were removed. Action elements are shared, not cloned, so
+  retry budgets keyed by element identity behave as before.
+- **Hardening:** malformed `parameters` / actions lists report as typed errors
+  (`#51`), as does a malformed `onSuccess` / `onFailure` / `criteria` entry
+  (`#59`); a thrown `ResolverError` is attributed to its step or workflow
+  (`#57`); a scalar `requestBody` no longer silently sends no body (`#56`);
+  workflow-level `outputs` shape is validated up front, before prerequisites or
+  steps fire live requests (`#53`/`#61`).
+- **`ActionResolver.resolveAll` split** into `resolveOnSuccess` /
+  `resolveOnFailure` (`#60`).
+- **Filed as follow-up:** issue `#39` — move the parameter-inheritance rule
+  into a `normalize-parameters` refractor plugin in
+  `@speclynx/apidom-ns-arazzo-1`, consumed here the way the OpenAPI
+  normalizers consume theirs. Cross-repo: blocked on an apidom release. (Its
+  "out of scope" note predates `#49` by two hours — actions now also live in
+  the normalizer, though as local code, not the plugin.)
+
 ### Not yet implemented / missing
 
 Each currently **throws `ExecutionError`** rather than misbehaving (or is simply
@@ -412,9 +454,6 @@ absent), and is scoped to a follow-up:
     So both land with reference-retry (which reuses the sub-workflow / goto-workflow
     machinery); until then the single `retry-reference-unsupported` throw is the
     contract.
-- **Workflow-level `parameters`** (§7) — not implemented. Unlike actions, this is
-  a genuine per-parameter merge (by name+in, step overriding); would follow the
-  `defaultActions` pattern with a `StepExecutor` `additionalParameters` arg.
 - **e2e suite** (§10) — only the deterministic stub unit suite exists; a real
   multi-step petstore run end-to-end is a separate opt-in follow-up.
 
@@ -427,9 +466,68 @@ overruled.
 **1. Reference-retry.** A `retry` carrying a `stepId` / `workflowId` to run before
 retrying; currently `retry-reference-unsupported`. Small, and it reuses the
 sub-workflow machinery that just landed. The deferred target validation lands with
-it. One ambiguity to settle: "the reference is executed and the context is
-returned, after which the current step is retried" does not say whether the
-reference runs once per attempt or once per retry chain.
+it. Design proposed below (2026-08-17) — decisions marked PROPOSED await review
+before coding.
+
+#### Reference-retry design (PROPOSED, pre-implementation)
+
+Spec basis (1.0.1 §Failure Action Object; 1.1.0 wording identical): `stepId` /
+`workflowId` are "only relevant when the `type` field value is `"goto"` or
+`"retry"`", mutually exclusive, the `stepId` "MUST be within the current
+workflow", and — the operative sentence — "When used with `"retry"`, context
+transfers back upon completion of the specified step [workflow]." Frequency per
+attempt vs. per chain is unspecified in both versions.
+
+- **Frequency — once per firing (i.e., per attempt), PROPOSED.** The reference
+  exists to repair state before retrying (re-authenticate, reset a fixture); a
+  repair that ran only before attempt 1 leaves attempts 2..N unrepaired, which
+  defeats its purpose. It also composes: exhaustion fall-through means a chain
+  can hold several `retry` actions, each with its own reference and budget —
+  "once per chain" has no coherent meaning there, "each time this action fires"
+  does. Duplicate side effects are the author's own declaration (`retryLimit`
+  bounds them).
+- **Ordering — `sleep(retryAfter)` → run reference → re-run step, PROPOSED.**
+  `retryAfter` is "seconds to delay _after the step failure_" — backpressure
+  anchored to the failure, and a reference firing its own requests should not
+  be thrown into that same window; a repair like a fresh token is also most
+  valuable immediately before the retry, not before a long wait.
+- **Seam — the runner decides _when_, the executor decides _how_.**
+  `StepRetryRunner` stays ignorant of what a reference is:
+  `StepRetryRunContext` gains a
+  `runReference?: (action: FailureActionElement) => Promise<void>` callback
+  (mirroring how the attempt thunk already hides budgets and cancellation),
+  invoked at the point `#rejectReference` throws today. `WorkflowExecutor`
+  supplies it:
+  - `workflowId` reference → recurse through `#run` with the current frame and
+    scope, exactly like a sub-workflow step: budget charged by the sub-run,
+    cycle/depth guarded by the shared stack, recorded via `state.setWorkflow`
+    so `$workflows.<id>.outputs` resolves; cross-document throws the existing
+    `cross-document-workflow-unsupported`.
+  - `stepId` reference → resolved against the current workflow (the deferred
+    target validation lands here: unknown id throws at fire time, lazy per the
+    settled position above); executed as one plain step execution against the
+    current state, its outputs recorded via `setStepOutputs` — that recording
+    _is_ the "context transfers back".
+- **The reference's control flow is not followed, PROPOSED.** Its
+  `onSuccess` / `onFailure` actions are not acted on — no `goto` / `end` /
+  nested `retry` escapes the reference; "context transfers back upon
+  completion" makes retry a call, and control transfer is `goto`'s job. It runs
+  once, bare.
+- **A failed reference does not break the chain, PROPOSED (weakest-held).**
+  "Completion", not "success": the reference runs for its effects, and the
+  retry proceeds regardless — a futile retry is bounded by `retryLimit`, while
+  failing the chain on reference failure invents semantics the spec doesn't
+  state. The alternative (fall through to the next failure action) is
+  defensible; flagging for review.
+- **Budget and cancellation:** a step reference charges one step-attempt; a
+  workflow reference charges whatever its sub-run spends (its own steps
+  charge). `throwIfAborted` before running the reference, riding the same seam
+  as the per-attempt check.
+- **Trace (open sub-question):** reference runs should be visible.
+  Lean proposal: a new optional `StepRunRecord` field (e.g.
+  `retryReferences?`) holding one record per firing — reusing
+  `subWorkflows` would conflate a step's own sub-workflow target with its
+  repair runs. Shape to settle in review.
 
 **2. Step-level `goto` to a `workflowId`.** Confirmed a must-have. Blocked on
 semantics rather than on code: 1.0.1 calls `goto` "a one-way transfer of workflow
@@ -447,10 +545,11 @@ analysis under "Cross-document workflow refs" above. Doing reference-retry first
 costs nothing here; doing this first would make both it and goto-workflow rebase
 around a changed collaborator seam.
 
-**Independent of that order:** workflow-level `parameters` (open question #2), the
-opt-in e2e petstore suite (§10), issue `#35` (per-source-description `server` /
-`serverVariables`), issue `#36` (request provenance for `RequestInterceptor`), and
-an `executeAll()` for libopenapi-style batch semantics (§5's interpretation note).
+**Independent of that order:** the opt-in e2e petstore suite (§10), issue `#39`
+(parameter inheritance as an apidom refractor plugin — cross-repo), issue `#35`
+(per-source-description `server` / `serverVariables`), issue `#36` (request
+provenance for `RequestInterceptor`), and an `executeAll()` for
+libopenapi-style batch semantics (§5's interpretation note).
 
 **Loose ends worth not losing:**
 
@@ -846,32 +945,37 @@ actions).
   shipped. If a future spec clarification demands union semantics, revisit — but
   do not reintroduce name-merge speculatively.
 
-How it's wired (as built):
+How it's wired — **superseded by `#49`** (the original `defaultActions` wiring
+below is kept for the record):
 
-- `StepExecutor.execute` gained an optional 4th arg
-  `defaultActions: StepDefaultActions` (`{ onSuccess?, onFailure? }`, the
-  workflow-level element lists). `#selectAction` selects from
-  `step.onSuccess ?? defaultActions.onSuccess` (failure symmetric). No merge, no
-  new helper — just `??`.
-- `ActionResolver.resolve` was widened to also accept the workflow-level list
-  element types (`WorkflowSuccessActionsElement` / `WorkflowFailureActionsElement`);
-  they share the step lists' shape, so selection is unchanged.
-- `WorkflowExecutor` resolves `workflow.successActions` / `workflow.failureActions`
-  once per run and passes them as `defaultActions` to every step. Selection stays
-  in StepExecutor because that is the only place with the post-response context.
+- **As of `#49`:** `ArazzoWorkflowNormalizer` copies the workflow's action lists
+  into each step that does not declare the corresponding key (`hasKey`, so an
+  explicit `onSuccess: []` suppresses the default rather than falling back).
+  Neither executor knows the rule exists — `selectActions` just reads the step's
+  own list. `StepDefaultActions` and the fourth `StepExecutor.execute` /
+  `selectActions` parameter were removed. Elements are shared into steps, not
+  cloned, so retry budgets keyed by element identity are unaffected.
+- _Original wiring (PR `#290`, removed by `#49`):_ `StepExecutor.execute` had an
+  optional 4th arg `defaultActions` selected via
+  `step.onSuccess ?? defaultActions.onSuccess`; `ActionResolver` was widened to
+  the workflow-level list element types; `WorkflowExecutor` resolved the
+  workflow lists once per run and passed them to every step.
 
-### parameters — FUTURE (still a merge)
+### parameters — DONE (`#40`, a genuine per-parameter merge)
 
-Workflow-level `parameters` remain out of scope for now. Unlike actions, the spec
-intent here is genuinely additive/override at the individual-parameter level:
+Unlike actions, this is additive/override at the individual-parameter level:
+**effective parameters** = merge(workflow.parameters, step.parameters) by
+parameter identity (`(name, in)`, an absent `in` equal only to another absent
+`in`), step overriding, step's own parameters leading the merged list.
 
-- **effective parameters** = merge(workflow.parameters, step.parameters) by
-  parameter identity (name+in), step overriding.
-  - _Wrinkle:_ StepExecutor reads `step.parameters` directly. To feed merged
-    params, either (a) WorkflowExecutor synthesizes a merged step element, or (b)
-    StepExecutor gains an optional `additionalParameters` arg. **Prefer (b)** — a
-    small, explicit StepExecutor extension mirroring the `defaultActions` arg
-    already added — over mutating elements. Not yet implemented.
+Neither of the two options this plan weighed (synthesized merged step element
+vs. an `additionalParameters` arg) shipped — `#40` put the rule in
+`ArazzoWorkflowNormalizer`, alongside dereferencing, mirroring how the OpenAPI
+normalizers inherit a Path Item's parameters into an Operation. A normalized
+step already carries what it inherits, so the executors never see the rule —
+the same shape `#49` later gave actions. Issue `#39` tracks promoting it into
+an apidom `normalize-parameters` refractor plugin so both sides read
+identically.
 
 ## 8. Reused building blocks (all already merged)
 
@@ -952,9 +1056,11 @@ Given size, consider 2–3 PRs rather than one:
 
 1. ~~`execute(workflowId, ...)` (id-in) vs `execute(workflow, ...)`
    (element-in)?~~ **RESOLVED: id-in.** Implemented.
-2. Param merge via StepExecutor `additionalParameters` arg (preferred) vs
-   synthesizing a merged step element? _(actions took the `defaultActions`-arg
-   route in §7; params should follow it — still to build.)_
+2. ~~Param merge via StepExecutor `additionalParameters` arg (preferred) vs
+   synthesizing a merged step element?~~ **RESOLVED (`#40`): neither** — the
+   merge happens in `ArazzoWorkflowNormalizer` at normalization time (§7), and
+   `#49` later moved actions inheritance to the same home, retiring the
+   `defaultActions` arg this question assumed as precedent.
 3. Step-level `goto` with `workflowId`: throw-initially (recommended) vs
    run-and-continue? _(shipped throw-initially: `goto-workflow-unsupported`.)_
 4. ~~dependsOn output sharing semantics — run-for-ordering only + expose via
