@@ -174,6 +174,18 @@ After each step, the selected `onSuccess` / `onFailure` action determines what h
   none remains, the break-default applies. Each step's `attempts` count is surfaced in the result
   trace.
 
+A `retry` action may also carry a `stepId` or `workflowId` **reference** — a repair to run before
+the next attempt (re-authenticate, reset a fixture). It fires once per attempt the action grants,
+not once for the whole retry chain: after the `retryAfter` wait, before the step is re-run. A
+`stepId` reference re-runs that step of the current workflow, charged against the same step budget
+as any attempt; a `workflowId` reference runs that workflow to completion, with no inputs — the
+specification gives a retry reference no input-mapping mechanism of its own, the same gap
+`dependsOn` has — recording its outputs under `$workflows.<id>` the way a sub-workflow step does.
+Neither kind's own success/failure actions are followed, and a failed reference does not break the
+retry chain: the specification speaks of the reference's _completion_, not its success, and a
+futile retry is still bounded by `retryLimit`. Reference runs are surfaced on the step's trace as
+`retryReferences`, one entry per firing.
+
 A runaway `goto` loop, a runaway `retry`, **or** a runaway tree of sub-workflow calls is bounded by
 `maxSteps` (default `1000`), which counts every step attempt and throws `ExecutionError`
 (`reason: 'step-budget'`) when exceeded. The budget is shared by the whole call tree rather than
@@ -306,10 +318,12 @@ a normal `status: 'failed'` result, **not** a throw — as is a run whose `depen
 Authoring errors throw `ExecutionError` — as does a cancelled run (`aborted`, above): an unknown
 `workflowId` (`workflow-not-found`), a `goto` to a step that does not exist
 (`goto-target-not-found`), a `goto` naming neither `stepId` nor `workflowId`
-(`goto-target-missing`), an action of an unknown `type` (`unknown-action-type`), a
-present but malformed `steps` or `dependsOn` (`malformed-steps`, `malformed-dependsOn`), a step
-naming more than one target (`ambiguous-target`), a cycle or over-deep nesting (`workflow-cycle`,
-`dependsOn-cycle`, `workflow-depth`), or the step-budget overflow above (`step-budget`).
+(`goto-target-missing`), a `retry` reference to a `stepId` this workflow does not declare
+(`retry-target-not-found`), an action of an unknown `type` (`unknown-action-type`), a
+present but malformed `steps` or `dependsOn` (`malformed-steps`, `malformed-dependsOn`), a step or a
+`retry` reference naming more than one target (`ambiguous-target`), a cycle or over-deep nesting
+(`workflow-cycle`, `dependsOn-cycle`, `workflow-depth`), or the step-budget overflow above
+(`step-budget`).
 
 A workflow's own `steps` and `dependsOn` lists are validated before any of its prerequisites run, so
 those two mistakes never fire live requests on the way to throwing. Errors belonging to an
@@ -324,11 +338,9 @@ These land in later work. Each throws `ExecutionError` with the noted `reason` r
 incorrectly:
 
 - **step-level `goto` to a `workflowId`** (`reason: 'goto-workflow-unsupported'`);
-- **a `retry` carrying a `stepId` / `workflowId` reference** to run before retrying
-  (`reason: 'retry-reference-unsupported'`);
 - **cross-document workflow references**: a `workflowId` / `dependsOn` naming a workflow in another
-  document via `$sourceDescriptions.<name>.<workflowId>`
-  (`reason: 'cross-document-workflow-unsupported'`); same-document only for now.
+  document via `$sourceDescriptions.<name>.<workflowId>` — including one named by a `retry`
+  reference — (`reason: 'cross-document-workflow-unsupported'`); same-document only for now.
 
 ## `StepExecutor`
 

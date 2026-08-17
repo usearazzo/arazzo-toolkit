@@ -108,6 +108,7 @@ export type {
   WorkflowExecuteOptions,
   WorkflowExecutionResult,
   StepRunRecord,
+  RetryReferenceRecord,
 } from './executor/WorkflowExecutor.ts';
 export { default as StepExecutor } from './executor/StepExecutor.ts';
 export type {

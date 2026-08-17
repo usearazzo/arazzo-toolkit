@@ -412,6 +412,25 @@ describe('WorkflowExecutor composition', function () {
       assert.include(calls[0].url, '/pet/42');
     });
 
+    specify(
+      "should not let a retry's workflowId reference clobber a dependency's recorded inputs",
+      async function () {
+        // echoInput is recorded once by dependsOn, with real inputs. doomed's
+        // retry then references the same workflowId — its own reference has no
+        // input channel and runs with {}, but that must refresh only the
+        // recorded outputs, not erase the inputs the dependency actually ran
+        // with.
+        const { executor } = makeExecutor(serverErrorResponse);
+
+        const result = await executor.execute('retryReferenceDoesNotClobberDependencyInputs', {
+          dependencyInputs: { echoInput: { seed: 'abc' } },
+        });
+
+        assert.strictEqual(result.status, 'failed');
+        assert.strictEqual(result.outputs.seed, 'abc');
+      },
+    );
+
     specify('should feed a transitive prerequisite from the same map', async function () {
       const { executor, calls } = makeExecutor();
 
@@ -524,6 +543,25 @@ describe('WorkflowExecutor composition', function () {
       assert.strictEqual(error.reason, 'workflow-cycle');
       assert.deepEqual(error.path, ['crossA', 'crossB', 'crossA']);
     });
+
+    specify(
+      'should classify a cycle formed through a retry workflowId reference as a call cycle',
+      async function () {
+        // the parent's failing step retries by running refCycleChild, whose own
+        // step calls back into the parent — grouped with 'step' for cycle
+        // classification, not 'dependsOn', so this reports workflow-cycle.
+        const { executor } = makeExecutor(serverErrorResponse);
+
+        const error = await captureError(executor.execute('retryRefCycleParent'));
+
+        assert.strictEqual(error.reason, 'workflow-cycle');
+        assert.deepEqual(error.path, [
+          'retryRefCycleParent',
+          'refCycleChild',
+          'retryRefCycleParent',
+        ]);
+      },
+    );
   });
 
   context('cancellation across the call tree', function () {

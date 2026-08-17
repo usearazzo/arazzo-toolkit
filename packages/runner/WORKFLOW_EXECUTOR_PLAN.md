@@ -1,16 +1,18 @@
 # WorkflowExecutor — implementation plan
 
-Status: the design below is implemented, across four PRs — the backbone
-(`#290`), retry (`#2`), sub-workflow steps + `dependsOn` (`#3`), and
-cancellation (`#4`) — plus a train of follow-ups (`#40`–`#61`, summarized in
-§0). §0 tracks
+Status: the design below is implemented, across five PRs — the backbone
+(`#290`), retry (`#2`), sub-workflow steps + `dependsOn` (`#3`),
+cancellation (`#4`), and reference-retry — plus a train of follow-ups
+(`#40`–`#61`, summarized in §0). §0 tracks
 what shipped, what deliberately still throws, and **what to build next**;
 the numbered sections after it are the design and its spec citations, kept
 because the reasoning outlives the code. Grounds on the merged StepExecutor
 (`#279`) and the Arazzo 1.0.1 spec (control-flow semantics quoted inline below).
 Target spec: 1.0.1, same as StepExecutor. (Arazzo 1.1.0, released 2026-05-17,
-leaves the retry-reference and `goto` wording quoted below unchanged — the
-ambiguities flagged in this plan stand in both versions. Its additions —
+leaves the `goto` wording quoted below unchanged — the goto-workflow ambiguity
+flagged in this plan stands in both versions; the retry-reference wording is
+likewise unchanged, but that ambiguity is now resolved and shipped, per §0.
+1.1.0's additions —
 step-level `dependsOn` / `timeout`, AsyncAPI steps, new criterion types,
 `querystring` already noted in issue `#33` — are out of this plan's scope.)
 
@@ -193,10 +195,11 @@ existing suite.
     map above. A future `executeAll()` is the natural home for libopenapi-style
     batch semantics.
 
-**Out of scope (still throwing, unchanged reasons):** reference-retry
-(`retry-reference-unsupported`) — next PR after this one, reusing this machinery;
-step-level goto-workflow; cross-document workflow refs. Workflow-level
-`parameters` and the e2e suite remain separate follow-ups.
+**Out of scope (still throwing, unchanged reasons):** step-level goto-workflow;
+cross-document workflow refs (including one named by a `retry` reference).
+Workflow-level `parameters` and the e2e suite remain separate follow-ups.
+(Reference-retry, listed here at the time this PR shipped, is now under
+"Shipped" below.)
 
 **Deviations from the design above, as built:**
 
@@ -401,15 +404,88 @@ them moved semantics this plan had placed elsewhere:
   "out of scope" note predates `#49` by two hours — actions now also live in
   the normalizer, though as local code, not the plugin.)
 
+### Shipped (reference-retry)
+
+Issue `#62` (input channel for a `workflowId` reference) filed alongside as a
+tracking issue, not a blocker — see below. Design proposed and reviewed
+2026-08-17 (§0 "Next" §1, superseded by this subsection); implemented the same
+day. All five PROPOSED decisions from that design shipped as proposed —
+frequency (once per firing), ordering (sleep → reference → retry), the
+reference's own control flow not followed, a failed reference not breaking the
+chain, and lazy target validation.
+
+- **Seam, as built:** `StepRetryRunContext` gains an optional
+  `runReference?: (action: FailureActionElement) => Promise<void>`.
+  `StepRetryRunner` still does not inspect `stepId`/`workflowId` itself —
+  `#referenced(action)` only detects *that* a reference is present; a referenced
+  action with no `runReference` supplied still throws the standalone
+  `retry-reference-unsupported` (fail-fast, before the `retryAfter` sleep,
+  unchanged from before this PR). With a callback supplied, the reference runs
+  after the sleep and before `continue`, and a throw from it propagates exactly
+  like a throw from the attempt thunk — ending the step, not retried around.
+- **`WorkflowExecutor` supplies the callback** (`#retryReference`), built once
+  per step and threaded into every `StepRetryRunner.run` call for that step:
+  - a `workflowId` reference runs through `#run` with the current frame's
+    `callStack`, entered via a new `'retry'` `WorkflowCallVia` — grouped with
+    `'step'` for cycle classification (a reference is a call the retrying step
+    makes, not a stated precondition), so a loop closed through one reports
+    `workflow-cycle`. It runs with **`{}` inputs**: the spec gives a retry
+    reference no input-mapping mechanism (the same gap `dependsOn` has), and
+    `{}` is the only spec-honest fallback — tracked, not blocked, by issue
+    `#62`, which weighs extending `dependencyInputs` or a dedicated
+    `referenceInputs` option if real flows need it. Its outputs are recorded
+    via `state.setWorkflow`, the same call `#runDependencies` makes — this
+    recording *is* "context transfers back". Cross-document
+    (`$sourceDescriptions.*`) reuses the existing `#rejectCrossDocumentWorkflow`
+    and throws the existing `cross-document-workflow-unsupported`.
+  - a `stepId` reference is looked up in the current workflow's `steps` via
+    `StepTransitionInterpreter.indexOfStep`, **parameterized** with an optional
+    `{ reason, label }` descriptor (defaulting to `goto-target-not-found` /
+    "goto target") rather than duplicated — a miss throws the new
+    `retry-target-not-found`, named for the missing target (matching the
+    existing `goto-target-not-found` convention: the error's `stepId` field is
+    the target, not the calling step). Found, it runs through the same
+    `#stepAttempt` + a new shared `#chargedAttempt` wrapper (factored out of
+    the main loop's per-attempt closure — budget charge, abort check before and
+    after) the step's own attempts use, so it is charged, cancellable, and — if
+    the target itself is a `workflowId` step — recurses the normal way with no
+    special case. Its outputs are recorded via `state.setStepOutputs`. A
+    self-reference (a step's retry naming its own `stepId`, e.g. the
+    pre-existing `retryWithReference` fixture) needs no special case either: it
+    is just one more attempt at that step.
+- **Trace:** new public `RetryReferenceRecord` (`{ kind: 'step' | 'workflow',
+  id, successful, subWorkflow? }`), one per firing, on a new optional
+  `StepRunRecord.retryReferences` field — kept separate from `subWorkflows`
+  because a reference belongs to the *retry*, not to the step's own target.
+  `subWorkflow` carries the nested run when the reference invoked a workflow,
+  whether directly (`kind: 'workflow'`) or because a referenced step itself
+  targets one (`kind: 'step'`).
+- **Budget:** a `stepId` reference charges one step-attempt (via
+  `#chargedAttempt`, same as any step); a `workflowId` reference charges only
+  what its sub-run spends — matching the sub-workflow-step convention §0
+  already records ("1 for the step itself plus whatever its sub-run spends").
+- `retry-reference-unsupported` now means specifically "a referenced retry
+  action was run through `StepRetryRunner` directly, with no `runReference`
+  supplied" — `WorkflowExecutor` never triggers it anymore; the standalone
+  unit test for it (`StepRetryRunner.ts`) is the only place it still fires.
+
+**Tests:** 5 unit tests on `StepRetryRunner` (once-per-firing not
+once-per-chain, sleep-then-reference ordering, no call for a reference-free
+retry, no call once exhausted, a throwing callback propagates and halts);
+6 `WorkflowExecutor` tests (self-reference — failed reference doesn't break the
+chain; a repair-step scenario proving the next attempt reads the reference's
+outputs; missing `stepId` target; a `workflowId` reference running to
+completion with its outputs reachable via `$workflows`; budget charged for the
+reference specifically; abort during the `retryAfter` wait stops before the
+reference runs at all); 1 `WorkflowExecutorComposition` test (a cycle closed
+through a `workflowId` reference classifies as `workflow-cycle`, confirming
+`'retry'` groups with `'step'` for that purpose).
+
 ### Not yet implemented / missing
 
 Each currently **throws `ExecutionError`** rather than misbehaving (or is simply
 absent), and is scoped to a follow-up:
 
-- **`retry` with a `stepId` / `workflowId` reference** (§6) — "the reference is
-  executed and the context is returned, after which the current step is retried".
-  Throws `reason: 'retry-reference-unsupported'`; lands with sub-workflow / goto
-  support since it reuses that machinery.
 - **Step-level `goto` to a `workflowId`** (§4 note) — throws
   `reason: 'goto-workflow-unsupported'`; land once one-way-vs-return semantics
   are confirmed.
@@ -436,100 +512,22 @@ absent), and is scoped to a follow-up:
     URI together with the workflowId), as §4c anticipated; today workflowId alone
     is unambiguous precisely because a run cannot leave its document.
 
-  So: its own PR, sequenced after reference-retry or before it, but not folded
-  into either.
-
-- **Retry-reference target validation** — we intentionally do NOT validate the
-  `stepId` / `workflowId` a reference-retry points at before throwing
-  `retry-reference-unsupported`. Rejection is lazy (fire-time only, so an
-  unreachable reference-retry never fails an otherwise-valid run), and validating
-  the target belongs with the feature that consumes it, not its rejection:
-  - a `workflowId` reference may be cross-document (`$sourceDescriptions.<name>.<id>`),
-    so validating it needs the deferred cross-doc resolution above — can't be done
-    in isolation;
-  - a `stepId` reference _could_ be checked cheaply against the current workflow
-    (reusing `#indexOfStep`, same as `goto`), but validating only that half is a
-    lopsided contract, and the author can't act on "valid target, still
-    unsupported" anyway.
-    So both land with reference-retry (which reuses the sub-workflow / goto-workflow
-    machinery); until then the single `retry-reference-unsupported` throw is the
-    contract.
+  So: its own PR, sequenced after (or before) goto-workflow, but not folded
+  into either. (Reference-retry, which this note originally sequenced against,
+  shipped first and needed none of this — a `stepId` reference is same-document
+  by construction, and a `workflowId` reference reuses the existing
+  `#rejectCrossDocumentWorkflow` check rather than needing new scoping.)
 - **e2e suite** (§10) — only the deterministic stub unit suite exists; a real
   multi-step petstore run end-to-end is a separate opt-in follow-up.
 
 ### Next — what to build, and what each decision costs
 
-Everything above is done. This is the queue, ordered by what it would cost to do
-later rather than by appetite, so the sequencing argument is visible and can be
-overruled.
+Reference-retry (formerly item 1 here) shipped 2026-08-17 — see §0 "Shipped
+(reference-retry)" above for what was built, including how each decision this
+section originally marked PROPOSED was resolved (all five shipped as
+proposed). What remains:
 
-**1. Reference-retry.** A `retry` carrying a `stepId` / `workflowId` to run before
-retrying; currently `retry-reference-unsupported`. Small, and it reuses the
-sub-workflow machinery that just landed. The deferred target validation lands with
-it. Design proposed below (2026-08-17) — decisions marked PROPOSED await review
-before coding.
-
-#### Reference-retry design (PROPOSED, pre-implementation)
-
-Spec basis (1.0.1 §Failure Action Object; 1.1.0 wording identical): `stepId` /
-`workflowId` are "only relevant when the `type` field value is `"goto"` or
-`"retry"`", mutually exclusive, the `stepId` "MUST be within the current
-workflow", and — the operative sentence — "When used with `"retry"`, context
-transfers back upon completion of the specified step [workflow]." Frequency per
-attempt vs. per chain is unspecified in both versions.
-
-- **Frequency — once per firing (i.e., per attempt), PROPOSED.** The reference
-  exists to repair state before retrying (re-authenticate, reset a fixture); a
-  repair that ran only before attempt 1 leaves attempts 2..N unrepaired, which
-  defeats its purpose. It also composes: exhaustion fall-through means a chain
-  can hold several `retry` actions, each with its own reference and budget —
-  "once per chain" has no coherent meaning there, "each time this action fires"
-  does. Duplicate side effects are the author's own declaration (`retryLimit`
-  bounds them).
-- **Ordering — `sleep(retryAfter)` → run reference → re-run step, PROPOSED.**
-  `retryAfter` is "seconds to delay _after the step failure_" — backpressure
-  anchored to the failure, and a reference firing its own requests should not
-  be thrown into that same window; a repair like a fresh token is also most
-  valuable immediately before the retry, not before a long wait.
-- **Seam — the runner decides _when_, the executor decides _how_.**
-  `StepRetryRunner` stays ignorant of what a reference is:
-  `StepRetryRunContext` gains a
-  `runReference?: (action: FailureActionElement) => Promise<void>` callback
-  (mirroring how the attempt thunk already hides budgets and cancellation),
-  invoked at the point `#rejectReference` throws today. `WorkflowExecutor`
-  supplies it:
-  - `workflowId` reference → recurse through `#run` with the current frame and
-    scope, exactly like a sub-workflow step: budget charged by the sub-run,
-    cycle/depth guarded by the shared stack, recorded via `state.setWorkflow`
-    so `$workflows.<id>.outputs` resolves; cross-document throws the existing
-    `cross-document-workflow-unsupported`.
-  - `stepId` reference → resolved against the current workflow (the deferred
-    target validation lands here: unknown id throws at fire time, lazy per the
-    settled position above); executed as one plain step execution against the
-    current state, its outputs recorded via `setStepOutputs` — that recording
-    _is_ the "context transfers back".
-- **The reference's control flow is not followed, PROPOSED.** Its
-  `onSuccess` / `onFailure` actions are not acted on — no `goto` / `end` /
-  nested `retry` escapes the reference; "context transfers back upon
-  completion" makes retry a call, and control transfer is `goto`'s job. It runs
-  once, bare.
-- **A failed reference does not break the chain, PROPOSED (weakest-held).**
-  "Completion", not "success": the reference runs for its effects, and the
-  retry proceeds regardless — a futile retry is bounded by `retryLimit`, while
-  failing the chain on reference failure invents semantics the spec doesn't
-  state. The alternative (fall through to the next failure action) is
-  defensible; flagging for review.
-- **Budget and cancellation:** a step reference charges one step-attempt; a
-  workflow reference charges whatever its sub-run spends (its own steps
-  charge). `throwIfAborted` before running the reference, riding the same seam
-  as the per-attempt check.
-- **Trace (open sub-question):** reference runs should be visible.
-  Lean proposal: a new optional `StepRunRecord` field (e.g.
-  `retryReferences?`) holding one record per firing — reusing
-  `subWorkflows` would conflate a step's own sub-workflow target with its
-  repair runs. Shape to settle in review.
-
-**2. Step-level `goto` to a `workflowId`.** Confirmed a must-have. Blocked on
+**1. Step-level `goto` to a `workflowId`.** Confirmed a must-have. Blocked on
 semantics rather than on code: 1.0.1 calls `goto` "a one-way transfer of workflow
 control", which is ambiguous inside a running workflow (does control return?).
 Worth settling as a question to the specification maintainers before building,
@@ -537,13 +535,11 @@ since guessing wrong is expensive to unwind. Expected shape: another `Transition
 kind the executor acts on, leaving the interpreter pure (see
 `StepTransitionInterpreter`).
 
-**3. Cross-document workflow references.** The largest, because it is a design
+**2. Cross-document workflow references.** The largest, because it is a design
 change rather than a lookup — the document must move into the per-invocation
 frame, and `StepExecutor`, injected pre-bound to one document, needs either a
 per-call document argument or a `(document) => StepExecutor` factory. Full
-analysis under "Cross-document workflow refs" above. Doing reference-retry first
-costs nothing here; doing this first would make both it and goto-workflow rebase
-around a changed collaborator seam.
+analysis under "Cross-document workflow refs" above.
 
 **Independent of that order:** the opt-in e2e petstore suite (§10), issue `#39`
 (parameter inheritance as an apidom refractor plugin — cross-repo), issue `#35`
@@ -775,16 +771,40 @@ by `ActionResolver`: `toValue(action.type)`, `action.stepId`, `action.workflowId
 `action.retryAfter`, `action.retryLimit`. Guard element presence with
 `isStringElement` / `isNumberElement`.
 
-**goto-workflow note (needs review):** the spec calls `goto` "a one-way transfer
-of workflow control". Strict reading = control leaves the current workflow and
-does not return. But a step-level `goto` to a workflow inside a running workflow
-is ambiguous in 1.0.1. Safe initial behavior: treat step-level `goto-workflow`
-as run-sub-workflow-then-continue (like a call), and flag the ambiguity — OR
-throw "unsupported" until clarified. **Recommend: throw `reason:'goto-workflow-
-unsupported'` initially** (mirrors how StepExecutor threw on `workflowId` until
-we were ready), and implement once semantics confirmed. Sub-workflow _calls_
-(step with `workflowId` field, §4-below) are the well-defined recursion path and
-ARE supported.
+**goto-workflow note — semantics DECIDED (2026-08-17), implementation still
+blocked:** the spec calls `goto` "a one-way transfer of workflow control".
+Settled reading: **one-way, no return** — the current workflow's own run ends
+at the `goto`; it does not resume afterward. Basis: the `stepId` and
+`workflowId` field descriptions both carry the identical clause "When used
+with `retry`, context transfers back upon completion of the specified
+step/workflow" — scoped to `retry` specifically, applied to both reference
+kinds. If context also transferred back for `goto`, the sentence would state
+it unconditionally, the way "mutually exclusive to stepId/workflowId" is
+stated unconditionally in the same sentence; the scoping is the signal that
+`goto` does not return. Consistent with `goto`-to-`stepId`'s existing
+semantics in this executor — a one-way jump with no return address remembered
+— so crossing a workflow boundary the same way is the more consistent reading,
+not a special case. Traced to
+[OAI/Arazzo-Specification#66](https://github.com/OAI/Arazzo-Specification/issues/66),
+the original proposal, which flagged this exact question as "TBD" at the time
+and never resolved it for `goto` specifically (only `retry` got the explicit
+sentence). Recorded in
+[issue #65](https://github.com/usearazzo/arazzo-toolkit/issues/65); still
+worth filing upstream to confirm/correct, but this is now the working
+position, not an open question.
+
+**Still blocking implementation — a result-shape question, not a semantics
+one:** since the current workflow never reaches its own normal completion
+when this fires, its own `outputs` declaration is never evaluated. The literal
+reading is a genuine tail-call — the target workflow's own result
+(`workflowId`, `outputs`, `status`, `steps`) becomes what the top-level
+`execute()` caller receives — with the original workflow's partial trace up
+to the `goto` needing a home (attached somewhere on the result, or dropped).
+Needs its own design pass before coding starts; throw `reason:
+'goto-workflow-unsupported'` continues until then (mirrors how StepExecutor
+threw on `workflowId` until sub-workflow steps were ready). Sub-workflow
+_calls_ (step with `workflowId` field, §4b below) are the well-defined
+recursion path and ARE supported — and, unlike this one, do return.
 
 ## 4b. Sub-workflow steps (step.workflowId)
 
@@ -891,7 +911,9 @@ processed."` Values are workflowIds (or `$sourceDescriptions.<name>.<id>`).
 **Status: SHIPPED (PR #2)** — the draft below is the original design sketch;
 the implemented resolution (walk `matchedActions`, per-retry budgets keyed by
 element identity, exhaustion fall-through) is recorded in §0 and open question
-#5. Kept for the spec quotes and rationale.
+#5. Kept for the spec quotes and rationale. The `if action has stepId/workflowId:
+execute that reference first` line in the sketch below was left unimplemented
+by PR #2 and shipped later, separately — see §0 "Shipped (reference-retry)".
 
 Spec: `retryLimit` default 1, `retryAfter` seconds delay, and crucially
 `"retryLimit MUST be exhausted prior to executing subsequent failure actions"`.
@@ -1003,7 +1025,9 @@ New `ExecutionError` reasons (extend the existing error type, no new class):
 (initial), `step-budget`, `workflow-depth`,
 `cross-document-workflow-unsupported` (initial), `aborted` (PR #4 — the caller
 cancelled the run; carries `workflowId`/`stepId`/`path` and the signal's own
-`reason` as `cause`).
+`reason` as `cause`), `retry-target-not-found` (reference-retry — a `retry`
+action's `stepId` reference names no step in the current workflow; carries the
+missing target as `stepId`, matching `goto-target-not-found`'s convention).
 
 `workflow-cycle` carries the offending `path` (chain of workflowIds, e.g.
 A → B → A). Keep it distinct from `workflow-depth`: cycle = guaranteed

@@ -80,6 +80,17 @@ class WorkflowExecutionState {
   }
 
   /**
+   * The inputs/outputs already recorded for `workflowId`, or `undefined` if
+   * none has been recorded yet. A narrow read of a single entry, for a caller
+   * that needs one without reconstructing the whole context via `toContext`.
+   */
+  getWorkflow(
+    workflowId: string,
+  ): Readonly<{ inputs?: Record<string, unknown>; outputs?: Record<string, unknown> }> | undefined {
+    return this.#workflows.get(workflowId);
+  }
+
+  /**
    * Produces the runtime expression context for the current evaluation site.
    *
    * The accumulated workflow-scoped state is combined with the optional
