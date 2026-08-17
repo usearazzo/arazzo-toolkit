@@ -10,6 +10,7 @@ import {
   StepExecutor,
   OpenAPIOperationExecutor,
   ExecutionError,
+  ResolverError,
   type HTTPClient,
   type OpenAPIOperationRequest,
   type StepRunRecord,
@@ -51,6 +52,22 @@ const captureError = async (promise: Promise<unknown>): Promise<ExecutionError> 
   }
   assert.instanceOf(caught, ExecutionError);
   return caught as ExecutionError;
+};
+
+/**
+ * Runs a promise expected to reject with a {@link ResolverError} — the shape
+ * checks {@link OutputResolver.validateShape} throws, which are not an
+ * {@link ExecutionError} like the executor's own authoring-error checks.
+ */
+const captureResolverError = async (promise: Promise<unknown>): Promise<ResolverError> => {
+  let caught: unknown;
+  try {
+    await promise;
+  } catch (error) {
+    caught = error;
+  }
+  assert.instanceOf(caught, ResolverError);
+  return caught as ResolverError;
 };
 
 /**
@@ -589,6 +606,24 @@ describe('WorkflowExecutor composition', function () {
       assert.strictEqual(error.reason, 'malformed-steps');
       assert.strictEqual(calls.length, 0);
     });
+
+    specify(
+      'should reject malformed outputs before running prerequisites or steps',
+      async function () {
+        // both the prerequisite and the workflow's own step would make live
+        // requests; a workflow that cannot possibly produce its outputs is
+        // unrunnable from the start, so neither must fire.
+        const { executor, calls } = makeExecutor();
+
+        const error = await captureResolverError(
+          executor.execute('malformedOutputsWithDependency'),
+        );
+
+        assert.strictEqual(error.reason, 'malformed-outputs');
+        assert.strictEqual(error.workflowId, 'malformedOutputsWithDependency');
+        assert.strictEqual(calls.length, 0);
+      },
+    );
 
     specify('should throw for a present but non-list "dependsOn"', async function () {
       const { executor } = makeExecutor();
