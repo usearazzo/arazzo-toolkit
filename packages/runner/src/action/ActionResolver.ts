@@ -75,6 +75,12 @@ class ActionResolver {
    * is present but not a list — is exactly the case where the element's own type
    * no longer distinguishes them. `scope` names the step itself, for the same
    * reason, in a thrown {@link ResolverError}.
+   *
+   * A well-formed list whose entry is not a Success/Failure Action Object
+   * throws rather than being skipped: an unrecognized entry is indistinguishable
+   * from a step that deliberately declared no action for it, and the `goto` /
+   * `end` its author was reaching for would otherwise never happen without a
+   * word said about why.
    */
   resolveAll(
     actions: StepOnSuccessElement | StepOnFailureElement | undefined,
@@ -95,7 +101,12 @@ class ActionResolver {
 
     const matched: SelectedAction[] = [];
     for (const action of actions) {
-      if (!isSuccessActionElement(action) && !isFailureActionElement(action)) continue;
+      if (!isSuccessActionElement(action) && !isFailureActionElement(action)) {
+        throw new ResolverError(
+          `\`${field}\` contains an entry that is not a Success/Failure Action Object`,
+          { ...scope, target: field, reason: 'malformed-action-entry' },
+        );
+      }
       if (this.#criteriaMet(action, isCriterionMet, scope)) {
         matched.push(action);
       }
@@ -106,13 +117,13 @@ class ActionResolver {
 
   /**
    * Whether every criterion of the action passes. An action with no criteria
-   * matches vacuously; a malformed (non-Criterion) entry fails the action
-   * rather than being skipped.
+   * matches vacuously.
    *
-   * A `criteria` that is present but not a list is a different matter, and
-   * throws: an entry the resolver cannot read is one action failing to match,
-   * whereas a container it cannot read is a document that does not say what its
-   * author meant — the same distinction the list-shaped fields draw elsewhere.
+   * A `criteria` that is present but not a list, or that contains an entry
+   * that is not a Criterion Object, throws either way: an entry the resolver
+   * cannot read and a container it cannot read are both a document that does
+   * not say what its author meant, the same as an unrecognized entry in the
+   * action list itself.
    */
   #criteriaMet(
     action: SelectedAction,
@@ -130,7 +141,13 @@ class ActionResolver {
     }
 
     for (const criterion of criteria) {
-      if (!isCriterionElement(criterion) || !isCriterionMet(criterion)) return false;
+      if (!isCriterionElement(criterion)) {
+        throw new ResolverError(
+          "An action's `criteria` contains an entry that is not a Criterion Object",
+          { ...scope, target: 'criteria', reason: 'malformed-criterion' },
+        );
+      }
+      if (!isCriterionMet(criterion)) return false;
     }
     return true;
   }

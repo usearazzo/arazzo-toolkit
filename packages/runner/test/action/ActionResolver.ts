@@ -154,5 +154,41 @@ describe('ActionResolver', function () {
         assert.strictEqual(error.stepId, stepId);
       },
     );
+
+    specify(
+      'should throw ResolverError for a well-formed list entry that is not a Success/Failure Action Object',
+      function () {
+        const actions = onSuccess({ name: 'a', type: 'end' }, 'not-an-action');
+
+        const error = assert.throws(
+          () => resolver.resolveAll(actions, always, 'onSuccess', scope),
+          ResolverError,
+          /contains an entry that is not a Success\/Failure Action Object/,
+        ) as unknown as ResolverError;
+
+        assert.strictEqual(error.reason, 'malformed-action-entry');
+        assert.strictEqual(error.target, 'onSuccess');
+        assert.strictEqual(error.stepId, stepId);
+      },
+    );
+
+    specify(
+      'should throw ResolverError for an action criteria entry that is not a Criterion Object',
+      function () {
+        const actions = new StepOnSuccessElement([
+          refractSuccessAction({ name: 'a', type: 'end', criteria: ['not-a-criterion'] }),
+        ]);
+
+        const error = assert.throws(
+          () => resolver.resolveAll(actions, byCondition, 'onSuccess', scope),
+          ResolverError,
+          /contains an entry that is not a Criterion Object/,
+        ) as unknown as ResolverError;
+
+        assert.strictEqual(error.reason, 'malformed-criterion');
+        assert.strictEqual(error.target, 'criteria');
+        assert.strictEqual(error.stepId, stepId);
+      },
+    );
   });
 });
