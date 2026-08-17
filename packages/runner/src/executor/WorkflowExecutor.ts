@@ -1,5 +1,5 @@
 import { toValue } from '@speclynx/apidom-core';
-import { isArrayElement, isStringElement } from '@speclynx/apidom-datamodel';
+import { isArrayElement, isObjectElement, isStringElement } from '@speclynx/apidom-datamodel';
 import {
   isStepElement,
   type WorkflowElement,
@@ -22,6 +22,7 @@ import WorkflowCallStack, { type WorkflowCallVia } from './WorkflowCallStack.ts'
 import StepTransitionInterpreter from './StepTransitionInterpreter.ts';
 import type { SelectedAction } from '../action/ActionResolver.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
+import ResolverError from '../errors/ResolverError.ts';
 import { readAbortSignal, throwIfAborted } from './abort.ts';
 
 /**
@@ -423,6 +424,12 @@ class WorkflowExecutor {
     // authoring error, and discovering it only after the dependencies have
     // fired would mean live side effects on the way to a throw.
     const steps = this.#orderedSteps(workflow, workflowId);
+    // same reasoning extends to `outputs`: a workflow that cannot possibly
+    // produce them is unrunnable from the start, and only a shape check is
+    // needed to know that — no run state is required for it. Checking now, not
+    // at `#result` where it used to be resolved, means the throw lands before
+    // the first request rather than after the last.
+    this.#validateWorkflowOutputsShape(workflow, workflowId);
 
     const dependencies = await this.#runDependencies(workflow, invocation, scope);
     if (dependencies.some((dependency) => dependency.status === 'failed')) {
@@ -835,6 +842,28 @@ class WorkflowExecutor {
         );
       }
       return step;
+    });
+  }
+
+  /**
+   * Checks that the workflow's `outputs`, if present, is a map — without
+   * resolving any of its values. The same check {@link OutputResolver.resolve}
+   * makes on its way to actually resolving them, run here early instead: the
+   * shape needs no run state, so this can — and, to keep a malformed `outputs`
+   * from costing the run its live side effects, must — happen alongside
+   * {@link WorkflowExecutor.#orderedSteps}, before any prerequisite or step of
+   * the workflow runs.
+   */
+  #validateWorkflowOutputsShape(workflow: WorkflowElement, workflowId: string): void {
+    if (!workflow.hasKey('outputs')) return;
+
+    const outputs = workflow.outputs;
+    if (isObjectElement(outputs)) return;
+
+    throw new ResolverError('`outputs` is present but is not a map', {
+      workflowId,
+      target: 'outputs',
+      reason: 'malformed-outputs',
     });
   }
 

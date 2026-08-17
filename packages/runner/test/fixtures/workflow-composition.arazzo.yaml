@@ -160,6 +160,18 @@ workflows:
       - setupA
     steps: not-a-list
 
+  # a malformed "outputs" on a workflow that also declares a prerequisite and a
+  # step of its own: the authoring error must be raised before either fires a
+  # live request — the run is unrunnable from the start, since it can never
+  # produce the outputs it promises.
+  - workflowId: malformedOutputsWithDependency
+    dependsOn:
+      - setupA
+    steps:
+      - stepId: only
+        operationId: getInventory
+    outputs: not-a-map
+
   # a child that always fails its criteria (driven by a 500 response). It still
   # resolves outputs — a failed run's outputs are resolved like any other.
   - workflowId: failingChild
