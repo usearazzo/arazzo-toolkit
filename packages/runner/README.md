@@ -102,9 +102,8 @@ registry.clear(); // drop cached documents to reclaim memory
 steps in list order, calling `StepExecutor` per step, and owns the run state (a
 `WorkflowExecutionState`) that accumulates each step's outputs so later steps can read
 `$steps.*.outputs`. It interprets the control-flow actions `StepExecutor` only _selects_ (advancing
-to the next step, jumping via `goto`, or stopping on `end` or the failure break-default), supplies
-each step the workflow-level default `successActions` / `failureActions`, and resolves the
-workflow's `outputs` against the final state.
+to the next step, jumping via `goto`, or stopping on `end` or the failure break-default), and
+resolves the workflow's `outputs` against the final state.
 
 Give it the entry document, registry, and a `StepExecutor` once; call `execute` per run with a
 `workflowId` and its `inputs`:
@@ -219,6 +218,14 @@ declares its own `onSuccess` / `onFailure` **overrides** the corresponding workf
 There is no per-action merge, and success and failure fall back independently (a step may override
 only its failure actions and still inherit the workflow's success actions).
 
+Like the parameters below, this is inheritance rather than dispatch, and happens in
+`ArazzoWorkflowNormalizer`: a normalized workflow's steps already carry the defaults they inherit,
+so the executors only ever read a step's own `onSuccess` / `onFailure`. Presence is what the
+override keys off, not content — a step declaring `onSuccess: []` has overridden the default with an
+empty set of actions and inherits nothing, whereas a step omitting the key entirely inherits.
+
+Both kinds of step take the defaults, including one targeting a `workflowId`.
+
 ### Workflow-level parameters
 
 A workflow's `parameters` apply to every step it contains. Unlike the actions above these **merge**
@@ -226,9 +233,9 @@ rather than replace: the specification lets a step override an inherited paramet
 never remove" one, so each step ends up with the union of the two lists, its own declaration
 winning.
 
-This is inheritance, not dispatch, so it happens in `ArazzoWorkflowNormalizer` — a normalized
-workflow's steps already carry what they inherit, exactly as a normalized OpenAPI operation already
-carries the parameters it inherits from its Path Item. Neither executor knows about it.
+This happens in `ArazzoWorkflowNormalizer` too — a normalized workflow's steps already carry what
+they inherit, exactly as a normalized OpenAPI operation already carries the parameters it inherits
+from its Path Item. Neither executor knows about it.
 
 A parameter's identity is the **`(name, in)` pair**, not `name` alone — the rule ApiDOM applies for
 that OpenAPI-side inheritance ("a unique parameter is defined by a combination of a name and

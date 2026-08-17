@@ -3,6 +3,8 @@ import {
   isParameterElement,
   isStepElement,
   StepParametersElement,
+  StepOnSuccessElement,
+  StepOnFailureElement,
   type WorkflowElement,
 } from '@speclynx/apidom-ns-arazzo-1';
 import { toValue } from '@speclynx/apidom-core';
@@ -35,26 +37,27 @@ const normalizerOptionsOverride = mergeOptions(arazzoProviderOptions as ApiDOMRe
  * Normalizes an extracted Arazzo workflow.
  *
  * Dereferences the workflow subtree ($components.* references),
- * producing a self-contained workflow element, then inherits the
- * workflow's `parameters` into each of its steps.
+ * producing a self-contained workflow element, then inherits the workflow's
+ * "applicable for all steps" defaults — its `parameters`, and its
+ * `successActions` / `failureActions` — into each of its steps.
  *
- * Both steps mutate, and what they mutate is the document itself: the extractor
+ * All passes mutate, and what they mutate is the document itself: the extractor
  * hands over the live workflow node out of `document.parseResult`, and
  * dereferencing runs `immutable: false`, returning that same instance. Writing
  * through to the document is what lets the registry act as a natural cache —
  * a workflow reached a second time is already dereferenced and already
- * inherited into, so neither pass repeats. The inheritance is idempotent for
+ * inherited into, so no pass repeats. The inheritance is idempotent for
  * exactly that reason.
  *
- * The two writes differ in kind, which is worth knowing before sharing a
+ * The writes differ in kind, which is worth knowing before sharing a
  * registry. Dereferencing only *resolves* what the document already says — a
  * `$ref` replaced by its target means the same thing. Inheritance *synthesizes*:
- * afterwards a step carries `parameters` its source never declared, so a
- * consumer that reads the document back (`APIDocument.toJSON()`) sees one that
- * no longer matches the file it was parsed from. The OpenAPI normalizers write
- * inherited servers, parameters and security requirements into their documents
- * the same way, so this is the layer's established contract rather than a
- * property of Arazzo.
+ * afterwards a step carries `parameters` or an `onSuccess` its source never
+ * declared, so a consumer that reads the document back (`APIDocument.toJSON()`)
+ * sees one that no longer matches the file it was parsed from. The OpenAPI
+ * normalizers write inherited servers, parameters and security requirements into
+ * their documents the same way, so this is the layer's established contract
+ * rather than a property of Arazzo.
  * @public
  */
 class ArazzoWorkflowNormalizer {
@@ -66,7 +69,7 @@ class ArazzoWorkflowNormalizer {
 
   /**
    * Dereferences the workflow subtree against its parent document, then inherits
-   * the workflow's `parameters` into its steps.
+   * the workflow's `parameters` and default actions into its steps.
    */
   async normalize(workflow: WorkflowElement, document: ArazzoDocument): Promise<WorkflowElement> {
     let dereferenced: WorkflowElement;
@@ -91,11 +94,12 @@ class ArazzoWorkflowNormalizer {
       );
     }
 
-    // normalization (mutable) — after dereferencing, so a `parameters` list
-    // reaching the steps through a $components reference is inherited as a
-    // resolved Parameter Object rather than as the Reference Object it was
-    // written as.
+    // normalization (mutable) — after dereferencing, so a `parameters` or
+    // action list reaching the steps through a $components reference is
+    // inherited as a resolved Parameter / Success Action Object rather than as
+    // the Reusable Object it was written as.
     this.#inheritParametersToSteps(dereferenced);
+    this.#inheritActionsToSteps(dereferenced);
 
     return dereferenced;
   }
@@ -171,6 +175,59 @@ class ArazzoWorkflowNormalizer {
       step.parameters = new StepParametersElement(
         uniqWith(ParameterIdentity.equal, [...own, ...applicable]),
       );
+    }
+  }
+
+  /**
+   * Inherits the workflow's `successActions` / `failureActions` into each step
+   * that declares no `onSuccess` / `onFailure` of its own.
+   *
+   * Per Arazzo 1.0.1 both lists are "applicable for all steps described under
+   * this workflow", and a step's own list **overrides** the corresponding
+   * workflow one — wholesale, with no per-action merge, which is where this
+   * differs from the parameters above. Success and failure fall back
+   * independently: a step may override only its `onFailure` and still inherit
+   * the workflow's `successActions`.
+   *
+   * Presence is tested with `hasKey`, not truthiness: a step declaring an empty
+   * list (`onSuccess: []`) has *overridden* the default with an empty set of
+   * actions, not asked for one — it is skipped, as is a step whose `onSuccess`
+   * is present but not a list, for the same reason the parameters pass leaves a
+   * malformed list alone. Testing the key is also what makes the pass
+   * idempotent: after the first run the step has it, so a workflow reached again
+   * through the registry cache is skipped.
+   *
+   * Unlike parameters there is no step-kind filter — an action names a
+   * transition within the workflow, which is as meaningful for a step targeting
+   * a `workflowId` as for one invoking an operation, so both kinds take the
+   * defaults.
+   *
+   * The workflow's own action *elements* are shared into the steps rather than
+   * copied, matching what falling back to one shared list did before: retry
+   * budgets are keyed by action element identity ({@link StepRetryRunner}) and
+   * held per `run()` call, so steps sharing an inherited `retry` share nothing
+   * that outlives the attempt loop.
+   */
+  #inheritActionsToSteps(workflow: WorkflowElement): void {
+    if (!isArrayElement(workflow.steps)) return;
+
+    const { successActions, failureActions } = workflow;
+    // an empty list defaults to nothing, which is what declaring no list
+    // already means — synthesizing one would only move the document further
+    // from its source for no change in behavior.
+    const inheritSuccess = isArrayElement(successActions) && !successActions.isEmpty;
+    const inheritFailure = isArrayElement(failureActions) && !failureActions.isEmpty;
+    if (!inheritSuccess && !inheritFailure) return;
+
+    for (const step of workflow.steps) {
+      if (!isStepElement(step)) continue;
+
+      if (inheritSuccess && !step.hasKey('onSuccess')) {
+        step.onSuccess = new StepOnSuccessElement([...successActions]);
+      }
+      if (inheritFailure && !step.hasKey('onFailure')) {
+        step.onFailure = new StepOnFailureElement([...failureActions]);
+      }
     }
   }
 }

@@ -1,11 +1,6 @@
 import { toValue } from '@speclynx/apidom-core';
 import { isArrayElement, isStringElement } from '@speclynx/apidom-datamodel';
-import {
-  isCriterionElement,
-  type StepElement,
-  type WorkflowSuccessActionsElement,
-  type WorkflowFailureActionsElement,
-} from '@speclynx/apidom-ns-arazzo-1';
+import { isCriterionElement, type StepElement } from '@speclynx/apidom-ns-arazzo-1';
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
 import type DocumentRegistry from '../registry/DocumentRegistry.ts';
@@ -76,23 +71,6 @@ export interface StepExecutorOptions {
    * the step executor is agnostic to how the operation reaches the live API.
    */
   readonly operationExecutor: OpenAPIOperationExecutor;
-}
-
-/**
- * The workflow-level default actions a step falls back to when it declares none
- * of its own.
- *
- * Per Arazzo 1.0.1 a workflow's `successActions` / `failureActions` are
- * "applicable for all steps"; a step that declares its own `onSuccess` /
- * `onFailure` list **overrides** the corresponding workflow list wholesale —
- * there is no per-action merge. The two lists are independent: a step may
- * override only its failure actions and still inherit the workflow's success
- * actions.
- * @public
- */
-export interface StepDefaultActions {
-  readonly onSuccess?: WorkflowSuccessActionsElement;
-  readonly onFailure?: WorkflowFailureActionsElement;
 }
 
 /**
@@ -169,17 +147,11 @@ class StepExecutor {
    * request nobody is waiting for, whose wire-level cancellation would surface
    * as a transport {@link ClientError} — a request that failed on its own terms
    * — rather than as the withdrawal it is.
-   *
-   * `defaultActions` are the workflow-level `successActions` / `failureActions`
-   * the step falls back to when it declares no `onSuccess` / `onFailure` of its
-   * own; the workflow executor supplies them. A step's own list overrides the
-   * matching default wholesale — see {@link StepDefaultActions}.
    */
   async execute(
     step: StepElement,
     state: ContextSource,
     executeOptions: Record<string, unknown> = {},
-    defaultActions: StepDefaultActions = {},
   ): Promise<StepExecutionResult> {
     const stepId = toValue(step.stepId) as string;
 
@@ -255,7 +227,7 @@ class StepExecutor {
     const outputs = this.#outputResolver.resolve(step.outputs, (expression) =>
       this.#evaluate(postContext, expression),
     );
-    const matchedActions = this.selectActions(step, successful, postContext, defaultActions);
+    const matchedActions = this.selectActions(step, successful, postContext);
 
     return { stepId, response, successful, outputs, action: matchedActions[0], matchedActions };
   }
@@ -325,15 +297,11 @@ class StepExecutor {
    * Selects every matching `onSuccess` / `onFailure` action for the outcome, in
    * list order, gating each action's criteria against the context.
    *
-   * A step's own action list overrides the workflow-level default wholesale: the
-   * step's list is used when the step *declares* it, otherwise the matching
-   * `defaultActions` list. There is no per-action merge, and success/failure fall
-   * back independently.
-   *
-   * Presence is tested with `hasKey`, not truthiness: a step that declares an
-   * empty list (`onSuccess: []`) has *overridden* the default with an empty set
-   * of actions and must not fall back to it, whereas a step that omits the key
-   * inherits the default.
+   * The step's own list is the whole story here: a step that declares none of
+   * its own already carries the workflow-level defaults, inherited by
+   * {@link ArazzoWorkflowNormalizer} — the same place a step's inherited
+   * `parameters` come from — so there is no fallback left to apply at selection
+   * time.
    *
    * The full matching list (not just the first) is returned so the caller can
    * honor "retryLimit exhausted prior to subsequent failure actions"; the common
@@ -342,23 +310,20 @@ class StepExecutor {
    * Public because selecting a step's actions is meaningful beyond running one:
    * the workflow executor selects them for a step targeting a `workflowId`, which
    * it runs itself and which therefore never reaches
-   * {@link StepExecutor.execute}. Keeping one implementation keeps the
-   * override/fallback rules from drifting apart.
+   * {@link StepExecutor.execute}. Both callers reach the criteria evaluator and
+   * the expression context through this one method rather than wiring their own.
    */
   selectActions(
     step: StepElement,
     successful: boolean,
     context: RuntimeExpressionContext,
-    defaultActions: StepDefaultActions,
   ): SelectedAction[] {
-    const [stepKey, stepActions, defaultActionList] = successful
-      ? (['onSuccess', step.onSuccess, defaultActions.onSuccess] as const)
-      : (['onFailure', step.onFailure, defaultActions.onFailure] as const);
-    const actions = step.hasKey(stepKey) ? stepActions : defaultActionList;
-    return this.#actionResolver.resolveAll(actions, (criterion) =>
-      this.#criterionEvaluator.evaluate(criterion, (expression) =>
-        this.#evaluate(context, expression),
-      ),
+    return this.#actionResolver.resolveAll(
+      successful ? step.onSuccess : step.onFailure,
+      (criterion) =>
+        this.#criterionEvaluator.evaluate(criterion, (expression) =>
+          this.#evaluate(context, expression),
+        ),
     );
   }
 

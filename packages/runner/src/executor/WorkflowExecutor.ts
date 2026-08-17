@@ -16,7 +16,7 @@ import ArazzoWorkflowNormalizer from '../normalizer/ArazzoWorkflowNormalizer.ts'
 import OutputResolver from '../resolver/OutputResolver.ts';
 import WorkflowParameterResolver from '../resolver/WorkflowParameterResolver.ts';
 import WorkflowExecutionState from '../state/WorkflowExecutionState.ts';
-import StepExecutor, { STEP_TARGET_FIELDS, type StepDefaultActions } from './StepExecutor.ts';
+import StepExecutor, { STEP_TARGET_FIELDS } from './StepExecutor.ts';
 import StepRetryRunner, { type StepAttemptOutcome } from './StepRetryRunner.ts';
 import WorkflowCallStack, { type WorkflowCallVia } from './WorkflowCallStack.ts';
 import StepTransitionInterpreter from './StepTransitionInterpreter.ts';
@@ -247,11 +247,6 @@ interface WorkflowInvocation {
   readonly workflowId: string;
   readonly state: WorkflowExecutionState;
   /**
-   * The workflow-level default actions every step falls back to when it declares
-   * no `onSuccess` / `onFailure` of its own.
-   */
-  readonly defaultActions: StepDefaultActions;
-  /**
    * The chain of workflows in progress, this one included — extended for each
    * workflow this invocation calls or depends on.
    */
@@ -422,15 +417,7 @@ class WorkflowExecutor {
 
     const workflow = await this.#resolveWorkflow(workflowId, scope);
     const state = new WorkflowExecutionState({ inputs });
-    const invocation: WorkflowInvocation = {
-      workflowId,
-      state,
-      // the workflow-level defaults every step falls back to when it declares no
-      // onSuccess / onFailure of its own, resolved once for the run.
-      defaultActions: { onSuccess: workflow.successActions, onFailure: workflow.failureActions },
-      callStack: nested,
-      via,
-    };
+    const invocation: WorkflowInvocation = { workflowId, state, callStack: nested, via };
 
     // validated before any prerequisite runs: a malformed `steps` is an
     // authoring error, and discovering it only after the dependencies have
@@ -701,9 +688,9 @@ class WorkflowExecutor {
     scope: RunScope,
     subWorkflows: WorkflowExecutionResult[],
   ): () => Promise<StepAttemptOutcome> {
-    const { workflowId, state, defaultActions, callStack } = invocation;
+    const { workflowId, state, callStack } = invocation;
     if (!isStringElement(step.workflowId)) {
-      return () => this.#stepExecutor.execute(step, state, scope.executeOptions, defaultActions);
+      return () => this.#stepExecutor.execute(step, state, scope.executeOptions);
     }
 
     const subWorkflowId = this.#subWorkflowId(step, stepId, workflowId);
@@ -746,12 +733,7 @@ class WorkflowExecutor {
       // but do see the sub-run's outputs through `$workflows`.
       const successful =
         result.status !== 'failed' && this.#stepExecutor.evaluateCriteria(step, context);
-      const matchedActions = this.#stepExecutor.selectActions(
-        step,
-        successful,
-        context,
-        defaultActions,
-      );
+      const matchedActions = this.#stepExecutor.selectActions(step, successful, context);
 
       return { stepId, successful, outputs, action: matchedActions[0], matchedActions };
     };

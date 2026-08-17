@@ -4,8 +4,6 @@ import {
   isCriterionElement,
   type StepOnSuccessElement,
   type StepOnFailureElement,
-  type WorkflowSuccessActionsElement,
-  type WorkflowFailureActionsElement,
   type SuccessActionElement,
   type FailureActionElement,
   type CriterionElement,
@@ -40,8 +38,11 @@ export type SelectedAction = SuccessActionElement | FailureActionElement;
  * the path default — the next sequential step on success, break-and-return on
  * failure.
  *
- * Reusable Object entries are already inlined by workflow normalization, so the
- * list contains only concrete action elements.
+ * A step's list is the only list there is: Reusable Object entries are already
+ * inlined by workflow normalization, and the workflow-level
+ * `successActions` / `failureActions` a step falls back to are inherited into
+ * `onSuccess` / `onFailure` by the same pass, so a well-formed document reaches
+ * this point as the step's own list of concrete action elements.
  * @public
  */
 class ActionResolver {
@@ -50,12 +51,7 @@ class ActionResolver {
    * none match.
    */
   resolve(
-    actions:
-      | StepOnSuccessElement
-      | StepOnFailureElement
-      | WorkflowSuccessActionsElement
-      | WorkflowFailureActionsElement
-      | undefined,
+    actions: StepOnSuccessElement | StepOnFailureElement | undefined,
     isCriterionMet: CriterionPredicate,
   ): SelectedAction | undefined {
     return this.resolveAll(actions, isCriterionMet)[0];
@@ -71,12 +67,7 @@ class ActionResolver {
    * Empty when the list is absent or nothing matches.
    */
   resolveAll(
-    actions:
-      | StepOnSuccessElement
-      | StepOnFailureElement
-      | WorkflowSuccessActionsElement
-      | WorkflowFailureActionsElement
-      | undefined,
+    actions: StepOnSuccessElement | StepOnFailureElement | undefined,
     isCriterionMet: CriterionPredicate,
   ): SelectedAction[] {
     if (actions === undefined) return [];
