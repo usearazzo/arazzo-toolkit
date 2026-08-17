@@ -771,16 +771,40 @@ by `ActionResolver`: `toValue(action.type)`, `action.stepId`, `action.workflowId
 `action.retryAfter`, `action.retryLimit`. Guard element presence with
 `isStringElement` / `isNumberElement`.
 
-**goto-workflow note (needs review):** the spec calls `goto` "a one-way transfer
-of workflow control". Strict reading = control leaves the current workflow and
-does not return. But a step-level `goto` to a workflow inside a running workflow
-is ambiguous in 1.0.1. Safe initial behavior: treat step-level `goto-workflow`
-as run-sub-workflow-then-continue (like a call), and flag the ambiguity — OR
-throw "unsupported" until clarified. **Recommend: throw `reason:'goto-workflow-
-unsupported'` initially** (mirrors how StepExecutor threw on `workflowId` until
-we were ready), and implement once semantics confirmed. Sub-workflow _calls_
-(step with `workflowId` field, §4-below) are the well-defined recursion path and
-ARE supported.
+**goto-workflow note — semantics DECIDED (2026-08-17), implementation still
+blocked:** the spec calls `goto` "a one-way transfer of workflow control".
+Settled reading: **one-way, no return** — the current workflow's own run ends
+at the `goto`; it does not resume afterward. Basis: the `stepId` and
+`workflowId` field descriptions both carry the identical clause "When used
+with `retry`, context transfers back upon completion of the specified
+step/workflow" — scoped to `retry` specifically, applied to both reference
+kinds. If context also transferred back for `goto`, the sentence would state
+it unconditionally, the way "mutually exclusive to stepId/workflowId" is
+stated unconditionally in the same sentence; the scoping is the signal that
+`goto` does not return. Consistent with `goto`-to-`stepId`'s existing
+semantics in this executor — a one-way jump with no return address remembered
+— so crossing a workflow boundary the same way is the more consistent reading,
+not a special case. Traced to
+[OAI/Arazzo-Specification#66](https://github.com/OAI/Arazzo-Specification/issues/66),
+the original proposal, which flagged this exact question as "TBD" at the time
+and never resolved it for `goto` specifically (only `retry` got the explicit
+sentence). Recorded in
+[issue #65](https://github.com/usearazzo/arazzo-toolkit/issues/65); still
+worth filing upstream to confirm/correct, but this is now the working
+position, not an open question.
+
+**Still blocking implementation — a result-shape question, not a semantics
+one:** since the current workflow never reaches its own normal completion
+when this fires, its own `outputs` declaration is never evaluated. The literal
+reading is a genuine tail-call — the target workflow's own result
+(`workflowId`, `outputs`, `status`, `steps`) becomes what the top-level
+`execute()` caller receives — with the original workflow's partial trace up
+to the `goto` needing a home (attached somewhere on the result, or dropped).
+Needs its own design pass before coding starts; throw `reason:
+'goto-workflow-unsupported'` continues until then (mirrors how StepExecutor
+threw on `workflowId` until sub-workflow steps were ready). Sub-workflow
+_calls_ (step with `workflowId` field, §4b below) are the well-defined
+recursion path and ARE supported — and, unlike this one, do return.
 
 ## 4b. Sub-workflow steps (step.workflowId)
 
