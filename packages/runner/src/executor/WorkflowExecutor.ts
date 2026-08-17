@@ -531,7 +531,7 @@ class WorkflowExecutor {
   ): WorkflowExecutionResult {
     return {
       workflowId,
-      outputs: this.#resolveWorkflowOutputs(workflow, state, workflowId),
+      outputs: this.#resolveWorkflowOutputs(workflow, state),
       steps,
       status,
       durationMs: this.#now() - startedAt,
@@ -845,13 +845,12 @@ class WorkflowExecutor {
   #resolveWorkflowOutputs(
     workflow: WorkflowElement,
     state: WorkflowExecutionState,
-    workflowId: string,
   ): Record<string, unknown> {
     const context = state.toContext();
     return this.#outputResolver.resolve(
       workflow.outputs,
       (expression) => this.#evaluate(context, expression),
-      { workflowId },
+      { workflowId: toValue(workflow.workflowId) as string },
     );
   }
 
