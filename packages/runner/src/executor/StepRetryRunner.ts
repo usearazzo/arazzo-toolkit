@@ -202,14 +202,19 @@ class StepRetryRunner {
         if (spent >= this.#retryLimit(action)) continue; // exhausted — try the next action
 
         const reference = this.#referenced(action);
-        if (reference && context.runReference === undefined) this.#rejectReference(context);
+        // narrowed once here rather than asserted at the call site below: by
+        // the time `runReference` is invoked, its absence would already have
+        // thrown on the line above, so the type reflects that instead of
+        // relying on a non-null assertion to say so.
+        const runReference = reference ? context.runReference : undefined;
+        if (reference && runReference === undefined) this.#rejectReference(context);
         retriesSpent.set(action, spent + 1);
         // only sleep for a real, positive delay — skip the event-loop yield of
         // sleep(0) for immediate retries, and never hand a custom sleep a
         // zero/negative/NaN value.
         const delayMs = this.#retryAfterMs(action);
         if (delayMs > 0) await this.#sleep(delayMs, context.signal);
-        if (reference) await context.runReference!(action);
+        if (runReference !== undefined) await runReference(action);
         fired = true;
         break;
       }

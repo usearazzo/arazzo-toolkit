@@ -403,6 +403,73 @@ workflows:
             retryLimit: 1
             workflowId: $sourceDescriptions.petstoreAPI.someWorkflow
 
+  # a retry action naming both a stepId and a workflowId — mutually exclusive.
+  - workflowId: retryAmbiguousReference
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: bad
+            type: retry
+            retryLimit: 1
+            stepId: doomed
+            workflowId: repairFlow
+
+  # a retry's workflowId reference to a workflow with no steps of its own —
+  # entering it must still be charged, proving it isn't a free ride.
+  - workflowId: retryWithBudgetedWorkflowReference
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: repair
+            type: retry
+            retryLimit: 1
+            workflowId: emptyWorkflow
+
+  # a workflowId-targeting step's inputs must reflect a retry reference's
+  # repair on the next attempt, not the state as it stood at the step's first
+  # attempt — the repaired token only reaches the sub-workflow once its own
+  # inputs stop being frozen.
+  - workflowId: echoValue
+    inputs:
+      type: object
+      properties:
+        value:
+          type: string
+    steps:
+      - stepId: echo
+        operationId: getInventory
+        outputs:
+          echoed: $inputs.value
+    outputs:
+      echoed: $steps.echo.outputs.echoed
+
+  - workflowId: repairFeedsSubWorkflowStep
+    steps:
+      - stepId: login
+        operationId: getInventory
+        outputs:
+          token: $response.body#/token
+      - stepId: call
+        workflowId: echoValue
+        parameters:
+          - name: value
+            value: $steps.login.outputs.token
+        successCriteria:
+          - condition: $workflows.echoValue.outputs.echoed == 'B'
+        onFailure:
+          - name: reLogin
+            type: retry
+            retryLimit: 1
+            stepId: login
+    outputs:
+      echoed: $workflows.echoValue.outputs.echoed
+
   # a self-reference with a retryAfter delay, so a test can abort during the
   # wait and assert the reference itself never ran.
   - workflowId: retryWithReferenceDelay

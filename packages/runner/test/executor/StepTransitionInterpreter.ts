@@ -33,6 +33,10 @@ describe('StepTransitionInterpreter', function () {
   const steps = (...stepIds: string[]) =>
     stepIds.map((stepId) => refractStep({ stepId })).filter(isStepElement);
 
+  // `indexOfStep`'s `descriptor` is mandatory (no goto-flavored default), so
+  // every caller — including these tests — names which lookup it is.
+  const gotoDescriptor = { reason: 'goto-target-not-found', label: 'goto target' };
+
   /**
    * Runs an interpretation expected to be rejected and returns the
    * ExecutionError, so a test can assert on its `reason`.
@@ -121,19 +125,41 @@ describe('StepTransitionInterpreter', function () {
 
   context('resolving a goto target', function () {
     specify('should find the target step by id', function () {
-      assert.strictEqual(interpreter.indexOfStep(steps('a', 'b', 'c'), 'c', 'wf'), 2);
+      assert.strictEqual(
+        interpreter.indexOfStep(steps('a', 'b', 'c'), 'c', 'wf', gotoDescriptor),
+        2,
+      );
     });
 
     specify('should find a target earlier in the list (a backward jump)', function () {
       // nothing in the specification forbids jumping back; a loop is the author's
       // to bound, which the executor's step budget backstops.
-      assert.strictEqual(interpreter.indexOfStep(steps('a', 'b', 'c'), 'a', 'wf'), 0);
+      assert.strictEqual(
+        interpreter.indexOfStep(steps('a', 'b', 'c'), 'a', 'wf', gotoDescriptor),
+        0,
+      );
     });
 
     specify('should reject a target that names no step in this workflow', function () {
-      const error = captureError(() => interpreter.indexOfStep(steps('a', 'b'), 'elsewhere', 'wf'));
+      const error = captureError(() =>
+        interpreter.indexOfStep(steps('a', 'b'), 'elsewhere', 'wf', gotoDescriptor),
+      );
 
       assert.strictEqual(error.reason, 'goto-target-not-found');
+    });
+
+    specify('should use the given descriptor to name a different lookup', function () {
+      // proves the reason/label are not hardcoded to goto's wording — a
+      // `retry` reference lookup (or any future caller) reports as itself.
+      const error = captureError(() =>
+        interpreter.indexOfStep(steps('a', 'b'), 'elsewhere', 'wf', {
+          reason: 'retry-target-not-found',
+          label: 'retry reference',
+        }),
+      );
+
+      assert.strictEqual(error.reason, 'retry-target-not-found');
+      assert.match(error.message, /retry reference step "elsewhere" not found/);
     });
   });
 });

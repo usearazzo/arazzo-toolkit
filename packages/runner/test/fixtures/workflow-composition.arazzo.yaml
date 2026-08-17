@@ -348,6 +348,39 @@ workflows:
       - stepId: own
         operationId: getInventory
 
+  # dependsOn feeds real inputs into $workflows.<id>.inputs; a later retry's
+  # workflowId reference to the same id must refresh only its outputs, not
+  # clobber those inputs with {}.
+  - workflowId: echoInput
+    inputs:
+      type: object
+      properties:
+        seed:
+          type: string
+    steps:
+      - stepId: only
+        operationId: getInventory
+        outputs:
+          touched: $statusCode
+    outputs:
+      touched: $steps.only.outputs.touched
+
+  - workflowId: retryReferenceDoesNotClobberDependencyInputs
+    dependsOn:
+      - echoInput
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: repair
+            type: retry
+            retryLimit: 1
+            workflowId: echoInput
+    outputs:
+      seed: $workflows.echoInput.inputs.seed
+
   # a transitive prerequisite: outer -> middle -> needsInput.
   - workflowId: transitiveOuter
     dependsOn:

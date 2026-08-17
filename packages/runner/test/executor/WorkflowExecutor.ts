@@ -1009,6 +1009,60 @@ describe('WorkflowExecutor', function () {
         assert.deepEqual(sleeps, [3000]);
       },
     );
+
+    specify(
+      'should reject a retry action naming both a stepId and a workflowId',
+      async function () {
+        const { executor, calls } = makeExecutor([serverErrorResponse]);
+
+        const error = await captureError(executor.execute('retryAmbiguousReference'));
+
+        assert.strictEqual(error.reason, 'ambiguous-target');
+        assert.strictEqual(error.stepId, 'doomed');
+        assert.strictEqual(error.workflowId, 'retryAmbiguousReference');
+        assert.match(error.message, /declares both a stepId and a workflowId/);
+        // rejected before either branch runs a live request.
+        assert.strictEqual(calls.length, 1);
+      },
+    );
+
+    specify(
+      'should charge the step budget for entering a workflowId reference, even an empty one',
+      async function () {
+        // maxSteps: 2 covers doomed's own initial attempt and, once the fix is
+        // in place, entering the reference; without that charge the run would
+        // complete as 'failed' once the single retry exhausts, rather than
+        // tripping the budget on doomed's own second attempt.
+        const { executor } = makeExecutor([serverErrorResponse], { maxSteps: 2 });
+
+        const error = await captureError(executor.execute('retryWithBudgetedWorkflowReference'));
+
+        assert.strictEqual(error.reason, 'step-budget');
+      },
+    );
+
+    specify(
+      "should feed a retried sub-workflow step's next attempt with the reference's repair",
+      async function () {
+        // login (initial) → token A; call's first attempt echoes A, which
+        // fails its criteria, firing the retry reference — a fresh run of
+        // login → token B. The retried attempt at call must read B, not the
+        // A its inputs were resolved with before the first attempt.
+        const { executor, calls } = makeExecutor([
+          { status: 200, statusText: 'OK', body: { token: 'A' } },
+          okResponse,
+          { status: 200, statusText: 'OK', body: { token: 'B' } },
+          okResponse,
+        ]);
+
+        const result = await executor.execute('repairFeedsSubWorkflowStep');
+
+        assert.strictEqual(result.status, 'completed');
+        assert.strictEqual(calls.length, 4);
+        assert.strictEqual(result.steps[1].attempts, 2); // call: initial + 1 retry
+        assert.strictEqual(result.outputs.echoed, 'B');
+      },
+    );
   });
 
   context('malformed step declarations', function () {
