@@ -30,14 +30,10 @@ export type CriterionPredicate = (criterion: CriterionElement) => boolean;
 export type SelectedAction = SuccessActionElement | FailureActionElement;
 
 /**
- * Which of a step's two action lists is being resolved.
- *
- * Named by {@link ActionResolver}'s public method rather than read off the
- * element: a well-formed list carries its own type (`StepOnSuccessElement` /
- * `StepOnFailureElement`), but a malformed one is whatever the author wrote —
- * and that is precisely the case that needs the name. Internal: baked into
- * `resolveOnSuccess` / `resolveOnFailure` rather than taken from the caller,
- * so it never leaks into the public API.
+ * Which of a step's two action lists is being resolved. See
+ * {@link ActionResolver.#resolveAll} for why it's needed and why it's baked
+ * in by the public method rather than taken from the caller. Internal: never
+ * leaks into the public API.
  */
 type StepActionsField = 'onSuccess' | 'onFailure';
 
@@ -85,6 +81,10 @@ class ActionResolver {
     isCriterionMet: CriterionPredicate,
     scope: StepScope,
   ): SuccessActionElement[] {
+    // safe: `#resolveAll` validates every entry as *a* Success/Failure Action
+    // Object, not one matching this list's own field, but a well-formed
+    // `StepOnSuccessElement` only ever refracts Success Action entries — the
+    // apidom refractor types list entries positionally at parse time.
     return this.#resolveAll(actions, isCriterionMet, 'onSuccess', scope) as SuccessActionElement[];
   }
 
@@ -99,6 +99,7 @@ class ActionResolver {
     isCriterionMet: CriterionPredicate,
     scope: StepScope,
   ): FailureActionElement[] {
+    // safe: see the same-named comment in `resolveOnSuccess` above.
     return this.#resolveAll(actions, isCriterionMet, 'onFailure', scope) as FailureActionElement[];
   }
 
