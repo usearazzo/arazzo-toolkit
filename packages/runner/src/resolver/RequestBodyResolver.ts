@@ -1,6 +1,6 @@
 import { assocPath, hasPath } from 'ramda';
 import { toValue } from '@speclynx/apidom-core';
-import { isArrayElement, isStringElement } from '@speclynx/apidom-datamodel';
+import { isArrayElement, isObjectElement, isStringElement } from '@speclynx/apidom-datamodel';
 import { parse as parseJSONPointer, testJSONPointer } from '@swaggerexpert/json-pointer';
 import { isPayloadReplacementElement, type RequestBodyElement } from '@speclynx/apidom-ns-arazzo-1';
 
@@ -45,6 +45,16 @@ class RequestBodyResolver extends ArazzoValueResolver {
     resolve: RuntimeExpressionResolver,
   ): ResolvedRequestBody | undefined {
     if (requestBody === undefined) return undefined;
+
+    // present but scalar: `.payload`, `.replacements` and `.contentType` are
+    // all plain `undefined` on a non-map element, so the step would silently
+    // send no body and report success.
+    if (!isObjectElement(requestBody)) {
+      throw new ResolverError('`requestBody` is present but is not a map', {
+        target: 'requestBody',
+        reason: 'malformed-request-body',
+      });
+    }
 
     let payload = this.resolveValue(requestBody.payload, resolve);
 
