@@ -133,15 +133,143 @@ workflows:
             type: goto
             stepId: nonexistent
 
-  # goto targets a workflowId — not yet supported.
-  - workflowId: gotoWorkflowUnsupported
+  # the transfer target used below: two steps whose outputs the caller's
+  # `transferredTo` exposes, and an `inputs` declaration read by neither
+  # operation's own parameters (both are hardcoded) but by a step output —
+  # proving a goto's transfer always runs its target with {} inputs (issue
+  # #62, the same gap a retry's workflowId reference has). Deliberately
+  # avoids reading `$inputs` through an OpenAPI operation *parameter*: the
+  # stub transport skips request validation, but the real OpenAPI request
+  # builder underneath does not, and a required parameter left unresolved
+  # would fail there rather than demonstrate the gap.
+  - workflowId: transferTarget
+    inputs:
+      type: object
+      properties:
+        status:
+          type: string
+    steps:
+      - stepId: first
+        operationId: getInventory
+        outputs:
+          echoedStatus: $inputs.status
+      - stepId: second
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: "7"
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          petName: $response.body#/name
+    outputs:
+      name: $steps.second.outputs.petName
+      echoedStatus: $steps.first.outputs.echoedStatus
+
+  # goto targets a workflowId — a one-way transfer. `only`'s own outputs and
+  # this workflow's own `outputs` declaration prove the caller's outputs are
+  # never evaluated: the run ends at the transfer, not at its own end.
+  - workflowId: transfersToTarget
+    outputs:
+      neverEvaluated: $steps.only.outputs.ran
+    steps:
+      - stepId: only
+        operationId: getInventory
+        outputs:
+          ran: $statusCode
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: transferTarget
+
+  # a transfer chain: start transfers to middle, which transfers to the
+  # target — `transferredTo.transferredTo` must recurse to its completed
+  # result.
+  - workflowId: transferChainStart
     steps:
       - stepId: only
         operationId: getInventory
         onSuccess:
           - name: jump
             type: goto
+            workflowId: transferChainMiddle
+  - workflowId: transferChainMiddle
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: transferTarget
+
+  # the step fails its successCriteria, and the failure-path action (not the
+  # success default) is the transfer — a transfer can fire from either path.
+  - workflowId: transferOnFailure
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: jump
+            type: goto
+            workflowId: emptyWorkflow
+
+  # transfers to a workflow whose own chain settles 'failed' — the top-level
+  # result is 'transferred', not 'failed'; a caller checking the settled
+  # status via the exported `settledResult` sees the real outcome.
+  - workflowId: transfersToFailing
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: failBreak
+
+  # a goto naming both a stepId and a workflowId — mutually exclusive.
+  - workflowId: gotoAmbiguous
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: bad
+            type: goto
+            stepId: only
             workflowId: linear
+
+  # a goto's workflowId reference into another document — not yet supported.
+  - workflowId: gotoCrossDocument
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: $sourceDescriptions.petstoreAPI.someWorkflow
+
+  # a goto targets a workflowId this document does not define.
+  - workflowId: gotoUnknownWorkflow
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: noSuchWorkflow
+
+  # a goto transfer to a workflow with no steps of its own — entering it must
+  # NOT be charged against the step budget, unlike a retry's workflowId
+  # reference: a goto fires once per step evaluation, not repeatedly.
+  - workflowId: transfersToEmpty
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: emptyWorkflow
 
   # the step fails then succeeds within the retry budget: the operation is
   # re-run until a 200 arrives, and the run completes.

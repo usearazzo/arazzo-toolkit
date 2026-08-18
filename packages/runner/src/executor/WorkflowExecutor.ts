@@ -23,7 +23,7 @@ import WorkflowExecutionState from '../state/WorkflowExecutionState.ts';
 import StepExecutor, { STEP_TARGET_FIELDS } from './StepExecutor.ts';
 import StepRetryRunner, { type StepAttemptOutcome } from './StepRetryRunner.ts';
 import WorkflowCallStack, { type WorkflowCallVia } from './WorkflowCallStack.ts';
-import StepTransitionInterpreter from './StepTransitionInterpreter.ts';
+import StepTransitionInterpreter, { actionTargets } from './StepTransitionInterpreter.ts';
 import type { SelectedAction } from '../action/ActionResolver.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
 import ResolverError from '../errors/ResolverError.ts';
@@ -172,9 +172,11 @@ export interface RetryReferenceRecord {
   readonly id: string;
   /**
    * Whether the reference completed successfully. For `kind: 'workflow'`, this
-   * is `status !== 'failed'`. Does not gate the retry: the retry proceeds
-   * either way, since the spec speaks of the reference's *completion*, not its
-   * success.
+   * is whether the referenced run's transfer chain settled `status !== 'failed'`
+   * — a reference to a workflow that transferred is judged by where control
+   * ended up, not by the intermediate `'transferred'` status. Does not gate the
+   * retry: the retry proceeds either way, since the spec speaks of the
+   * reference's *completion*, not its success.
    */
   readonly successful: boolean;
   /**
@@ -227,20 +229,45 @@ export interface StepRunRecord {
  * The outcome of executing a workflow.
  *
  * `status` is `completed` when the steps ran to the end of the list, `ended`
- * when an `end` action stopped the run early, and `failed` when a step failed
- * and no matching `onFailure` action redirected it (the break-and-return
- * default) — or when a `dependsOn` workflow did not complete.
+ * when an `end` action stopped the run early, `failed` when a step failed and no
+ * matching `onFailure` action redirected it (the break-and-return default) — or
+ * when a `dependsOn` workflow did not complete — and `transferred` when a `goto`
+ * action handed control one-way to another workflow: this run's own steps stop
+ * at that point, and its `outputs` declaration is never evaluated, since the run
+ * never reaches its own end. See {@link WorkflowExecutionResult.settledStatus}
+ * for the success/failure verdict a `'transferred'` result defers to.
  * @public
  */
 export interface WorkflowExecutionResult {
   readonly workflowId: string;
   readonly outputs: Record<string, unknown>;
   readonly steps: readonly StepRunRecord[];
-  readonly status: 'completed' | 'ended' | 'failed';
+  readonly status: 'completed' | 'ended' | 'failed' | 'transferred';
+  /**
+   * Where this run's outcome actually settled: `status` itself when it isn't
+   * `'transferred'`, otherwise the terminal, non-`'transferred'` status at the
+   * end of the {@link WorkflowExecutionResult.transferredTo} chain — computed
+   * once, eagerly, when this result is built, so it costs nothing to read and
+   * nothing to forget.
+   *
+   * `status` alone is not a success/failure verdict: `'transferred'` records
+   * *where* control went, not whether the run succeeded, so comparing it
+   * directly against `'failed'` — the natural thing to write — silently
+   * misses a failure buried in the chain. `settledStatus` is that comparison,
+   * already made, always present (even when `status` isn't `'transferred'`,
+   * where it simply repeats `status`): prefer `result.settledStatus ===
+   * 'failed'` over `result.status === 'failed'` for "did this run succeed",
+   * including on the top-level result {@link WorkflowExecutor.execute}
+   * itself returns.
+   */
+  readonly settledStatus: 'completed' | 'ended' | 'failed';
   /**
    * Elapsed time the run took, including its dependencies, sub-workflows, and
-   * retry waits. Measured on a monotonic clock by default, so it may be
-   * fractional and is unaffected by system clock changes.
+   * retry waits — and, for a `'transferred'` run, the whole chain nested
+   * under {@link WorkflowExecutionResult.transferredTo}, since running the
+   * target is what this run's own time was spent on. Measured on a monotonic
+   * clock by default, so it may be fractional and is unaffected by system
+   * clock changes.
    */
   readonly durationMs: number;
   /**
@@ -251,7 +278,55 @@ export interface WorkflowExecutionResult {
    * one result is reported here for each dependent that declares it.
    */
   readonly dependencies?: readonly WorkflowExecutionResult[];
+  /**
+   * The target workflow's own run, present only when `status` is `transferred`.
+   *
+   * Nested rather than spliced in, like {@link WorkflowExecutionResult.dependencies}
+   * — this run's `workflowId` stays the workflow that was called, not the one
+   * control ended up in. If the target itself transfers onward, the chain is
+   * reachable by following `transferredTo.transferredTo`, recursively; its own
+   * `outputs` are the only place the transfer's actual output values live, since
+   * this run's top-level `outputs` is always `{}`.
+   */
+  readonly transferredTo?: WorkflowExecutionResult;
 }
+
+/**
+ * The result a transfer chain settled on: `result` itself when its `status`
+ * isn't `'transferred'`, otherwise the terminal, non-`'transferred'` result at
+ * the end of its `transferredTo` chain.
+ *
+ * For the success/failure verdict alone, prefer
+ * {@link WorkflowExecutionResult.settledStatus} — every result already
+ * carries it, computed eagerly, so no call is needed. Reach for this function
+ * when the terminal result *itself* is wanted (its `outputs`, `steps`,
+ * `workflowId`), not just where it landed. Iterative, not recursive: a
+ * chain's length is bounded only by `maxWorkflowDepth`, and this must not add
+ * a matching bound on call-stack depth.
+ * @public
+ */
+export function settledResult(result: WorkflowExecutionResult): WorkflowExecutionResult {
+  let current = result;
+  while (current.transferredTo !== undefined) {
+    current = current.transferredTo;
+  }
+  return current;
+}
+
+/**
+ * How a `#run` invocation ended, handed to `#result` to assemble the final
+ * {@link WorkflowExecutionResult} from.
+ *
+ * A discriminated union rather than a `status` string plus a separately-set
+ * `transferredTo` — the shape this replaced, where nothing but convention
+ * kept the two in sync. Here, `status: 'transferred'` with no
+ * `transferredTo` (or the reverse) is not a state a caller of `#result` can
+ * construct, not merely one they are expected not to.
+ * @internal
+ */
+type RunOutcome =
+  | { readonly kind: 'settled'; readonly status: 'completed' | 'ended' | 'failed' }
+  | { readonly kind: 'transferred'; readonly transferredTo: WorkflowExecutionResult };
 
 /**
  * The state shared by every workflow invocation of a single
@@ -311,14 +386,19 @@ interface WorkflowInvocation {
  * {@link StepExecutor}, records the resolved step outputs into a
  * {@link WorkflowExecutionState} so later steps read `$steps.{id}.outputs.{name}`,
  * and interprets the {@link SelectedAction} the step executor selects but does
- * not act on — advancing to the next step, jumping via `goto`, or stopping on
+ * not act on — advancing to the next step, jumping via `goto`, transferring
+ * one-way to another workflow via a `goto` naming a `workflowId`, or stopping on
  * `end` / the failure break-default. After the loop it resolves the workflow's
- * `outputs` against the final state.
+ * `outputs` against the final state — unless the run transferred, in which case
+ * it never reaches its own end and `outputs` stays `{}`.
  *
  * A step targeting a `workflowId` is a sub-workflow call the executor runs
  * itself, recursively; the workflows named by `dependsOn` are run to completion
  * before the workflow's own steps. Both recurse through one call tree, guarded
- * by a shared step budget, a nesting-depth ceiling, and cycle detection.
+ * by a shared step budget, a nesting-depth ceiling, and cycle detection. A
+ * `goto`'s transfer joins the same call tree, entered via `'goto'`, but is not
+ * charged against the step budget: it fires once per step evaluation, unlike a
+ * retry reference, which can fire repeatedly from the same frame.
  *
  * State is created fresh per {@link WorkflowExecutor.execute} call — and per
  * workflow invocation within it — and owned here; the returned result is
@@ -329,9 +409,9 @@ interface WorkflowInvocation {
  * `status: 'failed'` result, not a throw — the same split {@link StepExecutor}
  * draws.
  *
- * Not yet supported, throwing rather than behaving incorrectly: a step-level
- * `goto` to a workflow, and cross-document workflow references (including one
- * named by a `retry` action's reference).
+ * Not yet supported, throwing rather than behaving incorrectly: cross-document
+ * workflow references (including one named by a `retry` action's reference or a
+ * `goto`'s transfer).
  * @public
  */
 class WorkflowExecutor {
@@ -476,21 +556,32 @@ class WorkflowExecutor {
     this.#validateWorkflowOutputsShape(workflow, workflowId);
 
     const dependencies = await this.#runDependencies(workflow, invocation, scope);
-    if (dependencies.some((dependency) => dependency.status === 'failed')) {
+    if (dependencies.some((dependency) => this.#settledFailed(dependency))) {
       // a declared prerequisite did not complete, so this workflow cannot be
       // processed. That is a runtime failure like any failing step — a `failed`
       // result carrying the dependency trace, not a throw — and none of its own
       // steps run. Unless the run was cancelled, in which case the prerequisite
       // did not fail on its own terms either.
       throwIfAborted(scope.signal, { workflowId, callStack: nested });
-      return this.#result(workflowId, workflow, state, [], 'failed', dependencies, startedAt);
+      return this.#result(
+        workflowId,
+        workflow,
+        state,
+        [],
+        { kind: 'settled', status: 'failed' },
+        dependencies,
+        startedAt,
+      );
     }
 
     const trace: StepRunRecord[] = [];
     let index = 0;
-    let status: WorkflowExecutionResult['status'] = 'completed';
+    // named distinctly from each step's own `outcome` (a StepAttemptOutcome,
+    // destructured fresh every iteration below) — the two are unrelated
+    // values that happen to share a natural name.
+    let runOutcome: RunOutcome = { kind: 'settled', status: 'completed' };
 
-    while (index < steps.length) {
+    stepLoop: while (index < steps.length) {
       const step = steps[index];
       const stepId = toValue(step.stepId) as string;
       const stepStartedAt = this.#now();
@@ -532,19 +623,52 @@ class WorkflowExecutor {
         workflowId,
         stepId,
       });
-      if (transition.kind === 'next') {
-        index += 1;
-      } else if (transition.kind === 'goto') {
-        index = this.#interpreter.indexOfStep(steps, transition.stepId, workflowId, {
-          reason: 'goto-target-not-found',
-          label: 'goto target',
-        });
-      } else if (transition.kind === 'end') {
-        status = 'ended';
-        break;
-      } else {
-        status = 'failed';
-        break;
+      switch (transition.kind) {
+        case 'next':
+          index += 1;
+          break;
+        case 'goto':
+          index = this.#interpreter.indexOfStep(steps, transition.stepId, workflowId, {
+            reason: 'goto-target-not-found',
+            label: 'goto target',
+          });
+          break;
+        case 'transfer': {
+          // a one-way transfer: this run ends here, and the target's run is
+          // nested rather than spliced into this one. Checked for cancellation
+          // before running the target — same boundary convention as every
+          // other nested call — ahead of the reference helper's own
+          // cross-document rejection, so an aborted run reports `aborted`
+          // rather than a cross-document target's own reason.
+          throwIfAborted(scope.signal, { workflowId, stepId, callStack: nested });
+          const transferredTo = await this.#runReferencedWorkflow(
+            transition.workflowId,
+            workflowId,
+            stepId,
+            scope,
+            nested,
+            'goto',
+          );
+          runOutcome = { kind: 'transferred', transferredTo };
+          break stepLoop;
+        }
+        case 'end':
+          runOutcome = { kind: 'settled', status: 'ended' };
+          break stepLoop;
+        case 'break':
+          runOutcome = { kind: 'settled', status: 'failed' };
+          break stepLoop;
+        default: {
+          // exhaustiveness guard: a Transition kind added above without a case
+          // here would otherwise fall through silently instead of failing
+          // loudly — `transition` is provably `never` once every kind above
+          // has its own case, which TypeScript checks at compile time.
+          const unreachable: never = transition;
+          throw new ExecutionError(
+            `step "${stepId}" in workflow "${workflowId}" produced an unrecognized transition ${JSON.stringify(unreachable)}`,
+            { workflowId, stepId, reason: 'unknown-transition-kind' },
+          );
+        }
       }
     }
 
@@ -556,31 +680,68 @@ class WorkflowExecutor {
     // last step than for every step before it.
     throwIfAborted(scope.signal, { workflowId, callStack: nested });
 
-    return this.#result(workflowId, workflow, state, trace, status, dependencies, startedAt);
+    return this.#result(workflowId, workflow, state, trace, runOutcome, dependencies, startedAt);
   }
 
   /**
-   * Assembles the run's result, resolving the workflow's `outputs` against the
-   * final state and stamping the elapsed time. `dependencies` is reported only
-   * when the workflow actually had some.
+   * Assembles the run's result from how it ended, resolving the workflow's
+   * `outputs` against the final state (unless it transferred) and stamping
+   * the elapsed time. `dependencies` is reported only when the workflow
+   * actually had some.
+   *
+   * `outcome` is the single source every derived field reads from — `status`,
+   * `settledStatus`, whether `outputs` gets resolved at all, whether
+   * `transferredTo` is present — so there is no second place any of them
+   * could drift from it. A `'transferred'` run never reaches its own end, so
+   * its `outputs` declaration is never evaluated — `{}` is the only honest
+   * value; the target's own outputs live at `transferredTo.outputs`. Skipping
+   * resolution loses no validation:
+   * {@link WorkflowExecutor.#validateWorkflowOutputsShape} already checked
+   * the shape up front, independent of resolving it.
    */
   #result(
     workflowId: string,
     workflow: WorkflowElement,
     state: WorkflowExecutionState,
     steps: readonly StepRunRecord[],
-    status: WorkflowExecutionResult['status'],
+    outcome: RunOutcome,
     dependencies: readonly WorkflowExecutionResult[],
     startedAt: number,
   ): WorkflowExecutionResult {
-    return {
+    const shared = {
       workflowId,
-      outputs: this.#resolveWorkflowOutputs(workflow, state),
       steps,
-      status,
       durationMs: this.#now() - startedAt,
       ...(dependencies.length > 0 ? { dependencies } : {}),
     };
+    if (outcome.kind === 'transferred') {
+      return {
+        ...shared,
+        outputs: {},
+        status: 'transferred',
+        // computed once, here, rather than left for a caller to chase via
+        // `settledResult` — `transferredTo` already carries its own
+        // `settledStatus`, itself computed the same way when it was built,
+        // so this is O(1) per hop rather than a walk of the whole chain.
+        settledStatus: outcome.transferredTo.settledStatus,
+        transferredTo: outcome.transferredTo,
+      };
+    }
+    return {
+      ...shared,
+      outputs: this.#resolveWorkflowOutputs(workflow, state),
+      status: outcome.status,
+      settledStatus: outcome.status,
+    };
+  }
+
+  /**
+   * Whether a nested run's transfer chain settled on `'failed'` — reading
+   * {@link WorkflowExecutionResult.settledStatus} directly, which every
+   * result already carries, rather than walking `transferredTo` itself.
+   */
+  #settledFailed(result: WorkflowExecutionResult): boolean {
+    return result.settledStatus === 'failed';
   }
 
   /**
@@ -692,8 +853,7 @@ class WorkflowExecutor {
     return async (action: FailureActionElement): Promise<void> => {
       throwIfAborted(scope.signal, { workflowId, stepId, callStack });
 
-      const hasWorkflowId = isStringElement(action.workflowId);
-      const hasStepId = isStringElement(action.stepId);
+      const { hasStepId, hasWorkflowId } = actionTargets(action);
       if (hasWorkflowId && hasStepId) {
         throw new ExecutionError(
           `retry action on step "${stepId}" in workflow "${workflowId}" declares both a stepId and a workflowId (mutually exclusive)`,
@@ -703,9 +863,15 @@ class WorkflowExecutor {
 
       if (hasWorkflowId) {
         const refId = toValue(action.workflowId) as string;
-        this.#rejectCrossDocumentWorkflow(refId, workflowId, stepId);
         this.#chargeBudget(scope, invocation, stepId);
-        const result = await this.#run(refId, {}, scope, callStack, 'retry');
+        const result = await this.#runReferencedWorkflow(
+          refId,
+          workflowId,
+          stepId,
+          scope,
+          callStack,
+          'retry',
+        );
         state.setWorkflow(refId, {
           inputs: state.getWorkflow(refId)?.inputs ?? {},
           outputs: result.outputs,
@@ -713,7 +879,7 @@ class WorkflowExecutor {
         retryReferences.push({
           kind: 'workflow',
           id: refId,
-          successful: result.status !== 'failed',
+          successful: !this.#settledFailed(result),
           subWorkflow: result,
         });
         return;
@@ -796,12 +962,16 @@ class WorkflowExecutor {
       // recorded whether or not it completed: a failed prerequisite still
       // resolved (possibly partial) outputs, and the parent resolves its own
       // outputs against this state on its way out, so `$workflows.{id}` is
-      // uniformly readable for every dependency that ran.
+      // uniformly readable for every dependency that ran. `outputs` is the
+      // dependency's own (`{}` when it transferred) — never the settled
+      // workflow's, which would misattribute values to a declaration that
+      // never ran.
       state.setWorkflow(dependencyId, { inputs, outputs: result.outputs });
-      if (result.status === 'failed') return results;
+      if (this.#settledFailed(result)) return results;
 
-      // only a *completed* dependency is remembered as satisfied — a failure must
-      // never let a later dependent skip running it.
+      // only a dependency whose chain settled non-`failed` is remembered as
+      // satisfied — a failure, transferred or not, must never let a later
+      // dependent skip running it.
       scope.dependencyRuns.set(dependencyId, result);
     }
     return results;
@@ -921,13 +1091,16 @@ class WorkflowExecutor {
         stepScope,
       );
       // an `end`ed sub-workflow returned to its caller with outputs, so it took
-      // the success path like a completed one; only `failed` is a failure. The
-      // step's own `successCriteria` still apply on top — they are the author's
-      // assertion about this step, and dropping them because the step happens to
-      // target a workflow would silently discard it. They see no `$response`,
-      // but do see the sub-run's outputs through `$workflows`.
+      // the success path like a completed one; only a chain settling `failed` is
+      // a failure — a sub-workflow that transferred is judged by where its
+      // chain settled, via `#settledFailed`, not by the intermediate
+      // `'transferred'` status itself. The step's own `successCriteria` still
+      // apply on top — they are the author's assertion about this step, and
+      // dropping them because the step happens to target a workflow would
+      // silently discard it. They see no `$response`, but do see the sub-run's
+      // own outputs (`{}` when it transferred) through `$workflows`.
       const successful =
-        result.status !== 'failed' && this.#stepExecutor.evaluateCriteria(step, context);
+        !this.#settledFailed(result) && this.#stepExecutor.evaluateCriteria(step, context);
       const matchedActions = this.#stepExecutor.selectActions(step, successful, context);
 
       return { stepId, successful, outputs, action: matchedActions[0], matchedActions };
@@ -1000,6 +1173,37 @@ class WorkflowExecutor {
       `workflow reference "${reference}" in workflow "${workflowId}" points to another document; not supported yet`,
       { workflowId, stepId, reason: 'cross-document-workflow-unsupported' },
     );
+  }
+
+  /**
+   * Runs a workflow an action references directly by id — a retry's
+   * `workflowId` reference or a goto's transfer — with `{}` inputs, since
+   * neither has an input-mapping mechanism of its own (issue `#62`).
+   *
+   * Shared rather than duplicated by its two callers, which otherwise repeat
+   * the identical "reject a cross-document target, then run with no inputs"
+   * sequence. Rejects a target this document does not define with the
+   * calling `stepId` attached, unlike {@link WorkflowExecutor.#resolveWorkflow}'s
+   * own `workflow-not-found` (reached only for a same-document target, once
+   * `#run` itself resolves it) — which carries no caller context at all, since
+   * it is reached generically from every kind of nested call.
+   */
+  async #runReferencedWorkflow(
+    refId: string,
+    workflowId: string,
+    stepId: string,
+    scope: RunScope,
+    callStack: WorkflowCallStack,
+    via: WorkflowCallVia,
+  ): Promise<WorkflowExecutionResult> {
+    this.#rejectCrossDocumentWorkflow(refId, workflowId, stepId);
+    if (!this.#document.workflowIndex.has(refId)) {
+      throw new ExecutionError(
+        `workflow "${refId}" not found in Arazzo document at "${this.#document.uri}"`,
+        { workflowId: refId, stepId, reason: 'workflow-not-found' },
+      );
+    }
+    return this.#run(refId, {}, scope, callStack, via);
   }
 
   /**

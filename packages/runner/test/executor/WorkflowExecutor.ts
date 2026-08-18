@@ -11,6 +11,7 @@ import {
   OpenAPIOperationExecutor,
   ExecutionError,
   ResolverError,
+  settledResult,
   type HTTPClient,
   type OpenAPIOperationRequest,
   type WorkflowExecuteOptions,
@@ -848,15 +849,18 @@ describe('WorkflowExecutor', function () {
   });
 
   context('not yet supported', function () {
-    specify('should throw for a goto targeting a workflowId', async function () {
-      const { executor } = makeExecutor();
+    specify(
+      'should throw for a goto workflowId reference into another document',
+      async function () {
+        const { executor } = makeExecutor();
 
-      await rejects(
-        executor.execute('gotoWorkflowUnsupported'),
-        ExecutionError,
-        /gotos a workflowId; not supported yet/,
-      );
-    });
+        await rejects(
+          executor.execute('gotoCrossDocument'),
+          ExecutionError,
+          /points to another document; not supported yet/,
+        );
+      },
+    );
 
     specify(
       'should throw for a retry workflowId reference into another document',
@@ -868,6 +872,201 @@ describe('WorkflowExecutor', function () {
           ExecutionError,
           /points to another document; not supported yet/,
         );
+      },
+    );
+  });
+
+  context('transfer to a workflow', function () {
+    specify(
+      'should transfer to the target and end its own run without evaluating outputs',
+      async function () {
+        const { executor, calls } = makeExecutor();
+
+        const result = await executor.execute('transfersToTarget');
+
+        assert.strictEqual(result.status, 'transferred');
+        assert.strictEqual(result.workflowId, 'transfersToTarget');
+        // the caller's own outputs declaration is never evaluated, despite
+        // naming a value the caller's own step did produce.
+        assert.deepEqual(result.outputs, {});
+        // the partial trace up to the transfer — only the caller's own step.
+        assert.deepEqual(
+          result.steps.map((step) => step.stepId),
+          ['only'],
+        );
+        assert.isTrue(result.steps[0].successful);
+
+        // the top-level status is 'transferred', but settledStatus reflects
+        // where the chain actually landed — computed eagerly, no call needed.
+        assert.strictEqual(result.settledStatus, 'completed');
+
+        assert.isDefined(result.transferredTo);
+        const target = result.transferredTo!;
+        assert.strictEqual(target.workflowId, 'transferTarget');
+        assert.strictEqual(target.status, 'completed');
+        // a non-transferred result's settledStatus is simply its own status.
+        assert.strictEqual(target.settledStatus, 'completed');
+        assert.deepEqual(
+          target.steps.map((step) => step.stepId),
+          ['first', 'second'],
+        );
+        assert.strictEqual(target.outputs.name, 'Rex');
+        // a goto's transfer carries no parameters, so the target runs with {}
+        // inputs — the same gap issue #62 already documents for retry
+        // references.
+        assert.isUndefined(target.outputs.echoedStatus);
+        // the target has no transfer of its own.
+        assert.isUndefined(target.transferredTo);
+
+        // 1 call for the caller's own step, 2 for the target's.
+        assert.strictEqual(calls.length, 3);
+      },
+    );
+
+    specify('should chain a transfer to a transfer, recursively', async function () {
+      const { executor } = makeExecutor();
+
+      const result = await executor.execute('transferChainStart');
+
+      assert.strictEqual(result.status, 'transferred');
+      assert.strictEqual(result.transferredTo?.workflowId, 'transferChainMiddle');
+      assert.strictEqual(result.transferredTo?.status, 'transferred');
+      assert.strictEqual(result.transferredTo?.transferredTo?.workflowId, 'transferTarget');
+      assert.strictEqual(result.transferredTo?.transferredTo?.status, 'completed');
+      // settledStatus is computed eagerly at every hop, so both the root and
+      // the middle link already carry the terminal verdict, not just the
+      // terminal result itself.
+      assert.strictEqual(result.settledStatus, 'completed');
+      assert.strictEqual(result.transferredTo?.settledStatus, 'completed');
+      // settledResult chases the whole two-hop chain to its terminal result,
+      // for callers who want the terminal result itself, not just its status.
+      assert.strictEqual(settledResult(result).workflowId, 'transferTarget');
+      assert.strictEqual(settledResult(result).status, 'completed');
+    });
+
+    specify(
+      'should return a non-transferred result from settledResult unchanged, with settledStatus mirroring status',
+      async function () {
+        const { executor } = makeExecutor();
+
+        const result = await executor.execute('linear', { inputs: { status: 'available' } });
+
+        assert.strictEqual(settledResult(result), result);
+        assert.strictEqual(result.settledStatus, result.status);
+      },
+    );
+
+    specify('should transfer from the failure path as readily as from success', async function () {
+      // every client returns a 500, so the step's successCriteria fail and its
+      // onFailure — a goto to a workflowId — fires.
+      const { executor } = makeExecutor(serverErrorResponse);
+
+      const result = await executor.execute('transferOnFailure');
+
+      assert.strictEqual(result.status, 'transferred');
+      assert.strictEqual(result.transferredTo?.workflowId, 'emptyWorkflow');
+      assert.strictEqual(result.transferredTo?.status, 'completed');
+    });
+
+    specify('should reject a goto naming both a stepId and a workflowId', async function () {
+      const { executor, calls } = makeExecutor();
+
+      const error = await captureError(executor.execute('gotoAmbiguous'));
+
+      assert.strictEqual(error.reason, 'ambiguous-target');
+      assert.match(error.message, /mutually exclusive/);
+      // rejected before either branch could act on it.
+      assert.strictEqual(calls.length, 1);
+    });
+
+    specify(
+      'should throw workflow-not-found, naming the calling step, for a transfer to an unknown workflow',
+      async function () {
+        const { executor } = makeExecutor();
+
+        const error = await captureError(executor.execute('gotoUnknownWorkflow'));
+
+        assert.strictEqual(error.reason, 'workflow-not-found');
+        assert.match(error.message, /not found/);
+        // several steps could goto the same missing id; naming the calling
+        // step (not just the missing target) is what lets an author tell
+        // which one is wrong.
+        assert.strictEqual(error.stepId, 'only');
+      },
+    );
+
+    specify(
+      'should report an abort at the transfer boundary as aborted, even for a cross-document target',
+      async function () {
+        // the abort is checked before the reference helper's own
+        // cross-document rejection, so a run cancelled at the transfer
+        // boundary reports why it stopped (aborted), not an authoring
+        // property of a target it never got to evaluate.
+        const controller = new AbortController();
+        const { executor, calls } = makeExecutor(okResponse, {
+          onCall: () => controller.abort(),
+        });
+
+        const error = await captureError(
+          executor.execute('gotoCrossDocument', { signal: controller.signal }),
+        );
+
+        assert.strictEqual(error.reason, 'aborted');
+        assert.strictEqual(calls.length, 1);
+      },
+    );
+
+    specify('should not charge the step budget for entering the target', async function () {
+      // maxSteps: 1 covers only the caller's own step; entering the (empty)
+      // target must not cost another unit, unlike a retry's workflowId
+      // reference, which does charge on entry.
+      const { executor } = makeExecutor(okResponse, { maxSteps: 1 });
+
+      const result = await executor.execute('transfersToEmpty');
+
+      assert.strictEqual(result.status, 'transferred');
+      assert.strictEqual(result.transferredTo?.status, 'completed');
+    });
+
+    specify('should not enter the target once aborted at the transfer boundary', async function () {
+      const controller = new AbortController();
+      const { executor, calls } = makeExecutor(okResponse, {
+        onCall: () => controller.abort(),
+      });
+
+      const error = await captureError(
+        executor.execute('transfersToTarget', { signal: controller.signal }),
+      );
+
+      assert.strictEqual(error.reason, 'aborted');
+      assert.strictEqual(error.workflowId, 'transfersToTarget');
+      assert.strictEqual(error.stepId, 'only');
+      // the caller's own step ran; the target was never entered.
+      assert.strictEqual(calls.length, 1);
+    });
+
+    specify(
+      'should let a caller detect a failure buried in the transfer chain via settledStatus',
+      async function () {
+        // the caller's own step has no successCriteria, so it transfers
+        // regardless of status; failBreak's own step does, and 500 fails it.
+        const { executor } = makeExecutor(serverErrorResponse);
+
+        const result = await executor.execute('transfersToFailing');
+
+        // the top-level status is 'transferred', not 'failed' — checking it
+        // directly, the way `result.status === 'failed'` naturally reads,
+        // would miss the failure entirely.
+        assert.strictEqual(result.status, 'transferred');
+        assert.notStrictEqual(result.status, 'failed');
+        // settledStatus already carries the terminal verdict — no call
+        // needed to discover it landed on 'failed'.
+        assert.strictEqual(result.settledStatus, 'failed');
+        // settledResult(result), for comparison, retrieves the terminal
+        // result itself (its workflowId, outputs, steps), not just its
+        // status.
+        assert.strictEqual(settledResult(result).status, 'failed');
+        assert.strictEqual(settledResult(result).workflowId, 'failBreak');
       },
     );
   });

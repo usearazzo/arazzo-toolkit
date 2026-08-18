@@ -6,18 +6,41 @@ import type { SelectedAction } from '../action/ActionResolver.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
 
 /**
+ * Which of an action's mutually exclusive `stepId` / `workflowId` fields are
+ * present, ahead of a caller deciding what that means.
+ *
+ * Shared rather than duplicated by `goto`'s own check here and a `retry`
+ * action's reference check in `WorkflowExecutor` — both Success/Failure
+ * Action Object fields carry the identical "mutually exclusive" constraint,
+ * so both need the identical two `isStringElement` reads before diverging on
+ * their own wording and branch handling.
+ * @internal
+ */
+export function actionTargets(action: {
+  readonly stepId?: unknown;
+  readonly workflowId?: unknown;
+}): { readonly hasStepId: boolean; readonly hasWorkflowId: boolean } {
+  return {
+    hasStepId: isStringElement(action.stepId),
+    hasWorkflowId: isStringElement(action.workflowId),
+  };
+}
+
+/**
  * What a workflow does after a step, once the step's action has been
  * interpreted.
  *
  * `next` runs the following step (the success default, or a matched `goto` that
  * targets the next step); `goto` jumps to a step by id within the current
- * workflow; `end` stops the run with `status: ended`; `break` stops with
- * `status: failed` (the failure default).
+ * workflow; `transfer` hands control one-way to another workflow, which the
+ * caller's run then ends on; `end` stops the run with `status: ended`; `break`
+ * stops with `status: failed` (the failure default).
  * @internal
  */
 export type Transition =
   | { readonly kind: 'next' }
   | { readonly kind: 'goto'; readonly stepId: string }
+  | { readonly kind: 'transfer'; readonly workflowId: string }
   | { readonly kind: 'end' }
   | { readonly kind: 'break' };
 
@@ -44,12 +67,14 @@ export interface StepTransitionContext {
  *   applicable outputs".
  * - **`goto` a `stepId`** — jumps within the current workflow, which is where the
  *   specification requires the target to be.
- * - **`goto` a `workflowId`** — a transfer of control to another workflow, whose
- *   one-way-versus-return semantics are ambiguous in 1.0.1, so it is rejected
- *   rather than guessed at. This is where that support lands once the semantics
- *   are settled: most likely as another `Transition` kind, leaving the running of
- *   the target to the executor, since running workflows is orchestration rather
- *   than policy.
+ * - **`goto` a `workflowId`** — a one-way transfer of control to another
+ *   workflow: the `stepId`/`workflowId` field descriptions condition "context
+ *   transfers back upon completion" on `retry` specifically, so for `goto` it
+ *   does not — the current run ends here, and running the target is the
+ *   executor's job, since running workflows is orchestration rather than
+ *   policy. A `goto` naming both `stepId` and `workflowId` is malformed — the
+ *   spec marks them mutually exclusive — and is rejected before either is
+ *   read.
  * - **anything else** — malformed input rather than a defined control flow.
  *   `retry` is the one action that never arrives here: it is settled by
  *   {@link StepRetryRunner}, which yields only the terminal action a retry chain
@@ -76,14 +101,18 @@ class StepTransitionInterpreter {
       return { kind: 'end' };
     }
     if (type === 'goto') {
-      if (isStringElement(action.workflowId)) {
+      const { hasStepId, hasWorkflowId } = actionTargets(action);
+      if (hasStepId && hasWorkflowId) {
         throw new ExecutionError(
-          `action on step "${stepId}" in workflow "${workflowId}" gotos a workflowId; not supported yet`,
-          { stepId, workflowId, reason: 'goto-workflow-unsupported' },
+          `goto action on step "${stepId}" in workflow "${workflowId}" declares both a stepId and a workflowId (mutually exclusive)`,
+          { stepId, workflowId, reason: 'ambiguous-target' },
         );
       }
-      if (isStringElement(action.stepId)) {
+      if (hasStepId) {
         return { kind: 'goto', stepId: toValue(action.stepId) as string };
+      }
+      if (hasWorkflowId) {
+        return { kind: 'transfer', workflowId: toValue(action.workflowId) as string };
       }
       throw new ExecutionError(
         `goto action on step "${stepId}" in workflow "${workflowId}" has neither stepId nor workflowId`,

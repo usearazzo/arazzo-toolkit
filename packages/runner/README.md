@@ -94,16 +94,17 @@ registry.clear(); // drop cached documents to reclaim memory
 ## `WorkflowExecutor`
 
 > [!NOTE]
-> Under active development. Step-level `goto` to a workflow, a `retry` carrying a reference, and
-> cross-document workflow references are not yet implemented and throw `ExecutionError` rather than
-> behaving incorrectly (see [Not yet supported](#not-yet-supported)).
+> Under active development. Cross-document workflow references are not yet implemented and throw
+> `ExecutionError` rather than behaving incorrectly (see [Not yet supported](#not-yet-supported)).
 
 `WorkflowExecutor` is the stateful orchestrator that runs a whole workflow. It iterates a workflow's
 steps in list order, calling `StepExecutor` per step, and owns the run state (a
 `WorkflowExecutionState`) that accumulates each step's outputs so later steps can read
 `$steps.*.outputs`. It interprets the control-flow actions `StepExecutor` only _selects_ (advancing
-to the next step, jumping via `goto`, or stopping on `end` or the failure break-default), and
-resolves the workflow's `outputs` against the final state.
+to the next step, jumping via `goto`, transferring one-way to another workflow via a `goto` naming a
+`workflowId`, or stopping on `end` or the failure break-default), and resolves the workflow's
+`outputs` against the final state — unless the run transferred, in which case it never reaches its
+own end and `outputs` is always `{}`.
 
 Give it the entry document, registry, and a `StepExecutor` once; call `execute` per run with a
 `workflowId` and its `inputs`:
@@ -137,7 +138,8 @@ const result = await executor.execute('authenticateAndOrderPet', {
   },
 });
 
-console.log(result.status); // 'completed' | 'ended' | 'failed'
+console.log(result.status); // 'completed' | 'ended' | 'failed' | 'transferred'
+console.log(result.settledStatus); // 'completed' | 'ended' | 'failed' — the actual verdict; see Control flow
 console.log(result.outputs); // workflow $outputs, resolved against final state
 console.log(result.steps); // trace: each step's id, success, action, attempts, durationMs
 console.log(result.durationMs); // elapsed time for the whole run
@@ -167,6 +169,7 @@ After each step, the selected `onSuccess` / `onFailure` action determines what h
   (`status: 'failed'`);
 - **`end`**: stops the run early with `status: 'ended'`, returning the outputs accumulated so far;
 - **`goto` a `stepId`**: jumps to that step within the current workflow;
+- **`goto` a `workflowId`**: transfers control to another workflow — see below;
 - **`retry`**: re-runs the step's operation up to the action's `retryLimit` (default `1`), waiting
   `retryAfter` seconds between attempts. Per spec, `retryLimit` is exhausted _before_ subsequent
   failure actions run, so an exhausted `retry` falls through to the next matching failure action,
@@ -185,6 +188,73 @@ Neither kind's own success/failure actions are followed, and a failed reference 
 retry chain: the specification speaks of the reference's _completion_, not its success, and a
 futile retry is still bounded by `retryLimit`. Reference runs are surfaced on the step's trace as
 `retryReferences`, one entry per firing.
+
+A `goto` naming a `workflowId` **transfers control one-way** to that workflow: unlike `end`, control
+does not return. The specification calls `goto` "a one-way transfer of workflow control", and the
+`stepId`/`workflowId` field descriptions condition "context transfers back upon completion" on
+`retry` specifically — the scoping is the signal that a `goto`'s transfer does not return. The
+calling workflow's own run ends at the `goto`, so its `outputs` declaration is never evaluated
+(`result.outputs` is always `{}` on a transferred result) and `result.steps` keeps only the partial
+trace up to the transfer. The target's own result is nested at `result.transferredTo`, with
+`result.status` set to `'transferred'`; if the target itself transfers onward, the chain reads back
+via `transferredTo.transferredTo`, recursively. Like a retry's `workflowId` reference, a transfer's
+target runs with no inputs — a `goto` action carries no `parameters`, and the specification gives it
+no input-mapping mechanism (the same gap issue `#62` tracks for retry references). A transfer joins
+the same guarded call tree as everything else below — a self-transfer or a transfer cycle throws
+`workflow-cycle`, and a legitimate transfer chain is bounded by `maxWorkflowDepth` — but, unlike a
+retry's reference, entering the target is **not** charged against the step budget: a `goto` fires
+once per step evaluation, with no way to re-fire from the same frame the way `retryLimit` lets a
+reference do.
+
+> [!NOTE]
+> A transfer target is entered on the *transferring* workflow's own call-stack frame, which is why
+> the cycle/depth rules above apply to it at all. This means a transfer chain does not behave like a
+> `goto stepId` loop: since the transferring workflow's frame stays on the stack (there is no return
+> to pop it), a workflow that transfers back to a workflow already on that chain — even indirectly,
+> even once the loop's actual exit condition would have been met — throws `workflow-cycle` rather
+> than looping, and a long acyclic chain of distinct workflows throws `workflow-depth` past
+> `maxWorkflowDepth` (default `32`) rather than running indefinitely. A `goto stepId` loop bounded by
+> ordinary data (poll until a status flips, say) has no such ceiling — only the shared step budget. A
+> state machine expressed as workflows chained by `goto workflowId` should therefore be modeled as a
+> bounded sequence, not a cycle that revisits a workflow already in progress.
+
+Because a transferred result is not itself a verdict about success — only a record of where control
+went — every `WorkflowExecutionResult` carries a second field, `settledStatus`, alongside `status`:
+`'completed' | 'ended' | 'failed'`, computed eagerly (when the result is built, not when read) by
+following a `'transferred'` result's `transferredTo` chain to its terminal, non-`transferred` result;
+for a result that isn't `'transferred'`, it simply repeats `status`. Anywhere this library reads a
+nested run's outcome — a `dependsOn` prerequisite, a sub-workflow step's own success, a retry
+reference's recorded `successful` — it compares `settledStatus`, not `status`: a dependency,
+sub-workflow step, or reference whose transfer chain settles `'completed'` or `'ended'` is treated as
+satisfied; one that settles `'failed'` is treated as failed. See
+[Composing workflows](#composing-workflows) for how this interacts with `$workflows.<id>.outputs`.
+
+> [!IMPORTANT]
+> `settledStatus` matters on the **top-level** result `execute()` returns, too, not only on nested
+> ones. A root run that transfers reports `result.status === 'transferred'`, not `'failed'`, even when
+> its target's own chain fails — `result.settledStatus === 'failed'` is the check that reflects where
+> the run actually landed:
+>
+> ```js
+> const result = await executor.execute('myWorkflow');
+> if (result.settledStatus === 'failed') {
+>   // handles both an ordinary failed run and one that transferred into a failing chain
+> }
+> ```
+>
+> A bare `result.status === 'failed'` check silently misses the latter case. `settledStatus` is
+> always present — comparing it is exactly as cheap as comparing `status`, no extra call required.
+>
+> For the terminal *result itself* — its `outputs`, `steps`, `workflowId` — rather than just its
+> status, the exported `settledResult(result)` helper follows the same chain and returns the object it
+> ends on (itself, unchanged, when `result.status` isn't `'transferred'`):
+>
+> ```js
+> import { settledResult } from '@usearazzo/runner';
+>
+> const landedOn = settledResult(result);
+> console.log(landedOn.workflowId, landedOn.outputs);
+> ```
 
 A runaway `goto` loop, a runaway `retry`, **or** a runaway tree of sub-workflow calls is bounded by
 `maxSteps` (default `1000`), which counts every step attempt and throws `ExecutionError`
@@ -221,7 +291,22 @@ workflow that completed and unwound may be entered again.
 
 The result mirrors this structure. A step record carries `subWorkflows` — one nested
 `WorkflowExecutionResult` per attempt, so a retried sub-workflow step keeps every attempt's trace —
-and a result carries `dependencies`, the prerequisite runs in declaration order.
+and a result carries `dependencies`, the prerequisite runs in declaration order. A result whose
+`status` is `'transferred'` (see [Control flow](#control-flow)) additionally carries `transferredTo`,
+nesting the transfer target's own result — a workflow that ran `dependsOn` prerequisites before
+transferring still reports them under `dependencies`; the two fields are independent, not exclusive.
+
+A nested run reached this way — a sub-workflow step's target, a `dependsOn` prerequisite, a retry
+reference — is judged by its `settledStatus`, not by a raw `'transferred'` status: a sub-workflow
+step that targets a workflow which transfers onward to a completed run still takes
+the success path, and a `dependsOn` prerequisite that transfers onward to a failed run still fails
+the dependent. Either way, the nested run's own recorded identity and `$workflows.<id>.outputs`
+reflect the workflow that was actually *called*, not the one control ended up in — a transferred
+call always records `outputs: {}` there, for the same reason its own top-level `outputs` is `{}`
+(see [Control flow](#control-flow)). The terminal outputs of a transfer chain are reachable, just
+not under that key: follow `transferredTo.outputs` (or `transferredTo.transferredTo.outputs`, for a
+chain) on the nested result itself, found on the calling step's `subWorkflows` entry or the result's
+`dependencies` entry.
 
 ### Workflow-level default actions
 
@@ -320,10 +405,10 @@ Authoring errors throw `ExecutionError` — as does a cancelled run (`aborted`, 
 (`goto-target-not-found`), a `goto` naming neither `stepId` nor `workflowId`
 (`goto-target-missing`), a `retry` reference to a `stepId` this workflow does not declare
 (`retry-target-not-found`), an action of an unknown `type` (`unknown-action-type`), a
-present but malformed `steps` or `dependsOn` (`malformed-steps`, `malformed-dependsOn`), a step or a
-`retry` reference naming more than one target (`ambiguous-target`), a cycle or over-deep nesting
-(`workflow-cycle`, `dependsOn-cycle`, `workflow-depth`), or the step-budget overflow above
-(`step-budget`).
+present but malformed `steps` or `dependsOn` (`malformed-steps`, `malformed-dependsOn`), a step, a
+`goto`, or a `retry` reference naming more than one target (`ambiguous-target`), a cycle or
+over-deep nesting (`workflow-cycle`, `dependsOn-cycle`, `workflow-depth`), or the step-budget
+overflow above (`step-budget`).
 
 A workflow's own `steps` and `dependsOn` lists are validated before any of its prerequisites run, so
 those two mistakes never fire live requests on the way to throwing. Errors belonging to an
@@ -337,10 +422,10 @@ run.
 These land in later work. Each throws `ExecutionError` with the noted `reason` rather than behaving
 incorrectly:
 
-- **step-level `goto` to a `workflowId`** (`reason: 'goto-workflow-unsupported'`);
 - **cross-document workflow references**: a `workflowId` / `dependsOn` naming a workflow in another
   document via `$sourceDescriptions.<name>.<workflowId>` — including one named by a `retry`
-  reference — (`reason: 'cross-document-workflow-unsupported'`); same-document only for now.
+  reference or a `goto`'s transfer — (`reason: 'cross-document-workflow-unsupported'`);
+  same-document only for now.
 
 ## `StepExecutor`
 

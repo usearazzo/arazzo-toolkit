@@ -102,7 +102,7 @@ export { default as ActionResolver } from './action/ActionResolver.ts';
 export type { CriterionPredicate, SelectedAction } from './action/ActionResolver.ts';
 
 /* Executor */
-export { default as WorkflowExecutor } from './executor/WorkflowExecutor.ts';
+export { default as WorkflowExecutor, settledResult } from './executor/WorkflowExecutor.ts';
 export type {
   WorkflowExecutorOptions,
   WorkflowExecuteOptions,
