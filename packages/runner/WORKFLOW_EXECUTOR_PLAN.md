@@ -3,16 +3,17 @@
 Status: the design below is implemented, across five PRs — the backbone
 (`#290`), retry (`#2`), sub-workflow steps + `dependsOn` (`#3`),
 cancellation (`#4`), and reference-retry — plus a train of follow-ups
-(`#40`–`#61`, summarized in §0). §0 tracks
-what shipped, what deliberately still throws, and **what to build next**;
-the numbered sections after it are the design and its spec citations, kept
-because the reasoning outlives the code. Grounds on the merged StepExecutor
-(`#279`) and the Arazzo 1.0.1 spec (control-flow semantics quoted inline below).
-Target spec: 1.0.1, same as StepExecutor. (Arazzo 1.1.0, released 2026-05-17,
-leaves the `goto` wording quoted below unchanged — the goto-workflow ambiguity
-flagged in this plan stands in both versions; the retry-reference wording is
-likewise unchanged, but that ambiguity is now resolved and shipped, per §0.
-1.1.0's additions —
+(`#40`–`#61`, summarized in §0) and goto-workflow transfer (issue `#65`). §0
+tracks what shipped, what deliberately still throws, and **what to build
+next**; the numbered sections after it are the design and its spec citations,
+kept because the reasoning outlives the code. Grounds on the merged
+StepExecutor (`#279`) and the Arazzo 1.0.1 spec (control-flow semantics quoted
+inline below). Target spec: 1.0.1, same as StepExecutor. (Arazzo 1.1.0,
+released 2026-05-17, leaves the `goto` wording quoted below unchanged — the
+one-way-vs-return ambiguity this plan once flagged stood in both versions
+before goto-workflow transfer resolved it as a working interpretation, per §0;
+the retry-reference wording is likewise unchanged, but that ambiguity is also
+resolved and shipped, per §0. 1.1.0's additions —
 step-level `dependsOn` / `timeout`, AsyncAPI steps, new criterion types,
 `querystring` already noted in issue `#33` — are out of this plan's scope.)
 
@@ -198,8 +199,9 @@ existing suite.
 **Out of scope (still throwing, unchanged reasons):** step-level goto-workflow;
 cross-document workflow refs (including one named by a `retry` reference).
 Workflow-level `parameters` and the e2e suite remain separate follow-ups.
-(Reference-retry, listed here at the time this PR shipped, is now under
-"Shipped" below.)
+(Reference-retry and step-level goto-workflow, both listed here at the time
+this PR shipped, are now under "Shipped" below; cross-document workflow refs
+remain the one open item from this list.)
 
 **Deviations from the design above, as built:**
 
@@ -255,10 +257,12 @@ Workflow-level `parameters` and the e2e suite remain separate follow-ups.
     would have given the same testability. Kept as a class for consistency with
     its two siblings and with the package's other stateless collaborators
     (`ActionResolver`, `OutputResolver`, `CriterionEvaluator`), not out of
-    necessity — step-level goto-workflow lands in this code, but under
-    "policies out, orchestration in" it should arrive as another `Transition`
-    kind that the executor acts on, which a function would serve equally well.
-    Downgrading it to one later is a small change that keeps its tests.
+    necessity — step-level goto-workflow (shipped, see §0 "Shipped
+    (goto-workflow transfer)") landed in this code, and under "policies out,
+    orchestration in" arrived exactly as predicted: another `Transition` kind
+    that the executor acts on, which a function would have served equally
+    well. Downgrading the class to one later is still a small change that
+    keeps its tests.
 - A `retry` on a sub-workflow step re-runs that workflow's **steps**; its
   already-completed `dependsOn` prerequisites stay satisfied, since the
   completed-dependency memo spans the run. Retrying re-runs the work, not the
@@ -481,17 +485,148 @@ reference runs at all); 1 `WorkflowExecutorComposition` test (a cycle closed
 through a `workflowId` reference classifies as `workflow-cycle`, confirming
 `'retry'` groups with `'step'` for that purpose).
 
+### Shipped (goto-workflow transfer)
+
+Design proposed in [issue #65](https://github.com/usearazzo/arazzo-toolkit/issues/65)
+(semantics decided 2026-08-17, result shape proposed the same day, both
+citing [OAI/Arazzo-Specification#66](https://github.com/OAI/Arazzo-Specification/issues/66));
+implemented as proposed. Formerly §0 "Next" item 1, formerly §4's
+goto-workflow note (both superseded by this subsection).
+
+- **Semantics, as built: one-way, no return.** A `goto` naming a `workflowId`
+  ends the calling workflow's own run at that step — it does not resume
+  afterward, and its own `outputs` declaration is never evaluated (the run
+  never reaches its own end). Basis unchanged from the proposal: the
+  `stepId`/`workflowId` field descriptions condition "context transfers back
+  upon completion" on `retry` specifically; the scoping is the signal that
+  `goto` does not return.
+- **`StepTransitionInterpreter` gains a `transfer` `Transition` kind**
+  (`{ kind: 'transfer', workflowId }`), replacing the
+  `goto-workflow-unsupported` throw. A `goto` naming both `stepId` and
+  `workflowId` now throws `ambiguous-target` — unreachable before (the
+  `workflowId` branch threw unconditionally), needed once it returns a
+  transition instead, mirroring the same check `#retryReference` already
+  makes.
+- **`WorkflowExecutor`'s `#run` loop acts on `transfer`** via a `switch` over
+  `Transition['kind']` (labeled `stepLoop:`, since exiting the transfer/`end`/
+  `break` cases must break the *loop*, not just the switch) — a `default`
+  branch narrows the exhausted union to `never` and throws `ExecutionError`
+  (`reason: 'unknown-transition-kind'`) rather than a bare `Error`, matching
+  the codebase's own exhaustiveness-guard convention
+  (`CriterionEvaluator`/`RuntimeExpressionEvaluator`). The transfer case
+  checks for cancellation **before** rejecting a cross-document target
+  (matching the boundary-check-first convention every other nested call
+  follows), then runs the target through a new shared
+  `#runReferencedWorkflow` helper — entered via a new `'goto'`
+  `WorkflowCallVia`, grouped with `'step'`/`'retry'` for cycle classification,
+  on the *caller's* call stack (push-only, so a self-transfer is caught as
+  `workflow-cycle`, not allowed as a "real" tail call). Runs with **`{}`
+  inputs** — a `goto` action carries no parameters, the same gap issue `#62`
+  already documents for a retry's `workflowId` reference. **Not charged
+  against the step budget** on entry, unlike a retry reference: a `goto`
+  fires once per step evaluation, with no way to re-fire from the same frame
+  the way `retryLimit` lets a reference fire repeatedly, so
+  `maxWorkflowDepth` + cycle detection already bound a transfer chain without
+  a third guard.
+- **`#runReferencedWorkflow(refId, workflowId, stepId, scope, callStack, via)`**
+  — shared by the transfer branch and `#retryReference`'s own `workflowId`
+  branch, which otherwise repeated the identical "reject a cross-document
+  target, then run with `{}` inputs" sequence. Also closes a gap neither copy
+  had on its own: a target this document does not define now throws
+  `workflow-not-found` naming the *calling* `stepId` (previously, both paths
+  fell through to `#resolveWorkflow`'s own generic `workflow-not-found`,
+  which — reached from every kind of nested call, not just these two — carries
+  no caller context at all, so several `goto`s to the same missing id were
+  indistinguishable). `StepTransitionInterpreter` gains a matching
+  `actionTargets(action)` helper, sharing the `hasStepId`/`hasWorkflowId`
+  detection between `goto`'s own ambiguous-target check and
+  `#retryReference`'s.
+- **Result shape, as built:** new terminal `status: 'transferred'` (added to
+  `WorkflowExecutionResult['status']`), new optional
+  `transferredTo?: WorkflowExecutionResult` nesting the target's full result —
+  never spliced in, so `workflowId` on the transferred result stays the
+  workflow that was *called*, and a chain reads back via
+  `transferredTo.transferredTo`, recursively, with no special-casing — and a
+  new **required** `settledStatus: 'completed' | 'ended' | 'failed'`, present
+  on every result, not only transferred ones (see next bullet). The caller's
+  own `steps` keeps its partial trace up to the transfer; its top-level
+  `outputs` is always `{}`.
+
+  `#run` assembles these from a single `RunOutcome` value
+  (`{ kind: 'settled', status } | { kind: 'transferred', transferredTo }`)
+  rather than a `status` string plus a separately-set `transferredTo` local —
+  an earlier revision of this change had exactly that shape, with the
+  transfer branch setting both, and review during implementation flagged it:
+  nothing but convention kept them in sync, and a future branch could set one
+  without the other and compile fine. `RunOutcome` makes that state
+  unconstructable rather than merely discouraged; `#result` switches on its
+  `kind` once and derives `status`, `settledStatus`, whether `outputs` gets
+  resolved, and whether `transferredTo` is present, all from that one value.
+- **`settledStatus`, computed eagerly, not chased on read.** The original
+  design here exported a `settledResult(result)` function that walked
+  `transferredTo` at query time to answer "did this settle failed?" — correct,
+  but opt-in: nothing stopped a consumer writing the natural-looking
+  `result.status === 'failed'` and getting a silently wrong answer, since nothing
+  in the type system flags an incomplete comparison against a 4-variant union
+  the way an unhandled `switch` case would. Review during implementation (this
+  time from the human maintainer, comparing the export against "a structure
+  that abstracts this for us") led to computing the settled verdict once, at
+  construction, into a field every result already carries — `transferredTo`
+  (built first, bottom-up through the recursion) already has its own
+  `settledStatus`, so a transferred result's is `O(1)`:
+  `outcome.transferredTo.settledStatus`, not a walk. `settledResult(result)`
+  is kept, exported, for the different job of retrieving the terminal result
+  *itself* (its `outputs`, `steps`, `workflowId`) — for the verdict alone,
+  `result.settledStatus` needs no call. Used **at the four places a nested
+  run's outcome gates something the caller does next** — the dependency gate,
+  the `#runDependencies` short-circuit, a retry-reference's recorded
+  `successful`, and a sub-workflow step's own success determination — via a
+  private `#settledFailed(result)` reading `result.settledStatus === 'failed'`
+  directly. A `'transferred'` result is a record of *where* control went, not
+  itself a verdict; judging by the raw status would either read a chain that
+  settled `failed` as success (`!== 'failed'` literal) or punish one that
+  settled `completed` (treating `transferred` as failure outright). The
+  nested run's own identity (`workflowId`) and `outputs` (`{}`) are still
+  recorded as the *called* workflow's own — only the pass/fail judgment is
+  chased through the chain. One consequence worth naming: a `dependsOn`
+  prerequisite whose chain settles non-`failed` is memoized as satisfied even
+  though its own result reads `'transferred'`, the same as any other
+  non-`failed` dependency. **This matters on the top-level `execute()` result
+  a library consumer receives, not only on nested ones**: it can itself be
+  `'transferred'` with a chain that settles `'failed'` underneath, and
+  `result.status === 'failed'` would silently miss that — `result.settledStatus`
+  is the field that reflects where the run actually landed, present and cheap
+  to read on every result, transferred or not.
+
+**Tests:** 3 `StepTransitionInterpreter` unit tests (transfer from either
+path; ambiguous stepId+workflowId; `actionTargets` covered indirectly through
+both); 11 `WorkflowExecutor` tests (happy path incl. never-evaluated outputs,
+`{}` target inputs, and `settledStatus`; a two-hop transfer chain with
+`settledStatus` at each hop and `settledResult` chasing the terminal result;
+`settledResult` returning a non-transferred result unchanged with
+`settledStatus` mirroring `status`; transfer from the failure path;
+ambiguous-target; unknown target naming the calling step; cross-document
+target; an abort at the transfer boundary reported as `aborted` even for a
+cross-document target; no step-budget charge on entry; abort at the transfer
+boundary never enters the target; a top-level result whose chain settles
+`'failed'` detected via `settledStatus` despite reading `'transferred'` at the
+top); 8 `WorkflowExecutorComposition` tests (self-transfer as
+`workflow-cycle`; indirect transfer cycle; transfer chain bounded by
+`maxWorkflowDepth`; a sub-workflow step reading a transferred target's
+`settledStatus`, both completed and failed; a `dependsOn` prerequisite read
+the same way, both completed and failed; a retry-workflowId reference's
+`successful` reflecting the `settledStatus` of a target that itself
+transfers).
+
 ### Not yet implemented / missing
 
 Each currently **throws `ExecutionError`** rather than misbehaving (or is simply
 absent), and is scoped to a follow-up:
 
-- **Step-level `goto` to a `workflowId`** (§4 note) — throws
-  `reason: 'goto-workflow-unsupported'`; land once one-way-vs-return semantics
-  are confirmed.
 - **Cross-document workflow refs** — `$sourceDescriptions.<name>.<workflowId>`
-  for sub-workflows / `dependsOn` throws `cross-document-workflow-unsupported`
-  (as of PR #3; same-document only). The parsing and loading halves already
+  for sub-workflows / `dependsOn` / a retry's reference / a `goto`'s transfer
+  throws `cross-document-workflow-unsupported` (as of PR #3; same-document
+  only). The parsing and loading halves already
   exist — `ArazzoDocumentRegistryProvider` loads Arazzo source documents, and
   `OpenAPIOperationLocatorNormalizer` already parses
   `$sourceDescriptions.<name>.<reference>` and acquires the named source. **The
@@ -512,30 +647,24 @@ absent), and is scoped to a follow-up:
     URI together with the workflowId), as §4c anticipated; today workflowId alone
     is unambiguous precisely because a run cannot leave its document.
 
-  So: its own PR, sequenced after (or before) goto-workflow, but not folded
-  into either. (Reference-retry, which this note originally sequenced against,
-  shipped first and needed none of this — a `stepId` reference is same-document
-  by construction, and a `workflowId` reference reuses the existing
-  `#rejectCrossDocumentWorkflow` check rather than needing new scoping.)
+  So: its own PR, not folded into any of the reference-shaped features above.
+  (Reference-retry and goto-workflow transfer, which this note originally
+  sequenced against, both shipped first and needed none of this — a `stepId`
+  reference is same-document by construction, and a `workflowId` reference or
+  a `goto`'s transfer both reuse the existing `#rejectCrossDocumentWorkflow`
+  check rather than needing new scoping.)
 - **e2e suite** (§10) — only the deterministic stub unit suite exists; a real
   multi-step petstore run end-to-end is a separate opt-in follow-up.
 
 ### Next — what to build, and what each decision costs
 
-Reference-retry (formerly item 1 here) shipped 2026-08-17 — see §0 "Shipped
-(reference-retry)" above for what was built, including how each decision this
-section originally marked PROPOSED was resolved (all five shipped as
-proposed). What remains:
+Reference-retry shipped 2026-08-17 — see §0 "Shipped (reference-retry)" above
+for what was built, including how each decision that section originally
+marked PROPOSED was resolved (all five shipped as proposed). Goto-workflow
+transfer (formerly item 1 here) shipped the same day — see §0 "Shipped
+(goto-workflow transfer)" above. What remains:
 
-**1. Step-level `goto` to a `workflowId`.** Confirmed a must-have. Blocked on
-semantics rather than on code: 1.0.1 calls `goto` "a one-way transfer of workflow
-control", which is ambiguous inside a running workflow (does control return?).
-Worth settling as a question to the specification maintainers before building,
-since guessing wrong is expensive to unwind. Expected shape: another `Transition`
-kind the executor acts on, leaving the interpreter pure (see
-`StepTransitionInterpreter`).
-
-**2. Cross-document workflow references.** The largest, because it is a design
+**1. Cross-document workflow references.** The largest, because it is a design
 change rather than a lookup — the document must move into the per-invocation
 frame, and `StepExecutor`, injected pre-bound to one document, needs either a
 per-call document argument or a `(document) => StepExecutor` factory. Full
@@ -624,11 +753,13 @@ export interface WorkflowExecutorOptions {
 
 export interface WorkflowExecutionResult {
   readonly workflowId: string;
-  readonly outputs: Record<string, unknown>; // workflow $outputs, resolved
+  readonly outputs: Record<string, unknown>; // workflow $outputs, resolved — always {} when status is 'transferred'
   readonly steps: readonly StepRunRecord[]; // trace: what ran, in order, with outcomes
-  readonly status: 'completed' | 'ended' | 'failed'; // ended = an `end` action fired; failed = a step broke-and-returned
+  readonly status: 'completed' | 'ended' | 'failed' | 'transferred'; // ended = an `end` action fired; failed = a step broke-and-returned; transferred = a goto-workflow one-way transfer (goto-workflow transfer, issue #65)
+  readonly settledStatus: 'completed' | 'ended' | 'failed'; // where a transfer chain actually landed — status itself when not 'transferred'; computed eagerly, always present (goto-workflow transfer, issue #65)
   readonly dependencies?: readonly WorkflowExecutionResult[]; // dependsOn runs, in order (PR #3)
-  readonly durationMs?: number; // wall-clock for the run, retries/waits included (PR #3)
+  readonly durationMs?: number; // wall-clock for the run, retries/waits included (PR #3) — for a transferred run, covers the whole target chain too
+  readonly transferredTo?: WorkflowExecutionResult; // the target's own result, present only when status is 'transferred' (goto-workflow transfer, issue #65)
 }
 
 export interface StepRunRecord {
@@ -713,12 +844,13 @@ to, threading the `frame` (`callStack` + `depth`) per §4c.
     transition = interpret(action, outcome.successful, workflow)
     switch transition.kind:
       'next':      index += 1                              # success default OR goto resolved to next
-      'goto-step': index = indexOf(transition.stepId)      # must be in current workflow
-      'goto-workflow': await runSubWorkflow(transition.workflowId, ...); index += 1
+      'goto':      index = indexOf(transition.stepId)      # must be in current workflow
+      'transfer':  transferredTo = await #run(transition.workflowId, {}, ...); status = 'transferred'; break  # one-way — this run ends here, not `index += 1`
       'end':       status = 'ended'; break
       'break':     status = 'failed'; break                # failure default (break and return)
-  applyWorkflowOutputs(workflow, state)                    # resolve workflow.outputs against final state
-  return { workflowId, outputs: state.outputs, steps: trace, status }
+  if status == 'transferred': outputs = {}                 # own outputs declaration never evaluated
+  else: applyWorkflowOutputs(workflow, state)               # resolve workflow.outputs against final state
+  return { workflowId, outputs, steps: trace, status, transferredTo? }
 ```
 
 ### Outputs recording (the key mutation)
@@ -744,9 +876,11 @@ be executed"` → `{kind:'next'}`.
 - **`type: end`** → `"The workflow ends, and context returns to the caller with
 applicable outputs"` → `{kind:'end'}`.
 - **`type: goto`** with `stepId` (MUST be in current workflow, mutually
-  exclusive w/ workflowId) → `{kind:'goto-step', stepId}`.
-- **`type: goto`** with `workflowId` → transfer control to another workflow →
-  `{kind:'goto-workflow', workflowId}` (run it, then continue — see note).
+  exclusive w/ workflowId) → `{kind:'goto', stepId}`.
+- **`type: goto`** with `workflowId` → a one-way transfer of control to another
+  workflow → `{kind:'transfer', workflowId}` (run it; this run ends there — see
+  note. Not "run it, then continue": that was the pre-decision guess, corrected
+  below).
 
 ### Failure (§Failure Action Object): types `end`, `retry`, `goto`
 
@@ -771,40 +905,14 @@ by `ActionResolver`: `toValue(action.type)`, `action.stepId`, `action.workflowId
 `action.retryAfter`, `action.retryLimit`. Guard element presence with
 `isStringElement` / `isNumberElement`.
 
-**goto-workflow note — semantics DECIDED (2026-08-17), implementation still
-blocked:** the spec calls `goto` "a one-way transfer of workflow control".
-Settled reading: **one-way, no return** — the current workflow's own run ends
-at the `goto`; it does not resume afterward. Basis: the `stepId` and
-`workflowId` field descriptions both carry the identical clause "When used
-with `retry`, context transfers back upon completion of the specified
-step/workflow" — scoped to `retry` specifically, applied to both reference
-kinds. If context also transferred back for `goto`, the sentence would state
-it unconditionally, the way "mutually exclusive to stepId/workflowId" is
-stated unconditionally in the same sentence; the scoping is the signal that
-`goto` does not return. Consistent with `goto`-to-`stepId`'s existing
-semantics in this executor — a one-way jump with no return address remembered
-— so crossing a workflow boundary the same way is the more consistent reading,
-not a special case. Traced to
-[OAI/Arazzo-Specification#66](https://github.com/OAI/Arazzo-Specification/issues/66),
-the original proposal, which flagged this exact question as "TBD" at the time
-and never resolved it for `goto` specifically (only `retry` got the explicit
-sentence). Recorded in
-[issue #65](https://github.com/usearazzo/arazzo-toolkit/issues/65); still
-worth filing upstream to confirm/correct, but this is now the working
-position, not an open question.
-
-**Still blocking implementation — a result-shape question, not a semantics
-one:** since the current workflow never reaches its own normal completion
-when this fires, its own `outputs` declaration is never evaluated. The literal
-reading is a genuine tail-call — the target workflow's own result
-(`workflowId`, `outputs`, `status`, `steps`) becomes what the top-level
-`execute()` caller receives — with the original workflow's partial trace up
-to the `goto` needing a home (attached somewhere on the result, or dropped).
-Needs its own design pass before coding starts; throw `reason:
-'goto-workflow-unsupported'` continues until then (mirrors how StepExecutor
-threw on `workflowId` until sub-workflow steps were ready). Sub-workflow
-_calls_ (step with `workflowId` field, §4b below) are the well-defined
-recursion path and ARE supported — and, unlike this one, do return.
+**goto-workflow transfer — SHIPPED**, see §0 "Shipped (goto-workflow
+transfer)" for the as-built semantics, result shape, and rationale (traced to
+[OAI/Arazzo-Specification#66](https://github.com/OAI/Arazzo-Specification/issues/66)
+and [issue #65](https://github.com/usearazzo/arazzo-toolkit/issues/65)). Kept
+here only as a pointer, since this section predates the decision and its
+pseudocode above has been updated to match. Sub-workflow _calls_ (step with
+`workflowId` field, §4b below) remain the separate, well-defined recursion
+path that _does_ return — a `goto`'s transfer does not.
 
 ## 4b. Sub-workflow steps (step.workflowId)
 
@@ -1021,13 +1129,24 @@ identically.
 
 New `ExecutionError` reasons (extend the existing error type, no new class):
 `workflow-not-found`, `workflow-cycle` (self-referential call chain, §4c),
-`dependsOn-cycle`, `goto-target-not-found`, `goto-workflow-unsupported`
-(initial), `step-budget`, `workflow-depth`,
+`dependsOn-cycle`, `goto-target-not-found`, `step-budget`, `workflow-depth`,
 `cross-document-workflow-unsupported` (initial), `aborted` (PR #4 — the caller
 cancelled the run; carries `workflowId`/`stepId`/`path` and the signal's own
 `reason` as `cause`), `retry-target-not-found` (reference-retry — a `retry`
 action's `stepId` reference names no step in the current workflow; carries the
 missing target as `stepId`, matching `goto-target-not-found`'s convention).
+`goto-workflow-unsupported` (initial) is retired — a `goto` naming a
+`workflowId` is a supported transfer now (goto-workflow transfer, §0). Its
+sibling `ambiguous-target` (already used for a sub-workflow step naming a
+workflow alongside an operation, and for a `retry` naming both `stepId` and
+`workflowId`) now also covers a `goto` naming both. Goto-workflow transfer also
+adds `unknown-transition-kind` — the `#run` loop's `switch (transition.kind)`
+`default` branch, provably unreachable while `StepTransitionInterpreter`
+produces only known kinds (TypeScript narrows to `never` there); not a
+reachable authoring error, so not in the README's user-facing reason table —
+a defensive guard against a future `Transition` kind landing without a
+matching `case`, kept loud (`ExecutionError`, not a bare `Error`) rather than
+silent so it would fail a build's tests immediately if it ever fired.
 
 `workflow-cycle` carries the offending `path` (chain of workflowIds, e.g.
 A → B → A). Keep it distinct from `workflow-depth`: cycle = guaranteed
@@ -1074,7 +1193,10 @@ Given size, consider 2–3 PRs rather than one:
 2. **Retry semantics** (the subtle §6) — isolated, well-tested.
 3. **Sub-workflow calls + dependsOn** (recursion, depth/cycle guards).
    Cross-document workflow refs and step-level goto-workflow: throw initially, land
-   later once semantics confirmed.
+   later once semantics confirmed. _(Step-level goto-workflow has since shipped,
+   as its own follow-up rather than folded into this PR — see §0 "Shipped
+   (goto-workflow transfer)". Cross-document workflow refs remain the one
+   still throwing initially, per this original slicing.)_
 
 ## Open questions for review (decide before coding)
 
@@ -1085,8 +1207,12 @@ Given size, consider 2–3 PRs rather than one:
    merge happens in `ArazzoWorkflowNormalizer` at normalization time (§7), and
    `#49` later moved actions inheritance to the same home, retiring the
    `defaultActions` arg this question assumed as precedent.
-3. Step-level `goto` with `workflowId`: throw-initially (recommended) vs
-   run-and-continue? _(shipped throw-initially: `goto-workflow-unsupported`.)_
+3. ~~Step-level `goto` with `workflowId`: throw-initially (recommended) vs
+   run-and-continue?~~ **RESOLVED (goto-workflow transfer, issue #65):**
+   neither guess — a one-way transfer with no return, ending the calling
+   run's own steps at the `goto` and reporting the target's result nested
+   under a new `status: 'transferred'`. See §0 "Shipped (goto-workflow
+   transfer)".
 4. ~~dependsOn output sharing semantics — run-for-ordering only + expose via
    `$workflows`?~~ **RESOLVED (PR #3 scope):** run for ordering/side effects,
    expose via `$workflows.<id>.outputs` (`state.setWorkflow`), no merging into
