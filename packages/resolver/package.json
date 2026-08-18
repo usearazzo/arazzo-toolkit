@@ -53,17 +53,17 @@
   "dependencies": {
     "@babel/runtime-corejs3": "^8.0.0",
     "@usearazzo/parser": "1.0.1-alpha.0",
-    "@speclynx/apidom-datamodel": "^5.0.1",
-    "@speclynx/apidom-error": "^5.0.1",
-    "@speclynx/apidom-ns-arazzo-1": "^5.0.1",
-    "@speclynx/apidom-ns-openapi-2": "^5.0.1",
-    "@speclynx/apidom-ns-openapi-3-0": "^5.0.1",
-    "@speclynx/apidom-ns-openapi-3-1": "^5.0.1",
-    "@speclynx/apidom-reference": "^5.0.1",
+    "@speclynx/apidom-datamodel": "^5.1.0",
+    "@speclynx/apidom-error": "^5.1.0",
+    "@speclynx/apidom-ns-arazzo-1": "^5.1.0",
+    "@speclynx/apidom-ns-openapi-2": "^5.1.0",
+    "@speclynx/apidom-ns-openapi-3-0": "^5.1.0",
+    "@speclynx/apidom-ns-openapi-3-1": "^5.1.0",
+    "@speclynx/apidom-reference": "^5.1.0",
     "type-fest": "^5.4.4"
   },
   "devDependencies": {
-    "@speclynx/apidom-core": "^5.0.1"
+    "@speclynx/apidom-core": "^5.1.0"
   },
   "files": [
     "src/**/*.mjs",
