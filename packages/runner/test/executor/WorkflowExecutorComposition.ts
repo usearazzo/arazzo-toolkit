@@ -367,6 +367,38 @@ describe('WorkflowExecutor composition', function () {
       assert.strictEqual(result.status, 'completed');
       assert.strictEqual(calls.length, 1);
     });
+
+    specify(
+      'should report a self-transfer as a cycle — the push-only stack keeps the transferring workflow on the chain',
+      async function () {
+        const { executor } = makeExecutor(okResponse, { maxWorkflowDepth: 1 });
+
+        const error = await captureError(executor.execute('gotoSelf'));
+
+        assert.strictEqual(error.reason, 'workflow-cycle');
+        assert.deepEqual(error.path, ['gotoSelf', 'gotoSelf']);
+      },
+    );
+
+    specify('should detect an indirect cycle formed through transfers', async function () {
+      const { executor } = makeExecutor();
+
+      const error = await captureError(executor.execute('gotoCycleA'));
+
+      assert.strictEqual(error.reason, 'workflow-cycle');
+      assert.deepEqual(error.path, ['gotoCycleA', 'gotoCycleB', 'gotoCycleA']);
+    });
+
+    specify(
+      'should bound legitimate acyclic transfer chains by maxWorkflowDepth',
+      async function () {
+        const { executor } = makeExecutor(okResponse, { maxWorkflowDepth: 2 });
+
+        const error = await captureError(executor.execute('gotoDeepOne'));
+
+        assert.strictEqual(error.reason, 'workflow-depth');
+      },
+    );
   });
 
   context('dependsOn', function () {
@@ -560,6 +592,109 @@ describe('WorkflowExecutor composition', function () {
           'refCycleChild',
           'retryRefCycleParent',
         ]);
+      },
+    );
+  });
+
+  context('transfer to a workflow (nested runs judged by settled status)', function () {
+    specify(
+      'should let a sub-workflow step take the success path when the target transfers to a completed chain',
+      async function () {
+        const { executor, calls } = makeExecutor();
+
+        const result = await executor.execute('callsTransferringChild');
+
+        assert.strictEqual(result.status, 'completed');
+        assert.isTrue(result.steps[0].successful);
+        const [subWorkflow] = subWorkflowsOf(result.steps[0]);
+        assert.strictEqual(subWorkflow.status, 'transferred');
+        assert.strictEqual(subWorkflow.settledStatus, 'completed');
+        assert.strictEqual(subWorkflow.transferredTo?.workflowId, 'hasNameOutput');
+        assert.strictEqual(subWorkflow.transferredTo?.status, 'completed');
+        assert.strictEqual(subWorkflow.transferredTo?.outputs.name, 'Rex');
+        // $workflows.childThatTransfers.outputs is {} — the transferred child's
+        // own outputs declaration was never evaluated, so a step output mapped
+        // from it resolves to nothing, even though the chain settled fine.
+        assert.isUndefined(result.outputs.childOutputs);
+        assert.strictEqual(calls.length, 2);
+      },
+    );
+
+    specify(
+      'should let a sub-workflow step take the failure path when the target transfers to a failed chain',
+      async function () {
+        const { executor, calls } = makeExecutor(serverErrorResponse);
+
+        const result = await executor.execute('callsChildTransferringToFailing');
+
+        assert.strictEqual(result.status, 'failed');
+        assert.isFalse(result.steps[0].successful);
+        const [subWorkflow] = subWorkflowsOf(result.steps[0]);
+        assert.strictEqual(subWorkflow.status, 'transferred');
+        assert.strictEqual(subWorkflow.settledStatus, 'failed');
+        assert.strictEqual(subWorkflow.transferredTo?.status, 'failed');
+        assert.strictEqual(calls.length, 2);
+      },
+    );
+
+    specify(
+      'should satisfy a dependent when its prerequisite transfers to a completed chain',
+      async function () {
+        const { executor, calls } = makeExecutor();
+
+        const result = await executor.execute('dependsOnTransferringPrereq');
+
+        assert.strictEqual(result.status, 'completed');
+        const [dependency] = dependenciesOf(result);
+        assert.strictEqual(dependency.status, 'transferred');
+        assert.strictEqual(dependency.settledStatus, 'completed');
+        assert.strictEqual(dependency.transferredTo?.status, 'completed');
+        assert.strictEqual(calls.length, 3);
+      },
+    );
+
+    specify(
+      'should fail a dependent, running none of its own steps, when its prerequisite transfers to a failed chain',
+      async function () {
+        const { executor, calls } = makeExecutor(serverErrorResponse);
+
+        const result = await executor.execute('dependsOnTransferringToFailingPrereq');
+
+        assert.strictEqual(result.status, 'failed');
+        assert.deepEqual(result.steps, []);
+        const [dependency] = dependenciesOf(result);
+        assert.strictEqual(dependency.status, 'transferred');
+        assert.strictEqual(dependency.settledStatus, 'failed');
+        assert.strictEqual(dependency.transferredTo?.status, 'failed');
+        assert.strictEqual(calls.length, 2);
+      },
+    );
+
+    specify(
+      "should record a retry-workflowId reference as successful when its target's chain settles non-failed",
+      async function () {
+        // every client returns a 500, so doomed's own successCriteria never
+        // pass — the retry (limit 1) fires the reference once and then
+        // exhausts, falling to the break-default. Neither step in the
+        // reference's own chain (jump, get) declares successCriteria, so
+        // both succeed regardless of statusCode and the chain settles
+        // 'completed' — a successful reference does not rescue doomed's own
+        // outcome, the same as a failed one does not break its chain.
+        const { executor, calls } = makeExecutor(serverErrorResponse);
+
+        const result = await executor.execute('retryReferenceTransfers');
+
+        assert.strictEqual(result.status, 'failed');
+        assert.strictEqual(result.steps[0].attempts, 2);
+        assert.strictEqual(result.steps[0].retryReferences?.length, 1);
+        const reference = result.steps[0].retryReferences?.[0];
+        assert.strictEqual(reference?.kind, 'workflow');
+        assert.strictEqual(reference?.id, 'childThatTransfers');
+        assert.isTrue(reference?.successful);
+        assert.strictEqual(reference?.subWorkflow?.status, 'transferred');
+        assert.strictEqual(reference?.subWorkflow?.settledStatus, 'completed');
+        assert.strictEqual(reference?.subWorkflow?.transferredTo?.status, 'completed');
+        assert.strictEqual(calls.length, 4);
       },
     );
   });

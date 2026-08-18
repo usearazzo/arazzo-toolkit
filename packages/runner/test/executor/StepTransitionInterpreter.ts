@@ -82,14 +82,36 @@ describe('StepTransitionInterpreter', function () {
       });
     });
 
-    specify('should reject a goto targeting a workflow', function () {
-      // the specification calls goto "a one-way transfer of workflow control",
-      // whose return semantics are ambiguous — rejected rather than guessed at.
-      const action = onSuccess({ name: 'jump', type: 'goto', workflowId: 'other' });
+    specify('should transfer control to the named workflow, from either path', function () {
+      // the specification calls goto "a one-way transfer of workflow control" —
+      // running the target is the executor's job; interpreting it is only this.
+      const success = onSuccess({ name: 'jump', type: 'goto', workflowId: 'other' });
+      const failure = onFailure({ name: 'jump', type: 'goto', workflowId: 'other' });
+
+      assert.deepEqual(interpreter.interpret(success, true, stepContext), {
+        kind: 'transfer',
+        workflowId: 'other',
+      });
+      assert.deepEqual(interpreter.interpret(failure, false, stepContext), {
+        kind: 'transfer',
+        workflowId: 'other',
+      });
+    });
+
+    specify('should reject a goto naming both a stepId and a workflowId', function () {
+      // the spec marks the two mutually exclusive; naming both is malformed
+      // rather than a preference for one over the other.
+      const action = onSuccess({
+        name: 'jump',
+        type: 'goto',
+        stepId: 'later',
+        workflowId: 'other',
+      });
 
       const error = captureError(() => interpreter.interpret(action, true, stepContext));
 
-      assert.strictEqual(error.reason, 'goto-workflow-unsupported');
+      assert.strictEqual(error.reason, 'ambiguous-target');
+      assert.match(error.message, /mutually exclusive/);
     });
 
     specify('should reject a goto naming no target at all', function () {

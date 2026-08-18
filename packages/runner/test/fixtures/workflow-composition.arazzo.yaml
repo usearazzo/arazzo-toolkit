@@ -516,6 +516,153 @@ workflows:
       - stepId: backToParent
         workflowId: retryRefCycleParent
 
+  # a goto whose only step transfers to itself — a direct cycle, same as
+  # selfCycle above but formed through a transfer rather than a sub-workflow
+  # step call.
+  - workflowId: gotoSelf
+    steps:
+      - stepId: again
+        operationId: getInventory
+        onSuccess:
+          - name: loop
+            type: goto
+            workflowId: gotoSelf
+
+  # an indirect cycle formed through transfers: A -> B -> A.
+  - workflowId: gotoCycleA
+    steps:
+      - stepId: toB
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: gotoCycleB
+  - workflowId: gotoCycleB
+    steps:
+      - stepId: toA
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: gotoCycleA
+
+  # legitimate acyclic nesting through transfers, three workflows deep —
+  # bounded by maxWorkflowDepth the same as a sub-workflow step chain.
+  - workflowId: gotoDeepOne
+    steps:
+      - stepId: down
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: gotoDeepTwo
+  - workflowId: gotoDeepTwo
+    steps:
+      - stepId: down
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: gotoDeepThree
+  - workflowId: gotoDeepThree
+    steps:
+      - stepId: only
+        operationId: getInventory
+
+  # a child whose own step transfers onward to fetchPet — the sub-workflow-step
+  # and dependsOn cases below call this to prove a transferred nested run is
+  # judged by where its chain settled, not by its own 'transferred' status.
+  - workflowId: childThatTransfers
+    steps:
+      - stepId: jump
+        operationId: getInventory
+        onSuccess:
+          - name: forward
+            type: goto
+            workflowId: hasNameOutput
+
+  # a `name` output but no required inputs (petId is hardcoded, unlike
+  # fetchPet's) — a goto's transfer always runs its target with {} inputs, so
+  # a target requiring one would fail request validation. No successCriteria
+  # of its own: it settles regardless of statusCode, which lets the tests
+  # below drive a single constant response and still observe a settled
+  # 'completed' chain.
+  - workflowId: hasNameOutput
+    steps:
+      - stepId: get
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: "7"
+        outputs:
+          petName: $response.body#/name
+    outputs:
+      name: $steps.get.outputs.petName
+
+  # a child whose own step transfers onward to failingChild, whose chain
+  # settles 'failed' — the negative-control counterpart to childThatTransfers.
+  - workflowId: childThatTransfersToFailing
+    steps:
+      - stepId: jump
+        operationId: getInventory
+        onSuccess:
+          - name: forward
+            type: goto
+            workflowId: failingChild
+
+  # a sub-workflow step targeting a workflow that transfers, settling
+  # 'completed' — the calling step must read that as success.
+  - workflowId: callsTransferringChild
+    steps:
+      - stepId: child
+        workflowId: childThatTransfers
+        outputs:
+          childOutputs: $workflows.childThatTransfers.outputs.name
+    outputs:
+      childOutputs: $steps.child.outputs.childOutputs
+
+  # a sub-workflow step targeting a workflow that transfers, settling
+  # 'failed' — the calling step must take the failure path, and this
+  # workflow, having no onFailure of its own, falls to the break-default.
+  - workflowId: callsChildTransferringToFailing
+    steps:
+      - stepId: child
+        workflowId: childThatTransfersToFailing
+
+  # a prerequisite that transfers, settling 'completed' — satisfies the
+  # dependent the same as any other non-failed dependency.
+  - workflowId: dependsOnTransferringPrereq
+    dependsOn:
+      - childThatTransfers
+    steps:
+      - stepId: own
+        operationId: getInventory
+
+  # a prerequisite that transfers, settling 'failed' — must block the
+  # dependent from running its own steps, the same as any other failed one.
+  - workflowId: dependsOnTransferringToFailingPrereq
+    dependsOn:
+      - childThatTransfersToFailing
+    steps:
+      - stepId: never
+        operationId: getInventory
+
+  # a retry's workflowId reference to a workflow that itself transfers —
+  # the reference's recorded `successful` must reflect where the referenced
+  # chain settled, not the intermediate 'transferred' status.
+  - workflowId: retryReferenceTransfers
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: repair
+            type: retry
+            retryLimit: 1
+            workflowId: childThatTransfers
+
   # a sub-workflow step referencing another document — not yet supported.
   - workflowId: crossDocumentStep
     steps:
