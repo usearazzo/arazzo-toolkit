@@ -1,15 +1,12 @@
 import type { ParseResultElement } from '@usearazzo/parser';
 import { toValue } from '@speclynx/apidom-core';
 import { isStringElement } from '@speclynx/apidom-datamodel';
-import { filter } from '@speclynx/apidom-traverse';
-import {
-  isSourceDescriptionElement,
-  type SourceDescriptionElement,
-} from '@speclynx/apidom-ns-arazzo-1';
+import { traverse, type Path } from '@speclynx/apidom-traverse';
+import type { SourceDescriptionElement, WorkflowElement } from '@speclynx/apidom-ns-arazzo-1';
 import { url } from '@speclynx/apidom-reference/configuration/empty';
 
 import APIDocument from './APIDocument.ts';
-import type ArazzoWorkflowIndex from './ArazzoWorkflowIndex.ts';
+import ArazzoWorkflowIndex from './ArazzoWorkflowIndex.ts';
 
 /**
  * One indexed source description: the parsed element and its canonical URI —
@@ -29,44 +26,52 @@ interface SourceDescriptionEntry {
 class ArazzoDocument extends APIDocument {
   readonly type = 'arazzo' as const;
   isEntry: boolean;
-  readonly workflowIndex: ArazzoWorkflowIndex;
   /**
-   * Name → source description, built eagerly at construction the way
-   * {@link ArazzoDocument.workflowIndex} is: one traversal when the document
-   * is created, map lookups ever after — a name is looked up repeatedly
-   * within a run (per retry firing, per dependency validation), and the
-   * source descriptions never change after parse. The canonical URI is
-   * resolved here too, for the same reason: the base URI and the source's
-   * `url` are both fixed once the document exists, so every entry is a
-   * ready-to-use, non-relative URI rather than a resolve deferred to each
-   * consumer. The first element of a duplicated name wins, matching what a
-   * first-match traversal returned.
+   * WorkflowId → JSON Pointer to the workflow within the parse result.
+   */
+  readonly workflowIndex = new ArazzoWorkflowIndex();
+  /**
+   * Name → source description. A name is looked up repeatedly within a run
+   * (per retry firing, per dependency validation), and the source
+   * descriptions never change after parse. The canonical URI is resolved
+   * here too: the base URI and the source's `url` are both fixed once the
+   * document exists, so every entry carries a ready-to-use, non-relative
+   * URI rather than a resolve deferred to each consumer. The first element
+   * of a duplicated name wins, matching what a first-match traversal
+   * returned.
    */
   readonly #sourceDescriptionIndex = new Map<string, SourceDescriptionEntry>();
 
-  constructor(
-    uri: string,
-    parseResult: ParseResultElement,
-    workflowIndex: ArazzoWorkflowIndex,
-    isEntry = false,
-  ) {
+  constructor(uri: string, parseResult: ParseResultElement, isEntry = false) {
     super(uri, parseResult);
     this.isEntry = isEntry;
-    this.workflowIndex = workflowIndex;
-    filter(
-      parseResult,
-      (path) => isSourceDescriptionElement(path.node) && isStringElement(path.node.name),
-    ).forEach((path) => {
-      const element = path.node as SourceDescriptionElement;
-      const name = toValue(element.name) as string;
-      if (this.#sourceDescriptionIndex.has(name)) return;
-
-      this.#sourceDescriptionIndex.set(name, {
-        element,
-        uri: isStringElement(element.url)
-          ? url.sanitize(url.stripHash(url.resolve(uri, toValue(element.url) as string)))
-          : undefined,
-      });
+    // both indexes derive from nothing but the parse result, so the document
+    // builds them itself, in one traversal at construction — a document with
+    // a mismatched index is not constructible.
+    traverse(parseResult.api, {
+      WorkflowElement: (path: Path) => {
+        const workflow = path.node as WorkflowElement;
+        const workflowId = toValue(workflow.workflowId);
+        if (typeof workflowId === 'string' && workflowId !== '') {
+          this.workflowIndex.set(workflowId, path.formatPath('jsonpointer'));
+        }
+        return path.skip();
+      },
+      SourceDescriptionElement: (path: Path) => {
+        const element = path.node as SourceDescriptionElement;
+        if (isStringElement(element.name)) {
+          const name = toValue(element.name) as string;
+          if (!this.#sourceDescriptionIndex.has(name)) {
+            this.#sourceDescriptionIndex.set(name, {
+              element,
+              uri: isStringElement(element.url)
+                ? url.sanitize(url.stripHash(url.resolve(uri, toValue(element.url) as string)))
+                : undefined,
+            });
+          }
+        }
+        return path.skip();
+      },
     });
   }
 

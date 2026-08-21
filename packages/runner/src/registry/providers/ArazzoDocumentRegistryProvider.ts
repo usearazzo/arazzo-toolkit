@@ -1,4 +1,3 @@
-import type { ParseResultElement } from '@usearazzo/parser';
 import { parseArazzo, defaultParseArazzoOptions } from '@usearazzo/parser';
 import {
   readFile,
@@ -7,9 +6,6 @@ import {
   type ApiDOMReferenceOptions,
 } from '@speclynx/apidom-reference/configuration/empty';
 import { UnmatchedResolverError } from '@speclynx/apidom-reference/configuration/empty';
-import { toValue } from '@speclynx/apidom-core';
-import { traverse, type Path } from '@speclynx/apidom-traverse';
-import { type WorkflowElement } from '@speclynx/apidom-ns-arazzo-1';
 
 import * as constants from '../../constants.ts';
 import ArazzoDocument from '../../document/ArazzoDocument.ts';
@@ -17,7 +13,6 @@ import DocumentRegistryProvider, {
   circularReplacer,
   type DocumentRegistryProviderOptions,
 } from './DocumentRegistryProvider.ts';
-import ArazzoWorkflowIndex from '../../document/ArazzoWorkflowIndex.ts';
 
 /**
  * Options for loading an Arazzo document.
@@ -53,7 +48,8 @@ export const providerOptionsOverride: ArazzoDocumentRegistryProviderOptions = {
 /**
  * Provides ArazzoDocument instances for the DocumentRegistry.
  *
- * Parses, dereferences, and builds a WorkflowIndex for Arazzo documents.
+ * Parses the Arazzo document; the document builds its own indexes from the
+ * parse result at construction.
  * @public
  */
 class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
@@ -87,29 +83,8 @@ class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
    */
   async provide(uri: string): Promise<ArazzoDocument> {
     const parseResult = await parseArazzo(uri, this.#buildParseOptions());
-    const workflowIndex = this.#buildWorkflowIndex(parseResult);
 
-    return new ArazzoDocument(uri, parseResult, workflowIndex);
-  }
-
-  #buildWorkflowIndex(parseResult: ParseResultElement): ArazzoWorkflowIndex {
-    const index = new ArazzoWorkflowIndex();
-
-    traverse(parseResult.api, {
-      WorkflowElement(path: Path) {
-        const workflow = path.node as WorkflowElement;
-        const workflowId = toValue(workflow.workflowId);
-
-        if (typeof workflowId !== 'string') return path.skip();
-        if (workflowId === '') return path.skip();
-
-        index.set(workflowId, path.formatPath('jsonpointer'));
-
-        path.skip();
-      },
-    });
-
-    return index;
+    return new ArazzoDocument(uri, parseResult);
   }
 
   #buildParseOptions(): ApiDOMReferenceOptions {
