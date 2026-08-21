@@ -1,5 +1,4 @@
 import ArazzoDocument from '../document/ArazzoDocument.ts';
-import type DocumentRegistry from '../registry/DocumentRegistry.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
 import SourceDescriptionsLocatorNormalizer from './SourceDescriptionsLocatorNormalizer.ts';
 
@@ -70,9 +69,7 @@ export interface WorkflowReferenceContext {
  * The `type` declared on a source description is not trusted (it may be
  * absent or wrong); a source is classified by what it actually parses to,
  * the same convention the OpenAPI operation locator follows. Source
- * documents are acquired from the registry on demand — through the run's
- * document ledger when the normalizer is bound to one, see
- * {@link ArazzoWorkflowLocatorNormalizer.forRun}. Whether the resolved
+ * documents are acquired from the registry on demand. Whether the resolved
  * document *defines* the workflow is deliberately left to the caller, which
  * owns the timing of that check (eager for a `dependsOn` list validated
  * before any prerequisite runs, lazy for a sub-workflow step resolved per
@@ -80,28 +77,6 @@ export interface WorkflowReferenceContext {
  * @public
  */
 class ArazzoWorkflowLocatorNormalizer extends SourceDescriptionsLocatorNormalizer {
-  /**
-   * The run's document ledger, when this normalizer is bound to one — every
-   * document a reference resolves to is consulted from and recorded into it,
-   * keeping each URI one live, identical document for as long as the run may
-   * need it, even if the registry's LRU cache evicts it mid-run.
-   */
-  readonly #documents: Map<string, ArazzoDocument> | undefined;
-
-  constructor(registry: DocumentRegistry, documents?: Map<string, ArazzoDocument>) {
-    super(registry);
-    this.#documents = documents;
-  }
-
-  /**
-   * A normalizer bound to a run's document ledger, sharing this one's
-   * registry — how the executor scopes document pinning to a single run
-   * without the ledger ever appearing in a method signature.
-   */
-  forRun(documents: Map<string, ArazzoDocument>): ArazzoWorkflowLocatorNormalizer {
-    return new ArazzoWorkflowLocatorNormalizer(this.registry, documents);
-  }
-
   /**
    * Resolves a reference — a plain workflowId or a
    * `$sourceDescriptions.{name}.{workflowId}` expression, as written — to the
@@ -150,7 +125,7 @@ class ArazzoWorkflowLocatorNormalizer extends SourceDescriptionsLocatorNormalize
    * Resolves a parsed reference to the Arazzo document that owns the target
    * workflow. A plain id resolves to the referencing document itself; an
    * expression resolves its named source description to a URI, acquires that
-   * document (ledger first), and requires it to actually be an Arazzo
+   * document from the registry, and requires it to actually be an Arazzo
    * document.
    */
   async #resolve(
@@ -171,15 +146,13 @@ class ArazzoWorkflowLocatorNormalizer extends SourceDescriptionsLocatorNormalize
       );
     }
 
-    const ledgered = this.#documents?.get(uri);
-    const source = ledgered ?? (await this.registry.acquire(uri));
+    const source = await this.registry.acquire(uri);
     if (!ArazzoDocument.is(source)) {
       throw new ExecutionError(
         `workflow reference "${parsed.reference}" in workflow "${workflowId}" names source description "${parsed.sourceName}" at "${uri}", which is not an Arazzo document`,
         { workflowId, stepId, reason: 'source-description-not-arazzo' },
       );
     }
-    this.#documents?.set(uri, source);
 
     return { document: source, workflowId: parsed.workflowId };
   }

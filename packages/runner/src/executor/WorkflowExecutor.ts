@@ -385,22 +385,6 @@ interface RunScope {
    * retried — must not pay for it each time.
    */
   readonly workflows: Map<string, WorkflowElement>;
-  /**
-   * The Arazzo documents in use by this run, keyed by canonical URI and
-   * seeded with the entry document. Every document a cross-document
-   * reference resolves to is held here for the rest of the run — not only in
-   * the registry, whose LRU cache may evict it mid-run — so each URI stays
-   * one live, identical document for as long as anything in the call tree
-   * may need it.
-   */
-  readonly documents: Map<string, ArazzoDocument>;
-  /**
-   * The workflow-reference normalizer bound to this run's document ledger
-   * (see {@link ArazzoWorkflowLocatorNormalizer.forRun}) — every reference
-   * this run resolves goes through it, so every document it touches lands in
-   * {@link RunScope.documents}.
-   */
-  readonly workflowLocatorNormalizer: ArazzoWorkflowLocatorNormalizer;
 }
 
 /**
@@ -531,7 +515,6 @@ class WorkflowExecutor {
     // whole cancellation rather than half of one: read only at dispatch, it would
     // abort requests while the loop walked on through the remaining steps.
     const signal = options.signal ?? readAbortSignal(options.executeOptions ?? {});
-    const documents = new Map([[this.#document.uri, this.#document]]);
     const scope: RunScope = {
       // the first-class signal is also spread into the opaque bag, because that
       // bag is how anything reaches the transport: the executor's own checks
@@ -544,8 +527,6 @@ class WorkflowExecutor {
       budget: { spent: 0 },
       dependencyRuns: new Map(),
       workflows: new Map(),
-      documents,
-      workflowLocatorNormalizer: this.#workflowLocatorNormalizer.forRun(documents),
     };
     return this.#run(
       { document: this.#document, workflowId },
@@ -1021,7 +1002,7 @@ class WorkflowExecutor {
     // every entry is validated before the first one runs: an authoring error
     // found halfway down the list would otherwise be raised only after earlier
     // prerequisites had already fired live requests.
-    const dependencyRefs = await this.#dependencyRefs(workflow, invocation, scope);
+    const dependencyRefs = await this.#dependencyRefs(workflow, invocation);
 
     const results: WorkflowExecutionResult[] = [];
     for (const dependency of dependencyRefs) {
@@ -1076,7 +1057,6 @@ class WorkflowExecutor {
   async #dependencyRefs(
     workflow: WorkflowElement,
     invocation: WorkflowInvocation,
-    scope: RunScope,
   ): Promise<{ locator: ArazzoWorkflowLocator; inputsKey: string }[]> {
     const { workflowId, document } = invocation;
     const dependsOn = workflow.dependsOn;
@@ -1099,7 +1079,7 @@ class WorkflowExecutor {
 
     const refs: { locator: ArazzoWorkflowLocator; inputsKey: string }[] = [];
     for (const reference of references) {
-      const locator = await scope.workflowLocatorNormalizer.normalize(reference, document, {
+      const locator = await this.#workflowLocatorNormalizer.normalize(reference, document, {
         workflowId,
       });
       if (!locator.document.workflowIndex.has(locator.workflowId)) {
@@ -1157,7 +1137,7 @@ class WorkflowExecutor {
 
     return async () => {
       if (locator === undefined) {
-        locator = await scope.workflowLocatorNormalizer.normalize(reference, document, {
+        locator = await this.#workflowLocatorNormalizer.normalize(reference, document, {
           workflowId,
           stepId,
         });
@@ -1292,7 +1272,7 @@ class WorkflowExecutor {
     scope: RunScope,
     via: WorkflowCallVia,
   ): Promise<WorkflowExecutionResult> {
-    const locator = await scope.workflowLocatorNormalizer.normalize(
+    const locator = await this.#workflowLocatorNormalizer.normalize(
       reference,
       invocation.document,
       { workflowId: invocation.workflowId, stepId },

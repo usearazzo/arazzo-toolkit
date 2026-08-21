@@ -647,8 +647,8 @@ follows:
   `SourceDescriptionsExpression` throws `invalid-workflow-reference`,
   including the resolver package's `#/workflows/...` pointer form, a
   `$ref`-time construct, not a runtime expression) and the async resolve
-  (`resolveSourceDescriptionURI` → `source-description-not-found`; run-ledger
-  or `registry.acquire` → `ArazzoDocument.is`, never the declared `type:` →
+  (`resolveSourceDescriptionURI` → `source-description-not-found`;
+  `registry.acquire` → `ArazzoDocument.is`, never the declared `type:` →
   `source-description-not-arazzo`) — are `#`-private. Callers needing the
   bare id take it from the returned locator (`locator.workflowId`) or a
   referenced run's result (`result.workflowId`). Workflow existence stays
@@ -687,13 +687,15 @@ follows:
 - **`dependencyInputs` is keyed by the `dependsOn` entry as written** (bare id
   locally, whole expression cross-document) — zero mechanism, the natural
   behavior once the raw entry string is the lookup key.
-- **`RunScope.documents` ledger** (canonical URI → `ArazzoDocument`, seeded
-  with the entry document): every document a reference resolves to is held
-  for the whole run, so the registry's size-4 LRU cannot evict a document a
-  live call tree still needs. The normalizer reaches it through a run-bound
-  sibling (`forRun(documents)`, mirroring `forDocument`), so the ledger
-  appears in no public signature — when issue `#74` moves pinning into the
-  registry itself, it can vanish without an API break.
+- **Foreign documents come straight from `registry.acquire`** — no run-side
+  document ledger. A prototype carried one (a per-run URI → document map the
+  normalizer consulted before the registry) to guard against the size-4 LRU
+  evicting a document mid-run, but it bought no correctness: cycle detection
+  and every cache key are URI-based, `forDocument`'s identity check only
+  matters for the (already-pinned) entry document, and the evaluator's sync
+  `registry.get` never consulted it anyway. `acquire` refreshing LRU recency
+  makes mid-run eviction unlikely; proper pinning is issue `#74`'s
+  registry-level fix.
 
 Tests: 20 in a new `WorkflowExecutorCrossDocument` suite over a two-document
 fixture pair whose APIs have distinct server prefixes (so a request URL proves
@@ -741,12 +743,13 @@ libopenapi-style batch semantics (§5's interpretation note).
   `WorkflowExecutor` (the workflow-side one now takes the document per call),
   with nothing keeping the two in step — a base-class or shared-collaborator
   candidate.
-- **Expression-time `registry.get` after eviction** (issue `#74`):
-  `RuntimeExpressionEvaluator` resolves `$sourceDescriptions.*` through the
-  registry's *synchronous* `get`, which can miss if the LRU evicted the
-  source mid-run. Pre-existing (OpenAPI sources have the same exposure), only
-  mitigated by the run's document ledger keeping Arazzo documents alive; a
-  real fix is a pin/release registry API.
+- **Mid-run LRU eviction** (issue `#74`): the registry pins only the entry
+  document, so a run touching more than `MAX_DOCUMENT_REGISTRY_SIZE` (4)
+  documents can have one evicted mid-run — a re-`acquire` re-fetches and
+  re-parses (correct, URIs key everything, but wasted work), and
+  `RuntimeExpressionEvaluator`'s *synchronous* `registry.get` for
+  `$sourceDescriptions.*` silently misses. Pre-existing for OpenAPI sources;
+  the fix is a pin/release (refcount) registry API.
 - **`$workflows` id collisions across documents** (see the shipped section
   above): last-write-wins is documented, but a spec-level answer — or a
   strict-mode diagnostic when a run records two different workflows under one
