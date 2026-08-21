@@ -6,7 +6,7 @@ describe('WorkflowCallStack', function () {
   const ENTRY = 'file:///entry.yaml';
   const CHILD = 'file:///child.yaml';
   const root = (maxDepth = 32): WorkflowCallStack =>
-    new WorkflowCallStack({ maxDepth, entryDocumentUri: ENTRY });
+    new WorkflowCallStack({ maxDepth, entryDocumentURI: ENTRY });
 
   /**
    * Runs a call that is expected to be rejected and returns the ExecutionError,
@@ -114,7 +114,7 @@ describe('WorkflowCallStack', function () {
 
   context('document-qualified calls', function () {
     specify('should not mistake one workflowId in two documents for a cycle', function () {
-      // the bare ids collide; the (documentUri, workflowId) identities do
+      // the bare ids collide; the (documentURI, workflowId) identities do
       // not — two documents' workflows sharing an id are different workflows.
       const stack = root().enter('shared', 'root', ENTRY).enter('shared', 'step', CHILD);
 

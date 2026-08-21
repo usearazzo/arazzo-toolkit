@@ -534,7 +534,7 @@ class WorkflowExecutor {
       scope,
       new WorkflowCallStack({
         maxDepth: this.#maxWorkflowDepth,
-        entryDocumentUri: this.#document.uri,
+        entryDocumentURI: this.#document.uri,
       }),
       'root',
     );

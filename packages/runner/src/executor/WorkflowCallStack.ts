@@ -14,14 +14,14 @@ import ExecutionError from '../errors/ExecutionError.ts';
 export type WorkflowCallVia = 'root' | 'step' | 'dependsOn' | 'retry' | 'goto';
 
 /**
- * One workflow invocation in progress. Its identity is the (documentUri,
+ * One workflow invocation in progress. Its identity is the (documentURI,
  * workflowId) pair: two documents may each define a workflow of one id, and
  * those are different workflows — comparing bare ids would call their meeting
  * a cycle.
  */
 interface WorkflowCall {
   readonly workflowId: string;
-  readonly documentUri: string;
+  readonly documentURI: string;
   readonly via: WorkflowCallVia;
 }
 
@@ -40,10 +40,10 @@ export interface WorkflowCallStackOptions {
    * Canonical URI of the run's entry document. Frames of this document read
    * as the bare workflowId in a reported `path` — the unambiguous,
    * back-compatible form every same-document chain has always reported —
-   * while a foreign document's frames read as `{documentUri}#{workflowId}`,
+   * while a foreign document's frames read as `{documentURI}#{workflowId}`,
    * where the bare id would not say which document's workflow looped.
    */
-  readonly entryDocumentUri: string;
+  readonly entryDocumentURI: string;
 }
 
 /**
@@ -72,24 +72,24 @@ export interface WorkflowCallStackOptions {
 class WorkflowCallStack {
   readonly #calls: readonly WorkflowCall[];
   readonly #maxDepth: number;
-  readonly #entryDocumentUri: string;
+  readonly #entryDocumentURI: string;
 
   constructor(options: WorkflowCallStackOptions, calls: readonly WorkflowCall[] = []) {
     this.#maxDepth = options.maxDepth;
-    this.#entryDocumentUri = options.entryDocumentUri;
+    this.#entryDocumentURI = options.entryDocumentURI;
     this.#calls = calls;
   }
 
   /**
    * The workflows in progress, outermost first — bare ids for entry-document
-   * frames, `{documentUri}#{workflowId}` for foreign ones.
+   * frames, `{documentURI}#{workflowId}` for foreign ones.
    */
   get path(): readonly string[] {
-    return this.#calls.map((call) => this.#display(call.workflowId, call.documentUri));
+    return this.#calls.map((call) => this.#display(call.workflowId, call.documentURI));
   }
 
-  #display(workflowId: string, documentUri: string): string {
-    return documentUri === this.#entryDocumentUri ? workflowId : `${documentUri}#${workflowId}`;
+  #display(workflowId: string, documentURI: string): string {
+    return documentURI === this.#entryDocumentURI ? workflowId : `${documentURI}#${workflowId}`;
   }
 
   /**
@@ -97,12 +97,12 @@ class WorkflowCallStack {
    * together with the canonical URI of the document that owns it — or throws
    * when entering it would form a cycle or exceed the nesting ceiling.
    */
-  enter(workflowId: string, via: WorkflowCallVia, documentUri: string): WorkflowCallStack {
+  enter(workflowId: string, via: WorkflowCallVia, documentURI: string): WorkflowCallStack {
     const repeated = this.#calls.findIndex(
-      (call) => call.workflowId === workflowId && call.documentUri === documentUri,
+      (call) => call.workflowId === workflowId && call.documentURI === documentURI,
     );
     if (repeated !== -1) {
-      const path = [...this.path, this.#display(workflowId, documentUri)];
+      const path = [...this.path, this.#display(workflowId, documentURI)];
       // name the loop for the mechanism that formed it: every edge closing the
       // cycle being a `dependsOn` edge makes it a dependency cycle, while any
       // sub-workflow step call in the loop makes it a call cycle. One stack
@@ -124,14 +124,14 @@ class WorkflowCallStack {
         {
           workflowId,
           reason: 'workflow-depth',
-          path: [...this.path, this.#display(workflowId, documentUri)],
+          path: [...this.path, this.#display(workflowId, documentURI)],
         },
       );
     }
 
     return new WorkflowCallStack(
-      { maxDepth: this.#maxDepth, entryDocumentUri: this.#entryDocumentUri },
-      [...this.#calls, { workflowId, documentUri, via }],
+      { maxDepth: this.#maxDepth, entryDocumentURI: this.#entryDocumentURI },
+      [...this.#calls, { workflowId, documentURI, via }],
     );
   }
 }
