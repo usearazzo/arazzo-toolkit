@@ -1,7 +1,7 @@
 import type { ParseResultElement } from '@usearazzo/parser';
 import { toValue } from '@speclynx/apidom-core';
 import { isStringElement } from '@speclynx/apidom-datamodel';
-import { find, filter } from '@speclynx/apidom-traverse';
+import { filter } from '@speclynx/apidom-traverse';
 import {
   isSourceDescriptionElement,
   type SourceDescriptionElement,
@@ -20,13 +20,14 @@ class ArazzoDocument extends APIDocument {
   isEntry: boolean;
   readonly workflowIndex: ArazzoWorkflowIndex;
   /**
-   * Name → canonical URI, resolved lazily and remembered: the underlying
-   * lookup traverses the parse result, and one name is resolved repeatedly
-   * within a run (per retry firing, per dependency validation), always to
-   * the same value — the source descriptions themselves never change after
-   * parse.
+   * Name → source description element, built eagerly at construction the way
+   * {@link ArazzoDocument.workflowIndex} is: one traversal when the document
+   * is created, map lookups ever after — a name is looked up repeatedly
+   * within a run (per retry firing, per dependency validation), and the
+   * source descriptions never change after parse. The first element of a
+   * duplicated name wins, matching what a first-match traversal returned.
    */
-  readonly #sourceDescriptionURIs = new Map<string, string | undefined>();
+  readonly #sourceDescriptionIndex = new Map<string, SourceDescriptionElement>();
 
   constructor(
     uri: string,
@@ -37,6 +38,16 @@ class ArazzoDocument extends APIDocument {
     super(uri, parseResult);
     this.isEntry = isEntry;
     this.workflowIndex = workflowIndex;
+    filter(
+      parseResult,
+      (path) => isSourceDescriptionElement(path.node) && isStringElement(path.node.name),
+    ).forEach((path) => {
+      const sourceDescription = path.node as SourceDescriptionElement;
+      const name = toValue(sourceDescription.name) as string;
+      if (!this.#sourceDescriptionIndex.has(name)) {
+        this.#sourceDescriptionIndex.set(name, sourceDescription);
+      }
+    });
   }
 
   /**
@@ -47,40 +58,19 @@ class ArazzoDocument extends APIDocument {
   }
 
   /**
-   * Finds a source description element by name.
-   */
-  #findSourceDescription(sourceDescriptionName: string): SourceDescriptionElement | undefined {
-    const sourceDescriptionPath = find(this.parseResult, (path) => {
-      return (
-        isSourceDescriptionElement(path.node) &&
-        isStringElement(path.node.name) &&
-        path.node.name.equals(sourceDescriptionName)
-      );
-    });
-
-    return sourceDescriptionPath?.node as SourceDescriptionElement | undefined;
-  }
-
-  /**
    * Resolves a source description name to its canonical URI.
    *
-   * Looks up the name in this document's sourceDescriptions array
-   * and resolves the url against this document's base URI.
+   * Looks up the name in this document's source description index and
+   * resolves the url against this document's base URI.
    */
   resolveSourceDescriptionURI(sourceDescriptionName: string): string | undefined {
-    if (this.#sourceDescriptionURIs.has(sourceDescriptionName)) {
-      return this.#sourceDescriptionURIs.get(sourceDescriptionName);
-    }
+    const sourceDescription = this.#sourceDescriptionIndex.get(sourceDescriptionName);
 
-    const sourceDescription = this.#findSourceDescription(sourceDescriptionName);
-    const uri =
-      sourceDescription === undefined || !isStringElement(sourceDescription.url)
-        ? undefined
-        : url.sanitize(
-            url.stripHash(url.resolve(this.uri, toValue(sourceDescription.url) as string)),
-          );
-    this.#sourceDescriptionURIs.set(sourceDescriptionName, uri);
-    return uri;
+    if (sourceDescription === undefined || !isStringElement(sourceDescription.url)) return;
+
+    return url.sanitize(
+      url.stripHash(url.resolve(this.uri, toValue(sourceDescription.url) as string)),
+    );
   }
 
   /**
@@ -94,7 +84,7 @@ class ArazzoDocument extends APIDocument {
   resolveSourceDescriptionField(sourceDescriptionName: string, field: string): unknown {
     if (field === 'url') return this.resolveSourceDescriptionURI(sourceDescriptionName);
 
-    const sourceDescription = this.#findSourceDescription(sourceDescriptionName);
+    const sourceDescription = this.#sourceDescriptionIndex.get(sourceDescriptionName);
     if (sourceDescription === undefined) return undefined;
 
     return toValue(sourceDescription.get(field));
@@ -106,11 +96,7 @@ class ArazzoDocument extends APIDocument {
    * url are omitted.
    */
   sourceDescriptionURIs(): string[] {
-    return filter(
-      this.parseResult,
-      (path) => isSourceDescriptionElement(path.node) && isStringElement(path.node.name),
-    )
-      .map((path) => toValue((path.node as SourceDescriptionElement).name) as string)
+    return [...this.#sourceDescriptionIndex.keys()]
       .map((name) => this.resolveSourceDescriptionURI(name))
       .filter((uri): uri is string => uri !== undefined);
   }
