@@ -68,6 +68,49 @@ workflows:
       - stepId: own
         operationId: getInventory
 
+  # depends on the child's childSetup by expression, then calls a child
+  # workflow that depends on the SAME prerequisite by its local bare id — one
+  # qualified identity, two spellings, so the second dependent must see the
+  # memoized run's actual inputs.
+  - workflowId: mixedInputsDiamond
+    dependsOn:
+      - $sourceDescriptions.childWorkflows.childSetup
+    steps:
+      - stepId: call
+        workflowId: $sourceDescriptions.childWorkflows.childNeedsSetup
+        outputs:
+          setupToken: $workflows.childNeedsSetup.outputs.setupToken
+    outputs:
+      setupToken: $steps.call.outputs.setupToken
+
+  # calls a child workflow whose own retry carries a stepId reference — the
+  # reference fires inside the foreign workflow, against the child's API.
+  - workflowId: crossDocumentRetryStepInside
+    steps:
+      - stepId: call
+        workflowId: $sourceDescriptions.childWorkflows.childRetryStep
+
+  # transfers into a child workflow that declares its own dependsOn.
+  - workflowId: crossDocumentGotoWithDeps
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: $sourceDescriptions.childWorkflows.childFinalWithSetup
+
+  # records the child's `shared` and then this document's `shared` under the
+  # one bare $workflows key — the documented last-write-wins collision.
+  - workflowId: collisionCaller
+    steps:
+      - stepId: foreign
+        workflowId: $sourceDescriptions.childWorkflows.shared
+      - stepId: local
+        workflowId: shared
+    outputs:
+      winnerOrigin: $workflows.shared.outputs.origin
+
   # a retry action whose reference runs a workflow of the child document
   # before each retry attempt.
   - workflowId: crossDocumentRetryReference
@@ -103,6 +146,9 @@ workflows:
           source: $workflows.shared.outputs.source
     outputs:
       source: $steps.call.outputs.source
+      # resolves in THIS document — the child's `shared` has no `origin`, which
+      # is what lets a test tell whose record won a $workflows key collision.
+      origin: $sourceDescriptions.petstoreAPI.url
 
   # calls the child's callsBack, which calls back into this workflow — a
   # genuine cycle closed across the document boundary.

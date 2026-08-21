@@ -731,11 +731,12 @@ libopenapi-style batch semantics (§5's interpretation note).
   `WorkflowExecutor` (the workflow-side one now takes the document per call),
   with nothing keeping the two in step — a base-class or shared-collaborator
   candidate.
-- **Expression-time `registry.get` after eviction**: `RuntimeExpressionEvaluator`
-  resolves `$sourceDescriptions.*` through the registry's *synchronous* `get`,
-  which can miss if the LRU evicted the source mid-run. Pre-existing (OpenAPI
-  sources have the same exposure), only mitigated by the run's document ledger
-  keeping Arazzo documents alive; a real fix is a pin/release registry API.
+- **Expression-time `registry.get` after eviction** (issue `#74`):
+  `RuntimeExpressionEvaluator` resolves `$sourceDescriptions.*` through the
+  registry's *synchronous* `get`, which can miss if the LRU evicted the
+  source mid-run. Pre-existing (OpenAPI sources have the same exposure), only
+  mitigated by the run's document ledger keeping Arazzo documents alive; a
+  real fix is a pin/release registry API.
 - **`$workflows` id collisions across documents** (see the shipped section
   above): last-write-wins is documented, but a spec-level answer — or a
   strict-mode diagnostic when a run records two different workflows under one

@@ -69,6 +69,48 @@ workflows:
     outputs:
       refreshed: $steps.refresh.outputs.refreshed
 
+  # depends on childSetup by its plain local id — the same prerequisite the
+  # entry document reaches as $sourceDescriptions.childWorkflows.childSetup.
+  # One qualified identity, two spellings: a memoized run must report the
+  # inputs it actually received, not this spelling's (absent) entry.
+  - workflowId: childNeedsSetup
+    dependsOn:
+      - childSetup
+    steps:
+      - stepId: own
+        operationId: getInventory
+    outputs:
+      setupToken: $workflows.childSetup.inputs.token
+
+  # a failing step whose retry carries a stepId reference — the reference must
+  # run THIS document's helper step, against this document's API.
+  - workflowId: childRetryStep
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: repair
+            type: retry
+            retryLimit: 1
+            stepId: helper
+      - stepId: helper
+        operationId: getInventory
+
+  # a transfer target with its own prerequisite — entering it cross-document
+  # must still run its dependsOn first.
+  - workflowId: childFinalWithSetup
+    dependsOn:
+      - childSetup
+    steps:
+      - stepId: last
+        operationId: getInventory
+        outputs:
+          done: $statusCode
+    outputs:
+      done: $steps.last.outputs.done
+
   # the target of the entry document's goto transfer.
   - workflowId: childFinal
     steps:

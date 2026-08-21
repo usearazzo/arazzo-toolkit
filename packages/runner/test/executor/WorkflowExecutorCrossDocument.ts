@@ -181,6 +181,37 @@ describe('WorkflowExecutor cross-document references', function () {
       assert.strictEqual(result.status, 'completed');
       assert.match(result.outputs.source as string, /cross-document-child\.openapi\.json$/);
     });
+
+    specify(
+      'should record same-named workflows of two documents under one bare $workflows key, last write winning',
+      async function () {
+        const { executor } = makeExecutor();
+
+        // step `foreign` records the child's `shared`; step `local` then
+        // records the entry's own under the same bare key. `origin` exists
+        // only on the entry's outputs, so its presence proves the later
+        // write won — the documented last-write-wins hazard.
+        const result = await executor.execute('collisionCaller');
+
+        assert.strictEqual(result.status, 'completed');
+        assert.match(result.outputs.winnerOrigin as string, /petstore\.openapi\.json$/);
+      },
+    );
+
+    specify("should forward executeOptions to a foreign workflow's steps", async function () {
+      const { executor, calls } = makeExecutor();
+
+      const result = await executor.execute('crossDocumentStep', {
+        executeOptions: { server: 'https://override.example/base' },
+      });
+
+      assert.strictEqual(result.status, 'completed');
+      // the server override reached the foreign document's step as well as
+      // the entry document's own.
+      assert.include(calls[0].url, 'https://override.example/base');
+      assert.include(calls[0].url, '/pet/7');
+      assert.include(calls[1].url, 'https://override.example/base');
+    });
   });
 
   context('dependsOn across documents', function () {
@@ -243,6 +274,31 @@ describe('WorkflowExecutor cross-document references', function () {
         assert.strictEqual(calls.length, 0);
       },
     );
+
+    specify(
+      "should give a memoized prerequisite's record the inputs the run actually received",
+      async function () {
+        const { executor, calls } = makeExecutor();
+
+        // the entry depends on the child's childSetup by expression; the
+        // child workflow it then calls depends on the same prerequisite by
+        // its local bare id — one qualified identity, two spellings.
+        const result = await executor.execute('mixedInputsDiamond', {
+          dependencyInputs: {
+            '$sourceDescriptions.childWorkflows.childSetup': { token: 'first' },
+          },
+        });
+
+        assert.strictEqual(result.status, 'completed');
+        // childSetup ran once; the bare-id spelling was satisfied from the
+        // memoized run.
+        assert.strictEqual(calls.length, 2);
+        // the second dependent reads the inputs the memoized run actually
+        // received — not the (absent) dependencyInputs entry for its own
+        // bare-id spelling.
+        assert.strictEqual(result.outputs.setupToken, 'first');
+      },
+    );
   });
 
   context('retry reference across documents', function () {
@@ -269,6 +325,28 @@ describe('WorkflowExecutor cross-document references', function () {
       assert.strictEqual(reference.subWorkflow?.workflowId, 'childRepair');
       assert.strictEqual(reference.subWorkflow?.outputs.refreshed, 500);
     });
+
+    specify(
+      'should run a retry stepId reference inside a foreign workflow against its own document',
+      async function () {
+        const { executor, calls } = makeExecutor(serverErrorResponse);
+
+        const result = await executor.execute('crossDocumentRetryStepInside');
+
+        assert.strictEqual(result.status, 'failed');
+        // doomed, the helper reference, doomed again — all against the
+        // child document's API.
+        assert.strictEqual(calls.length, 3);
+        calls.forEach((call) => assert.include(call.url, '/child-api/v1/store/inventory'));
+        const nested = subWorkflowsOf(result.steps[0])[0];
+        assert.strictEqual(nested.workflowId, 'childRetryStep');
+        const nestedStep = nested.steps[0];
+        assert.strictEqual(nestedStep.attempts, 2);
+        const reference = retryReferencesOf(nestedStep)[0];
+        assert.strictEqual(reference.kind, 'step');
+        assert.strictEqual(reference.id, 'helper');
+      },
+    );
   });
 
   context('goto transfer across documents', function () {
@@ -286,6 +364,27 @@ describe('WorkflowExecutor cross-document references', function () {
       assert.strictEqual(calls.length, 2);
       assert.include(calls[1].url, '/child-api/v1/store/inventory');
     });
+
+    specify(
+      "should run a foreign transfer target's own dependsOn before its steps",
+      async function () {
+        const { executor, calls } = makeExecutor();
+
+        const result = await executor.execute('crossDocumentGotoWithDeps');
+
+        assert.strictEqual(result.status, 'transferred');
+        const target = result.transferredTo as WorkflowExecutionResult;
+        assert.strictEqual(target.workflowId, 'childFinalWithSetup');
+        assert.strictEqual(dependenciesOf(target)[0].workflowId, 'childSetup');
+        assert.strictEqual(target.outputs.done, 200);
+        // the caller's own step, then the target's prerequisite and step —
+        // the latter two against the child document's API.
+        assert.strictEqual(calls.length, 3);
+        assert.include(calls[0].url, '/api/v3/store/inventory');
+        assert.include(calls[1].url, '/child-api/v1/store/inventory');
+        assert.include(calls[2].url, '/child-api/v1/store/inventory');
+      },
+    );
 
     specify(
       'should report an abort at the transfer boundary as aborted, not resolve the target',
