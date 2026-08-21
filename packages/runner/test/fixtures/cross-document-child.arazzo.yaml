@@ -1,0 +1,150 @@
+arazzo: "1.0.1"
+info:
+  title: Cross-document child workflows
+  version: "1.0.0"
+  summary: >-
+    The foreign Arazzo document the cross-document tests reference from
+    cross-document.arazzo.yaml. It has its own OpenAPI source — deliberately
+    named `petstoreAPI`, like the entry document's, to prove source names
+    resolve in the document they are written in — and a `parent` source
+    pointing back at the entry document for the cross-document cycle case.
+sourceDescriptions:
+  - name: petstoreAPI
+    url: ./cross-document-child.openapi.json
+    type: openapi
+  - name: parent
+    url: ./cross-document.arazzo.yaml
+    type: arazzo
+workflows:
+  # a prerequisite the entry document depends on; echoes its input back so a
+  # test can prove `dependencyInputs` reached a cross-document dependency.
+  - workflowId: childSetup
+    inputs:
+      type: object
+      properties:
+        token:
+          type: string
+    steps:
+      - stepId: prepare
+        operationId: getInventory
+        outputs:
+          ready: $statusCode
+    outputs:
+      ready: $steps.prepare.outputs.ready
+      echo: $inputs.token
+
+  # the callee of the entry document's sub-workflow step. Its plain
+  # `operationId` must resolve against THIS document's petstoreAPI (the child
+  # API, under /child-api/v1) — not the entry document's — and its
+  # `$sourceDescriptions` output must resolve here too.
+  - workflowId: childFetch
+    inputs:
+      type: object
+      properties:
+        petId:
+          type: string
+    steps:
+      - stepId: get
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: $inputs.petId
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          petName: $response.body#/name
+    outputs:
+      name: $steps.get.outputs.petName
+      source: $sourceDescriptions.petstoreAPI.url
+
+  # the target of the entry document's retry reference. No successCriteria, so
+  # it completes even against a failing transport.
+  - workflowId: childRepair
+    steps:
+      - stepId: refresh
+        operationId: getInventory
+        outputs:
+          refreshed: $statusCode
+    outputs:
+      refreshed: $steps.refresh.outputs.refreshed
+
+  # depends on childSetup by its plain local id — the same prerequisite the
+  # entry document reaches as $sourceDescriptions.childWorkflows.childSetup.
+  # One qualified identity, two spellings: a memoized run must report the
+  # inputs it actually received, not this spelling's (absent) entry.
+  - workflowId: childNeedsSetup
+    dependsOn:
+      - childSetup
+    steps:
+      - stepId: own
+        operationId: getInventory
+    outputs:
+      setupToken: $workflows.childSetup.inputs.token
+
+  # a failing step whose retry carries a stepId reference — the reference must
+  # run THIS document's helper step, against this document's API.
+  - workflowId: childRetryStep
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: repair
+            type: retry
+            retryLimit: 1
+            stepId: helper
+      - stepId: helper
+        operationId: getInventory
+
+  # a transfer target with its own prerequisite — entering it cross-document
+  # must still run its dependsOn first.
+  - workflowId: childFinalWithSetup
+    dependsOn:
+      - childSetup
+    steps:
+      - stepId: last
+        operationId: getInventory
+        outputs:
+          done: $statusCode
+    outputs:
+      done: $steps.last.outputs.done
+
+  # the target of the entry document's goto transfer.
+  - workflowId: childFinal
+    steps:
+      - stepId: last
+        operationId: getInventory
+        outputs:
+          done: $statusCode
+    outputs:
+      done: $steps.last.outputs.done
+
+  # the same workflowId exists in the entry document. Its source output tells
+  # the two apart: this one resolves to the child API's URL.
+  - workflowId: shared
+    steps:
+      - stepId: only
+        operationId: getInventory
+    outputs:
+      source: $sourceDescriptions.petstoreAPI.url
+
+  # a plain, same-document reference made FROM a foreign workflow — it must
+  # resolve within this document, to this document's `shared`, not the entry
+  # document's.
+  - workflowId: childCallsShared
+    steps:
+      - stepId: call
+        workflowId: shared
+        outputs:
+          source: $workflows.shared.outputs.source
+    outputs:
+      source: $steps.call.outputs.source
+
+  # calls back into the entry document's `loopEntry` — which is what called
+  # this workflow, closing a cross-document cycle.
+  - workflowId: callsBack
+    steps:
+      - stepId: back
+        workflowId: $sourceDescriptions.parent.loopEntry

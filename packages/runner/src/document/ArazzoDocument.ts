@@ -1,34 +1,41 @@
 import type { ParseResultElement } from '@usearazzo/parser';
 import { toValue } from '@speclynx/apidom-core';
-import { isStringElement } from '@speclynx/apidom-datamodel';
-import { find, filter } from '@speclynx/apidom-traverse';
-import {
-  isSourceDescriptionElement,
-  type SourceDescriptionElement,
-} from '@speclynx/apidom-ns-arazzo-1';
-import { url } from '@speclynx/apidom-reference/configuration/empty';
 
 import APIDocument from './APIDocument.ts';
 import type ArazzoWorkflowIndex from './ArazzoWorkflowIndex.ts';
+import type ArazzoSourceDescriptionIndex from './ArazzoSourceDescriptionIndex.ts';
 
 /**
- * An Arazzo document held by the document registry.
+ * An Arazzo document held by the document registry: the parse result together
+ * with the indexes the provider built over it — a container, not a logic
+ * bearer. The methods below are thin reads of the source description index.
  * @public
  */
 class ArazzoDocument extends APIDocument {
   readonly type = 'arazzo' as const;
   isEntry: boolean;
+  /**
+   * WorkflowId → JSON Pointer to the workflow within the parse result.
+   */
   readonly workflowIndex: ArazzoWorkflowIndex;
+  /**
+   * Name → source description element and canonical URI (already resolved
+   * against this document's base URI). Built by the provider, like
+   * {@link ArazzoDocument.workflowIndex}.
+   */
+  readonly sourceDescriptionIndex: ArazzoSourceDescriptionIndex;
 
   constructor(
     uri: string,
     parseResult: ParseResultElement,
     workflowIndex: ArazzoWorkflowIndex,
+    sourceDescriptionIndex: ArazzoSourceDescriptionIndex,
     isEntry = false,
   ) {
     super(uri, parseResult);
     this.isEntry = isEntry;
     this.workflowIndex = workflowIndex;
+    this.sourceDescriptionIndex = sourceDescriptionIndex;
   }
 
   /**
@@ -39,34 +46,11 @@ class ArazzoDocument extends APIDocument {
   }
 
   /**
-   * Finds a source description element by name.
-   */
-  #findSourceDescription(sourceDescriptionName: string): SourceDescriptionElement | undefined {
-    const sourceDescriptionPath = find(this.parseResult, (path) => {
-      return (
-        isSourceDescriptionElement(path.node) &&
-        isStringElement(path.node.name) &&
-        path.node.name.equals(sourceDescriptionName)
-      );
-    });
-
-    return sourceDescriptionPath?.node as SourceDescriptionElement | undefined;
-  }
-
-  /**
-   * Resolves a source description name to its canonical URI.
-   *
-   * Looks up the name in this document's sourceDescriptions array
-   * and resolves the url against this document's base URI.
+   * Resolves a source description name to its canonical URI — precomputed by
+   * the provider, resolved against this document's base URI.
    */
   resolveSourceDescriptionURI(sourceDescriptionName: string): string | undefined {
-    const sourceDescription = this.#findSourceDescription(sourceDescriptionName);
-
-    if (sourceDescription === undefined || !isStringElement(sourceDescription.url)) return;
-
-    return url.sanitize(
-      url.stripHash(url.resolve(this.uri, toValue(sourceDescription.url) as string)),
-    );
+    return this.sourceDescriptionIndex.get(sourceDescriptionName)?.uri;
   }
 
   /**
@@ -78,12 +62,11 @@ class ArazzoDocument extends APIDocument {
    * description or the field is absent.
    */
   resolveSourceDescriptionField(sourceDescriptionName: string, field: string): unknown {
-    if (field === 'url') return this.resolveSourceDescriptionURI(sourceDescriptionName);
-
-    const sourceDescription = this.#findSourceDescription(sourceDescriptionName);
+    const sourceDescription = this.sourceDescriptionIndex.get(sourceDescriptionName);
     if (sourceDescription === undefined) return undefined;
+    if (field === 'url') return sourceDescription.uri;
 
-    return toValue(sourceDescription.get(field));
+    return toValue(sourceDescription.element.get(field));
   }
 
   /**
@@ -92,12 +75,8 @@ class ArazzoDocument extends APIDocument {
    * url are omitted.
    */
   sourceDescriptionURIs(): string[] {
-    return filter(
-      this.parseResult,
-      (path) => isSourceDescriptionElement(path.node) && isStringElement(path.node.name),
-    )
-      .map((path) => toValue((path.node as SourceDescriptionElement).name) as string)
-      .map((name) => this.resolveSourceDescriptionURI(name))
+    return [...this.sourceDescriptionIndex.values()]
+      .map((entry) => entry.uri)
       .filter((uri): uri is string => uri !== undefined);
   }
 }

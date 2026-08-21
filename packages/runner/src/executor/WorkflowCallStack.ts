@@ -14,10 +14,14 @@ import ExecutionError from '../errors/ExecutionError.ts';
 export type WorkflowCallVia = 'root' | 'step' | 'dependsOn' | 'retry' | 'goto';
 
 /**
- * One workflow invocation in progress.
+ * One workflow invocation in progress. Its identity is the (documentURI,
+ * workflowId) pair: two documents may each define a workflow of one id, and
+ * those are different workflows — comparing bare ids would call their meeting
+ * a cycle.
  */
 interface WorkflowCall {
   readonly workflowId: string;
+  readonly documentURI: string;
   readonly via: WorkflowCallVia;
 }
 
@@ -32,6 +36,14 @@ export interface WorkflowCallStackOptions {
    * all nesting.
    */
   readonly maxDepth: number;
+  /**
+   * Canonical URI of the run's entry document. Frames of this document read
+   * as the bare workflowId in a reported `path` — the unambiguous,
+   * back-compatible form every same-document chain has always reported —
+   * while a foreign document's frames read as `{documentURI}#{workflowId}`,
+   * where the bare id would not say which document's workflow looped.
+   */
+  readonly entryDocumentURI: string;
 }
 
 /**
@@ -60,27 +72,37 @@ export interface WorkflowCallStackOptions {
 class WorkflowCallStack {
   readonly #calls: readonly WorkflowCall[];
   readonly #maxDepth: number;
+  readonly #entryDocumentURI: string;
 
   constructor(options: WorkflowCallStackOptions, calls: readonly WorkflowCall[] = []) {
     this.#maxDepth = options.maxDepth;
+    this.#entryDocumentURI = options.entryDocumentURI;
     this.#calls = calls;
   }
 
   /**
-   * The workflowIds in progress, outermost first.
+   * The workflows in progress, outermost first — bare ids for entry-document
+   * frames, `{documentURI}#{workflowId}` for foreign ones.
    */
   get path(): readonly string[] {
-    return this.#calls.map((call) => call.workflowId);
+    return this.#calls.map((call) => this.#display(call.workflowId, call.documentURI));
+  }
+
+  #display(workflowId: string, documentURI: string): string {
+    return documentURI === this.#entryDocumentURI ? workflowId : `${documentURI}#${workflowId}`;
   }
 
   /**
-   * Returns the stack with `workflowId` pushed, or throws when entering it would
-   * form a cycle or exceed the nesting ceiling.
+   * Returns the stack with the workflow pushed — identified by its bare id
+   * together with the canonical URI of the document that owns it — or throws
+   * when entering it would form a cycle or exceed the nesting ceiling.
    */
-  enter(workflowId: string, via: WorkflowCallVia): WorkflowCallStack {
-    const repeated = this.#calls.findIndex((call) => call.workflowId === workflowId);
+  enter(workflowId: string, via: WorkflowCallVia, documentURI: string): WorkflowCallStack {
+    const repeated = this.#calls.findIndex(
+      (call) => call.workflowId === workflowId && call.documentURI === documentURI,
+    );
     if (repeated !== -1) {
-      const path = [...this.path, workflowId];
+      const path = [...this.path, this.#display(workflowId, documentURI)];
       // name the loop for the mechanism that formed it: every edge closing the
       // cycle being a `dependsOn` edge makes it a dependency cycle, while any
       // sub-workflow step call in the loop makes it a call cycle. One stack
@@ -99,14 +121,18 @@ class WorkflowCallStack {
     if (this.#calls.length >= this.#maxDepth) {
       throw new ExecutionError(
         `workflow "${workflowId}" nests deeper than the limit of ${this.#maxDepth} workflows`,
-        { workflowId, reason: 'workflow-depth', path: [...this.path, workflowId] },
+        {
+          workflowId,
+          reason: 'workflow-depth',
+          path: [...this.path, this.#display(workflowId, documentURI)],
+        },
       );
     }
 
-    return new WorkflowCallStack({ maxDepth: this.#maxDepth }, [
-      ...this.#calls,
-      { workflowId, via },
-    ]);
+    return new WorkflowCallStack(
+      { maxDepth: this.#maxDepth, entryDocumentURI: this.#entryDocumentURI },
+      [...this.#calls, { workflowId, documentURI, via }],
+    );
   }
 }
 

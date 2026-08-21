@@ -239,7 +239,8 @@ workflows:
             stepId: only
             workflowId: linear
 
-  # a goto's workflowId reference into another document — not yet supported.
+  # a goto's workflowId reference into a non-Arazzo source — an authoring
+  # error: petstoreAPI is an OpenAPI document and defines no workflows.
   - workflowId: gotoCrossDocument
     steps:
       - stepId: only
@@ -518,7 +519,8 @@ workflows:
       status: $steps.call.outputs.status
       repaired: $workflows.repairFlow.outputs.refreshed
 
-  # a retry's workflowId reference into another document — not yet supported.
+  # a retry's workflowId reference into a non-Arazzo source — the same
+  # authoring error, from a retry action.
   - workflowId: retryReferenceCrossDocument
     steps:
       - stepId: doomed

@@ -62,17 +62,20 @@ export default tseslint.config(
           ignorePackages: true,
         },
       ],
-      'import/no-extraneous-dependencies': ['error', {
-        devDependencies: [
-          'packages/*/test/**/*.ts',
-          'packages/*/test/**/*.tsx',
-          '**/config/**',
-          '**/*.config.js',
-          '**/*.config.ts',
-        ],
-        peerDependencies: true,
-        optionalDependencies: false,
-      }],
+      'import/no-extraneous-dependencies': [
+        'error',
+        {
+          devDependencies: [
+            'packages/*/test/**/*.ts',
+            'packages/*/test/**/*.tsx',
+            '**/config/**',
+            '**/*.config.js',
+            '**/*.config.ts',
+          ],
+          peerDependencies: true,
+          optionalDependencies: false,
+        },
+      ],
       'import/no-mutable-exports': 'off',
       'import/order': [
         'error',

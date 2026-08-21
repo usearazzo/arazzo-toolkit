@@ -4,12 +4,14 @@ import {
   readFile,
   File,
   mergeOptions,
+  url,
   type ApiDOMReferenceOptions,
 } from '@speclynx/apidom-reference/configuration/empty';
 import { UnmatchedResolverError } from '@speclynx/apidom-reference/configuration/empty';
 import { toValue } from '@speclynx/apidom-core';
+import { isStringElement } from '@speclynx/apidom-datamodel';
 import { traverse, type Path } from '@speclynx/apidom-traverse';
-import { type WorkflowElement } from '@speclynx/apidom-ns-arazzo-1';
+import type { SourceDescriptionElement, WorkflowElement } from '@speclynx/apidom-ns-arazzo-1';
 
 import * as constants from '../../constants.ts';
 import ArazzoDocument from '../../document/ArazzoDocument.ts';
@@ -18,6 +20,7 @@ import DocumentRegistryProvider, {
   type DocumentRegistryProviderOptions,
 } from './DocumentRegistryProvider.ts';
 import ArazzoWorkflowIndex from '../../document/ArazzoWorkflowIndex.ts';
+import ArazzoSourceDescriptionIndex from '../../document/ArazzoSourceDescriptionIndex.ts';
 
 /**
  * Options for loading an Arazzo document.
@@ -53,7 +56,8 @@ export const providerOptionsOverride: ArazzoDocumentRegistryProviderOptions = {
 /**
  * Provides ArazzoDocument instances for the DocumentRegistry.
  *
- * Parses, dereferences, and builds a WorkflowIndex for Arazzo documents.
+ * Parses the Arazzo document and builds its workflow and source description
+ * indexes — the document itself is a container.
  * @public
  */
 class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
@@ -87,13 +91,25 @@ class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
    */
   async provide(uri: string): Promise<ArazzoDocument> {
     const parseResult = await parseArazzo(uri, this.#buildParseOptions());
-    const workflowIndex = this.#buildWorkflowIndex(parseResult);
+    const { workflowIndex, sourceDescriptionIndex } = this.#buildIndexes(uri, parseResult);
 
-    return new ArazzoDocument(uri, parseResult, workflowIndex);
+    return new ArazzoDocument(uri, parseResult, workflowIndex, sourceDescriptionIndex);
   }
 
-  #buildWorkflowIndex(parseResult: ParseResultElement): ArazzoWorkflowIndex {
-    const index = new ArazzoWorkflowIndex();
+  /**
+   * Builds both indexes in one traversal of the parse result.
+   *
+   * A source description's canonical URI is resolved here too — against the
+   * document's base URI, into the exact form the document registry keys on —
+   * so every consumer works with a ready-to-use, non-relative URI. The first
+   * element of a duplicated source description name wins.
+   */
+  #buildIndexes(
+    uri: string,
+    parseResult: ParseResultElement,
+  ): { workflowIndex: ArazzoWorkflowIndex; sourceDescriptionIndex: ArazzoSourceDescriptionIndex } {
+    const workflowIndex = new ArazzoWorkflowIndex();
+    const sourceDescriptionIndex = new ArazzoSourceDescriptionIndex();
 
     traverse(parseResult.api, {
       WorkflowElement(path: Path) {
@@ -103,13 +119,30 @@ class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
         if (typeof workflowId !== 'string') return path.skip();
         if (workflowId === '') return path.skip();
 
-        index.set(workflowId, path.formatPath('jsonpointer'));
+        workflowIndex.set(workflowId, path.formatPath('jsonpointer'));
 
-        path.skip();
+        return path.skip();
+      },
+
+      SourceDescriptionElement(path: Path) {
+        const element = path.node as SourceDescriptionElement;
+        if (!isStringElement(element.name)) return path.skip();
+
+        const name = toValue(element.name) as string;
+        if (!sourceDescriptionIndex.has(name)) {
+          sourceDescriptionIndex.set(name, {
+            element,
+            uri: isStringElement(element.url)
+              ? url.sanitize(url.stripHash(url.resolve(uri, toValue(element.url) as string)))
+              : undefined,
+          });
+        }
+
+        return path.skip();
       },
     });
 
-    return index;
+    return { workflowIndex, sourceDescriptionIndex };
   }
 
   #buildParseOptions(): ApiDOMReferenceOptions {

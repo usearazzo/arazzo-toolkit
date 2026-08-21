@@ -848,29 +848,29 @@ describe('WorkflowExecutor', function () {
     });
   });
 
-  context('not yet supported', function () {
+  context('references into a non-Arazzo source', function () {
     specify(
-      'should throw for a goto workflowId reference into another document',
+      'should throw for a goto workflowId reference into an OpenAPI source',
       async function () {
         const { executor } = makeExecutor();
 
         await rejects(
           executor.execute('gotoCrossDocument'),
           ExecutionError,
-          /points to another document; not supported yet/,
+          /names source description "petstoreAPI" at .+, which is not an Arazzo document/,
         );
       },
     );
 
     specify(
-      'should throw for a retry workflowId reference into another document',
+      'should throw for a retry workflowId reference into an OpenAPI source',
       async function () {
         const { executor } = makeExecutor([serverErrorResponse]);
 
         await rejects(
           executor.execute('retryReferenceCrossDocument'),
           ExecutionError,
-          /points to another document; not supported yet/,
+          /names source description "petstoreAPI" at .+, which is not an Arazzo document/,
         );
       },
     );
@@ -998,10 +998,11 @@ describe('WorkflowExecutor', function () {
     specify(
       'should report an abort at the transfer boundary as aborted, even for a cross-document target',
       async function () {
-        // the abort is checked before the reference helper's own
-        // cross-document rejection, so a run cancelled at the transfer
-        // boundary reports why it stopped (aborted), not an authoring
-        // property of a target it never got to evaluate.
+        // the abort is checked before the reference helper resolves the
+        // target (here, a workflow reference into a non-Arazzo source), so a
+        // run cancelled at the transfer boundary reports why it stopped
+        // (aborted), not an authoring property of a target it never got to
+        // evaluate.
         const controller = new AbortController();
         const { executor, calls } = makeExecutor(okResponse, {
           onCall: () => controller.abort(),

@@ -21,6 +21,11 @@ export type { OpenAPIOperationElement, OpenAPIPathItemElement } from './document
 /* Indexes */
 export { default as ArazzoWorkflowIndex, type WorkflowId } from './document/ArazzoWorkflowIndex.ts';
 export {
+  default as ArazzoSourceDescriptionIndex,
+  type SourceDescriptionName,
+  type SourceDescriptionEntry,
+} from './document/ArazzoSourceDescriptionIndex.ts';
+export {
   default as OpenAPIOperationIndex,
   type OperationId,
 } from './document/OpenAPIOperationIndex.ts';
@@ -125,6 +130,11 @@ export type {
 } from './executor/OpenAPIOperationExecutor.ts';
 export { default as OpenAPIOperationLocatorNormalizer } from './executor/OpenAPIOperationLocatorNormalizer.ts';
 export type { OpenAPIOperationLocator } from './executor/OpenAPIOperationLocatorNormalizer.ts';
+export { default as ArazzoWorkflowLocatorNormalizer } from './executor/ArazzoWorkflowLocatorNormalizer.ts';
+export type {
+  ArazzoWorkflowLocator,
+  WorkflowReferenceContext,
+} from './executor/ArazzoWorkflowLocatorNormalizer.ts';
 
 /* Errors */
 export { default as ArazzoRunnerError } from './errors/ArazzoRunnerError.ts';

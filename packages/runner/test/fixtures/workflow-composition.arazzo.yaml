@@ -432,8 +432,9 @@ workflows:
     outputs:
       fromFailed: $workflows.failingChild.outputs.status
 
-  # a prerequisite list whose second entry is unusable: the first must not run
-  # before the authoring error is raised.
+  # a prerequisite list whose second entry is unusable (a workflow reference
+  # into an OpenAPI source): the first must not run before the authoring error
+  # is raised.
   - workflowId: dependsOnLateBadEntry
     dependsOn:
       - setupA
@@ -663,13 +664,16 @@ workflows:
             retryLimit: 1
             workflowId: childThatTransfers
 
-  # a sub-workflow step referencing another document — not yet supported.
+  # a sub-workflow step referencing a workflow of a non-Arazzo source — an
+  # authoring error: petstoreAPI is an OpenAPI document and defines no
+  # workflows.
   - workflowId: crossDocumentStep
     steps:
       - stepId: remote
         workflowId: $sourceDescriptions.petstoreAPI.someWorkflow
 
-  # a prerequisite in another document — not yet supported.
+  # a prerequisite referencing a workflow of a non-Arazzo source — the same
+  # authoring error, from dependsOn.
   - workflowId: crossDocumentDependsOn
     dependsOn:
       - $sourceDescriptions.petstoreAPI.someWorkflow

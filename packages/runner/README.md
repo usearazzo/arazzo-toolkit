@@ -33,8 +33,10 @@ into four main components:
   descriptions, so each is fetched and parsed once.
 - **`WorkflowExecutor`**: iterates a workflow's steps, owns the run state, and interprets
   control-flow actions (`goto`, `retry`, `end`).
-- **`StepExecutor`**: runs a single Arazzo step: locates its operation, resolves inputs, evaluates
-  criteria and outputs, and selects the next action.
+- **`StepExecutor`**: runs a single operation-shaped Arazzo step (`operationId` /
+  `operationPath`): locates its operation, resolves inputs, evaluates criteria and outputs, and
+  selects the next action. A `workflowId` step is run by `WorkflowExecutor` instead, which borrows
+  this component's criteria evaluation and action selection for it.
 - **`OpenAPIOperationExecutor`**: runs a single OpenAPI operation: builds the HTTP request
   (parameter serialization, securities, server resolution), sends it through the pluggable
   `HTTPClient` transport, and normalizes the raw response into the runner's response model.
@@ -93,10 +95,6 @@ registry.clear(); // drop cached documents to reclaim memory
 
 ## `WorkflowExecutor`
 
-> [!NOTE]
-> Under active development. Cross-document workflow references are not yet implemented and throw
-> `ExecutionError` rather than behaving incorrectly (see [Not yet supported](#not-yet-supported)).
-
 `WorkflowExecutor` is the stateful orchestrator that runs a whole workflow. It iterates a workflow's
 steps in list order, calling `StepExecutor` per step, and owns the run state (a
 `WorkflowExecutionState`) that accumulates each step's outputs so later steps can read
@@ -151,7 +149,7 @@ console.log(result.durationMs); // elapsed time for the whole run
 | ------------------ | ------------------------------------------------------------------------------------ |
 | `inputs`           | the workflow's inputs, read via `$inputs`                                            |
 | `executeOptions`   | opaque bag forwarded to every step's operation (e.g. `server`, `requestInterceptor`) |
-| `dependencyInputs` | inputs for workflows run to satisfy `dependsOn`, keyed by workflowId                 |
+| `dependencyInputs` | inputs for workflows run to satisfy `dependsOn`, keyed by the entry as written       |
 | `runDependencies`  | run this workflow's `dependsOn` workflows first (default `true`)                     |
 | `signal`           | an `AbortSignal` cancelling the run (see [Cancellation](#cancellation))              |
 
@@ -308,6 +306,43 @@ not under that key: follow `transferredTo.outputs` (or `transferredTo.transferre
 chain) on the nested result itself, found on the calling step's `subWorkflows` entry or the result's
 `dependencies` entry.
 
+### Cross-document workflow references
+
+Anywhere a workflow is referenced — a sub-workflow step's `workflowId`, a `dependsOn` entry, a
+`retry` action's `workflowId` reference, a `goto`'s transfer target — the reference may name a
+workflow of **another Arazzo document**, written as the runtime expression
+`$sourceDescriptions.<name>.<workflowId>`. The named source description must resolve to an Arazzo
+document; its declared `type` is not trusted — the source is classified by what it actually parses
+to, the same way operation sources are. Only that dotted spec form is a workflow reference: the
+resolver package's `$sourceDescriptions.<name>#/json/pointer` form is a `$ref`-time construct, not
+a runtime expression, and is rejected (`reason: 'invalid-workflow-reference'`).
+
+A foreign workflow runs **against its own document**: its plain `operationId`s resolve against
+*that* document's source descriptions, its `$components` / `$sourceDescriptions` expressions
+against that document, and its own plain workflow references (a nested `workflowId` step, its own
+`dependsOn`) within that document. Source description *names* are likewise scoped to the document
+they are written in — two documents may both name a source `petstoreAPI` and mean different
+documents.
+
+Two keying rules follow from the runtime-expression grammar and are worth knowing:
+
+- **`$workflows.<id>` state stays keyed by the bare workflowId** — the only form an expression can
+  read it back by. If the entry document and a foreign document both define a workflow of one id
+  and one run records both, the later write wins under that key (the same last-write-wins two
+  same-document calls of one workflow already have). The cycle/depth guards, dependency
+  memoization, and caches are *not* affected — internally every workflow is identified by its
+  document URI together with its id (which is also how a foreign workflow displays in an error
+  `path`: `<documentURI>#<workflowId>`).
+- **`dependencyInputs` is keyed by the `dependsOn` entry as written** — the bare id for a
+  same-document dependency, the whole `$sourceDescriptions.<name>.<workflowId>` expression for a
+  cross-document one.
+
+A bad reference throws `ExecutionError`: `invalid-workflow-reference` (a `$`-prefixed reference
+that is not a `$sourceDescriptions` expression), `source-description-not-found` (the named source
+is absent), `source-description-not-arazzo` (it resolves to a non-Arazzo document — e.g. a workflow
+reference into an OpenAPI source), or `workflow-not-found` (the document does not define the id;
+the message names which document was searched).
+
 ### Workflow-level default actions
 
 A workflow's `successActions` / `failureActions` apply to every step as a **default**. A step that
@@ -407,8 +442,10 @@ Authoring errors throw `ExecutionError` — as does a cancelled run (`aborted`, 
 (`retry-target-not-found`), an action of an unknown `type` (`unknown-action-type`), a
 present but malformed `steps` or `dependsOn` (`malformed-steps`, `malformed-dependsOn`), a step, a
 `goto`, or a `retry` reference naming more than one target (`ambiguous-target`), a cycle or
-over-deep nesting (`workflow-cycle`, `dependsOn-cycle`, `workflow-depth`), or the step-budget
-overflow above (`step-budget`).
+over-deep nesting (`workflow-cycle`, `dependsOn-cycle`, `workflow-depth`), the step-budget
+overflow above (`step-budget`), or a bad cross-document reference (`invalid-workflow-reference`,
+`source-description-not-found`, `source-description-not-arazzo` — see
+[Cross-document workflow references](#cross-document-workflow-references)).
 
 A workflow's own `steps` and `dependsOn` lists are validated before any of its prerequisites run, so
 those two mistakes never fire live requests on the way to throwing. Errors belonging to an
@@ -417,20 +454,10 @@ action `type` — are raised when the run reaches that step, which means earlier
 executed. That is deliberate: a bad step the run never reaches should not fail an otherwise valid
 run.
 
-### Not yet supported
-
-These land in later work. Each throws `ExecutionError` with the noted `reason` rather than behaving
-incorrectly:
-
-- **cross-document workflow references**: a `workflowId` / `dependsOn` naming a workflow in another
-  document via `$sourceDescriptions.<name>.<workflowId>` — including one named by a `retry`
-  reference or a `goto`'s transfer — (`reason: 'cross-document-workflow-unsupported'`);
-  same-document only for now.
-
 ## `StepExecutor`
 
-Executes a single Arazzo step that invokes an OpenAPI operation, returning its outcome. It
-orchestrates the full per-step pipeline:
+Executes a single operation-shaped Arazzo step — one that invokes an OpenAPI operation — returning
+its outcome. It orchestrates the full per-step pipeline:
 
 1. locate the step's operation (`operationId` or `operationPath`);
 2. resolve the step's `parameters` and `requestBody` against the pre-request context (`$inputs`,
@@ -442,7 +469,15 @@ orchestrates the full per-step pipeline:
 `StepExecutor` **reads run state and mutates nothing**: it returns the resolved outputs and the
 selected action for the caller to record and interpret. A step targeting a `workflowId` (a
 sub-workflow) is not an operation step and throws; running sub-workflows is the `WorkflowExecutor`'s
-concern.
+concern — which still evaluates such a step's `successCriteria` and selects its actions through
+this component's public `evaluateCriteria` / `selectActions`, so step semantics live in one place.
+
+A step executor is bound to the document its steps belong to (the `document` option): plain
+`operationId`s resolve against that document's source descriptions, and expressions resolve their
+`$components` / `$sourceDescriptions` against it. `forDocument(document)` derives a sibling
+executor bound to another document, sharing the registry and operation executor — how
+`WorkflowExecutor` runs the steps of a
+[cross-document workflow](#cross-document-workflow-references).
 
 It delegates the located operation to an injected `OpenAPIOperationExecutor` (below) rather than
 building one, so it stays agnostic to the operation pipeline and HTTP stack:

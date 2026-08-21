@@ -1,0 +1,59 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "Cross-document child API",
+    "description": "The OpenAPI source of the child Arazzo document. Its server prefix differs from the entry document's petstore, so a request URL proves which document's source descriptions an operation was resolved against.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/child-api/v1"
+    }
+  ],
+  "paths": {
+    "/pet/{petId}": {
+      "get": {
+        "operationId": "getPetById",
+        "parameters": [
+          {
+            "name": "petId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/inventory": {
+      "get": {
+        "operationId": "getInventory",
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

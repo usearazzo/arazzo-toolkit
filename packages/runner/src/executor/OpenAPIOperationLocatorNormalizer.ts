@@ -1,15 +1,12 @@
-import {
-  test as isRuntimeExpression,
-  parse as parseRuntimeExpression,
-} from '@swaggerexpert/arazzo-runtime-expression';
+import { test as isRuntimeExpression } from '@swaggerexpert/arazzo-runtime-expression';
 import { URIFragmentIdentifier, testJSONPointer } from '@swaggerexpert/json-pointer';
 import { url } from '@speclynx/apidom-reference/configuration/empty';
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
 import OpenAPIDocument from '../document/OpenAPIDocument.ts';
-import type DocumentRegistry from '../registry/DocumentRegistry.ts';
 import RuntimeExpressionEvaluator from '../expression/RuntimeExpressionEvaluator.ts';
 import ExtractionError from '../errors/ExtractionError.ts';
+import SourceDescriptionsLocatorNormalizer from './SourceDescriptionsLocatorNormalizer.ts';
 
 /**
  * A canonical OpenAPI operation locator: the OpenAPI document that owns the
@@ -47,13 +44,7 @@ export interface OpenAPIOperationLocator {
  * demand.
  * @public
  */
-class OpenAPIOperationLocatorNormalizer {
-  readonly #registry: DocumentRegistry;
-
-  constructor(registry: DocumentRegistry) {
-    this.#registry = registry;
-  }
-
+class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormalizer {
   /**
    * Normalizes a plain or expression `operationId` to a canonical locator.
    *
@@ -93,7 +84,7 @@ class OpenAPIOperationLocatorNormalizer {
   ): Promise<OpenAPIOperationLocator> {
     const evaluator = new RuntimeExpressionEvaluator(
       {},
-      { strict: false, document, registry: this.#registry },
+      { strict: false, document, registry: this.registry },
     );
     const uriReference = evaluator.interpolate(operationPath);
 
@@ -113,7 +104,7 @@ class OpenAPIOperationLocatorNormalizer {
       });
     }
 
-    const source = await this.#registry.acquire(documentURI);
+    const source = await this.registry.acquire(documentURI);
     if (!OpenAPIDocument.is(source)) {
       throw new ExtractionError(
         `operationPath "${operationPath}" does not reference an OpenAPI document`,
@@ -125,21 +116,20 @@ class OpenAPIOperationLocatorNormalizer {
   }
 
   /**
-   * Parses a `$sourceDescriptions.{name}.{reference}` expression to its AST,
-   * asserting it is a source-descriptions expression.
+   * Parses a `$sourceDescriptions.{name}.{reference}` expression, asserting
+   * it is a source-descriptions expression.
    */
   #parseSourceDescriptionsExpression(expression: string): {
     sourceName: string;
     reference: string;
   } {
-    const { result, tree } = parseRuntimeExpression(expression);
-    if (!result.success || tree.type !== 'SourceDescriptionsExpression') {
+    const parsed = this.parseSourceDescriptionsExpression(expression);
+    if (parsed === undefined) {
       throw new ExtractionError(`Unsupported operationId expression "${expression}"`, {
         operationId: expression,
       });
     }
-    const { sourceName, reference } = tree;
-    return { sourceName, reference };
+    return parsed;
   }
 
   async #resolveSourced(
@@ -176,7 +166,7 @@ class OpenAPIOperationLocatorNormalizer {
     document: ArazzoDocument,
   ): Promise<OpenAPIOperationLocator> {
     for (const uri of document.sourceDescriptionURIs()) {
-      const source = await this.#registry.acquire(uri);
+      const source = await this.registry.acquire(uri);
       if (!OpenAPIDocument.is(source)) continue;
 
       const jsonPointer = source.operationIndex.get(operationId);
@@ -205,7 +195,7 @@ class OpenAPIOperationLocatorNormalizer {
         uri: document.uri,
       });
     }
-    const source = await this.#registry.acquire(uri);
+    const source = await this.registry.acquire(uri);
     if (!OpenAPIDocument.is(source)) {
       throw new ExtractionError(`Source description "${sourceName}" is not an OpenAPI document`, {
         uri,
