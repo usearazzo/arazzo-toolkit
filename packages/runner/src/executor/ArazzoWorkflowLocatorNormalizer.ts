@@ -1,8 +1,7 @@
-import { parse as parseRuntimeExpression } from '@swaggerexpert/arazzo-runtime-expression';
-
 import ArazzoDocument from '../document/ArazzoDocument.ts';
 import type DocumentRegistry from '../registry/DocumentRegistry.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
+import SourceDescriptionsLocatorNormalizer from './SourceDescriptionsLocatorNormalizer.ts';
 
 /**
  * A canonical Arazzo workflow locator: the Arazzo document that owns the
@@ -12,7 +11,10 @@ import ExecutionError from '../errors/ExecutionError.ts';
  * `workflowId` of the current document, or a
  * `$sourceDescriptions.{name}.{workflowId}` runtime expression naming a
  * workflow of another Arazzo document. Both are locators for the same thing;
- * the normalizer reduces either to this single canonical form.
+ * the normalizer reduces either to this single canonical form. `workflowId`
+ * is the bare id either way — the key run state (`$workflows.{id}`) is
+ * recorded under, which the runtime-expression grammar can only express
+ * unqualified.
  * @public
  */
 export interface ArazzoWorkflowLocator {
@@ -21,16 +23,10 @@ export interface ArazzoWorkflowLocator {
 }
 
 /**
- * A workflow reference, parsed but not yet resolved: either a plain id of the
- * referencing document, or a `$sourceDescriptions.{name}.{workflowId}`
- * expression into a named source. `workflowId` is the bare id either way —
- * the key run state (`$workflows.{id}`) is recorded under, which the
- * runtime-expression grammar can only express unqualified — and `reference`
- * is the reference as written, so a caller holding a parsed value never
- * needs the original string alongside it.
- * @public
+ * A workflow reference, parsed but not yet resolved — the intermediate form
+ * between {@link ArazzoWorkflowLocatorNormalizer.normalize}'s two halves.
  */
-export type ParsedWorkflowReference =
+type ParsedWorkflowReference =
   | { readonly kind: 'local'; readonly reference: string; readonly workflowId: string }
   | {
       readonly kind: 'sourced';
@@ -42,18 +38,10 @@ export type ParsedWorkflowReference =
 /**
  * The referencing context a reference is resolved in: the workflow (and step,
  * when the reference sits on one) making the reference, stamped onto every
- * error, and the run's document ledger.
+ * error.
  * @public
  */
 export interface WorkflowReferenceContext {
-  /**
-   * The Arazzo documents already in use by this run, keyed by canonical URI.
-   * Consulted before the registry and extended with every document a
-   * reference resolves to — holding a direct reference for the rest of the
-   * run keeps the document alive even if the registry's LRU cache evicts it
-   * while the run is in flight.
-   */
-  readonly documents: Map<string, ArazzoDocument>;
   /**
    * The workflow the reference appears in.
    */
@@ -82,63 +70,90 @@ export interface WorkflowReferenceContext {
  * The `type` declared on a source description is not trusted (it may be
  * absent or wrong); a source is classified by what it actually parses to,
  * the same convention the OpenAPI operation locator follows. Source
- * documents are acquired from the registry on demand, through the run's
- * document ledger.
+ * documents are acquired from the registry on demand — through the run's
+ * document ledger when the normalizer is bound to one, see
+ * {@link ArazzoWorkflowLocatorNormalizer.forRun}. Whether the resolved
+ * document *defines* the workflow is deliberately left to the caller, which
+ * owns the timing of that check (eager for a `dependsOn` list validated
+ * before any prerequisite runs, lazy for a sub-workflow step resolved per
+ * attempt).
  * @public
  */
-class ArazzoWorkflowLocatorNormalizer {
-  readonly #registry: DocumentRegistry;
+class ArazzoWorkflowLocatorNormalizer extends SourceDescriptionsLocatorNormalizer {
+  /**
+   * The run's document ledger, when this normalizer is bound to one — every
+   * document a reference resolves to is consulted from and recorded into it,
+   * keeping each URI one live, identical document for as long as the run may
+   * need it, even if the registry's LRU cache evicts it mid-run.
+   */
+  readonly #documents: Map<string, ArazzoDocument> | undefined;
 
-  constructor(registry: DocumentRegistry) {
-    this.#registry = registry;
+  constructor(registry: DocumentRegistry, documents?: Map<string, ArazzoDocument>) {
+    super(registry);
+    this.#documents = documents;
   }
 
   /**
-   * Parses a reference to its target — without resolving it, so callers that
-   * only need the bare workflowId (state keys, the prior `$workflows` entry a
-   * retry pins) get it synchronously, before any document is acquired.
-   *
-   * A reference starting with `$` must be a whole
-   * `$sourceDescriptions.{name}.{workflowId}` expression; anything else
-   * `$`-prefixed (another expression kind, or one that does not parse) is a
-   * malformed reference, rejected here rather than looked up as a literal id
-   * that cannot exist.
+   * A normalizer bound to a run's document ledger, sharing this one's
+   * registry — how the executor scopes document pinning to a single run
+   * without the ledger ever appearing in a method signature.
    */
-  parseReference(
+  forRun(documents: Map<string, ArazzoDocument>): ArazzoWorkflowLocatorNormalizer {
+    return new ArazzoWorkflowLocatorNormalizer(this.registry, documents);
+  }
+
+  /**
+   * Resolves a reference — a plain workflowId or a
+   * `$sourceDescriptions.{name}.{workflowId}` expression, as written — to the
+   * canonical locator: the Arazzo document that owns the target workflow,
+   * and the bare id within it.
+   */
+  async normalize(
     reference: string,
-    { workflowId, stepId }: { workflowId: string; stepId?: string },
+    document: ArazzoDocument,
+    context: WorkflowReferenceContext,
+  ): Promise<ArazzoWorkflowLocator> {
+    return this.#resolve(this.#parseReference(reference, context), document, context);
+  }
+
+  /**
+   * Parses a reference to its target. A reference starting with `$` must be
+   * a whole `$sourceDescriptions.{name}.{workflowId}` expression; anything
+   * else `$`-prefixed (another expression kind, or one that does not parse)
+   * is a malformed reference, rejected here rather than looked up as a
+   * literal id that cannot exist.
+   */
+  #parseReference(
+    reference: string,
+    { workflowId, stepId }: WorkflowReferenceContext,
   ): ParsedWorkflowReference {
     if (!reference.startsWith('$')) {
       return { kind: 'local', reference, workflowId: reference };
     }
 
-    const { result, tree } = parseRuntimeExpression(reference);
-    if (!result.success || tree.type !== 'SourceDescriptionsExpression') {
+    const parsed = this.parseSourceDescriptionsExpression(reference);
+    if (parsed === undefined) {
       throw new ExecutionError(
         `workflow reference "${reference}" in workflow "${workflowId}" is not a $sourceDescriptions.{name}.{workflowId} expression`,
         { workflowId, stepId, reason: 'invalid-workflow-reference' },
       );
     }
-    const { sourceName, reference: sourcedWorkflowId } = tree;
-    return { kind: 'sourced', reference, sourceName, workflowId: sourcedWorkflowId };
+    return {
+      kind: 'sourced',
+      reference,
+      sourceName: parsed.sourceName,
+      workflowId: parsed.reference,
+    };
   }
 
   /**
-   * Resolves an already-parsed reference to the Arazzo document that owns the
-   * target workflow — the second half of {@link ArazzoWorkflowLocatorNormalizer.normalize},
-   * split out so a caller that parsed early (for the bare id, or to validate
-   * a whole list before acquiring anything) does not pay for the parse twice.
-   *
-   * A plain id resolves to the referencing document itself. An expression
-   * resolves its named source description to a URI, acquires that document
-   * (through the run ledger first — see
-   * {@link WorkflowReferenceContext.documents}), and requires it to actually
-   * be an Arazzo document. Whether the document then *defines* the workflow
-   * is deliberately left to the caller, which owns the timing of that check
-   * (eager for a `dependsOn` list validated before any prerequisite runs,
-   * lazy for a sub-workflow step resolved per attempt).
+   * Resolves a parsed reference to the Arazzo document that owns the target
+   * workflow. A plain id resolves to the referencing document itself; an
+   * expression resolves its named source description to a URI, acquires that
+   * document (ledger first), and requires it to actually be an Arazzo
+   * document.
    */
-  async resolve(
+  async #resolve(
     parsed: ParsedWorkflowReference,
     document: ArazzoDocument,
     context: WorkflowReferenceContext,
@@ -156,31 +171,17 @@ class ArazzoWorkflowLocatorNormalizer {
       );
     }
 
-    const ledgered = context.documents.get(uri);
-    const source = ledgered ?? (await this.#registry.acquire(uri));
+    const ledgered = this.#documents?.get(uri);
+    const source = ledgered ?? (await this.registry.acquire(uri));
     if (!ArazzoDocument.is(source)) {
       throw new ExecutionError(
         `workflow reference "${parsed.reference}" in workflow "${workflowId}" names source description "${parsed.sourceName}" at "${uri}", which is not an Arazzo document`,
         { workflowId, stepId, reason: 'source-description-not-arazzo' },
       );
     }
-    context.documents.set(uri, source);
+    this.#documents?.set(uri, source);
 
     return { document: source, workflowId: parsed.workflowId };
-  }
-
-  /**
-   * Parses and resolves a reference in one call — the convenience over
-   * {@link ArazzoWorkflowLocatorNormalizer.parseReference} +
-   * {@link ArazzoWorkflowLocatorNormalizer.resolve} for callers with no
-   * earlier use for the parsed form.
-   */
-  async normalize(
-    reference: string,
-    document: ArazzoDocument,
-    context: WorkflowReferenceContext,
-  ): Promise<ArazzoWorkflowLocator> {
-    return this.resolve(this.parseReference(reference, context), document, context);
   }
 }
 

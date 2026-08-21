@@ -639,21 +639,25 @@ follows:
   every reference — plain id or expression — normalizes to, mirroring
   `OpenAPIOperationLocator`. A new public `ArazzoWorkflowLocatorNormalizer`
   (registry in the constructor, referencing document per call, like its
-  OpenAPI sibling) owns parse + resolve: sync `parseReference` (so state keys
-  and the retry-pinned `$workflows` entry need no await; anything `$`-prefixed
-  that is not a `SourceDescriptionsExpression` throws
-  `invalid-workflow-reference` — including the resolver package's
-  `#/workflows/...` pointer form, which is a `$ref`-time construct, not a
-  runtime expression) and async `normalize`
+  OpenAPI sibling — both now extend an `@internal`
+  `SourceDescriptionsLocatorNormalizer` base owning the registry handle and
+  the one grammar-facing `$sourceDescriptions` parse) exposes **one** public
+  method: `normalize(reference, document, context) → locator`. Its two
+  halves — the sync parse (anything `$`-prefixed that is not a
+  `SourceDescriptionsExpression` throws `invalid-workflow-reference`,
+  including the resolver package's `#/workflows/...` pointer form, a
+  `$ref`-time construct, not a runtime expression) and the async resolve
   (`resolveSourceDescriptionURI` → `source-description-not-found`; run-ledger
   or `registry.acquire` → `ArazzoDocument.is`, never the declared `type:` →
-  `source-description-not-arazzo`). Workflow existence stays with the callers,
-  which own its timing: eager for `dependsOn` (whole list, before any
-  prerequisite runs) and for `#runReferencedWorkflow` (with the calling
-  `stepId`), lazy via `#resolveWorkflow` for a sub-workflow step. A canonical
-  *string* form was considered and rejected: the entry document's own
-  workflows have no expression spelling, and source names are document-scoped,
-  so the expression form is not context-free.
+  `source-description-not-arazzo`) — are `#`-private. Callers needing the
+  bare id take it from the returned locator (`locator.workflowId`) or a
+  referenced run's result (`result.workflowId`). Workflow existence stays
+  with the callers, which own its timing: eager for `dependsOn` (whole list,
+  before any prerequisite runs) and for `#runReferencedWorkflow` (with the
+  calling `stepId`), lazy via `#resolveWorkflow` for a sub-workflow step. A
+  canonical *string* form was considered and rejected: the entry document's
+  own workflows have no expression spelling, and source names are
+  document-scoped, so the expression form is not context-free.
 - **The document moved into the invocation**: `WorkflowInvocation.document`,
   `#run(locator, …)`, `#resolveWorkflow(locator, scope)`, and `#evaluate`
   taking the document per call. Every former `this.#document` read in the run
@@ -664,16 +668,18 @@ follows:
   per-call document argument, no factory option; decided over both
   alternatives the predecessor note weighed). It gained
   `forDocument(document)`, deriving a sibling bound to a foreign document and
-  sharing the registry + operation executor; `WorkflowExecutor` caches one
-  per document URI in `RunScope.stepExecutors`, seeded with the injected
-  instance under the entry URI.
-- **Identity is `{documentURI}#{workflowId}`** for cycle detection
-  (`WorkflowCallStack.enter(workflowId, via, { documentUri, display })` —
-  passed *always*, entry included, so a foreign source pointing back at the
-  entry document closes a detectable cycle), the normalized-workflow cache,
-  and `dependencyRuns` dedup — as §4c anticipated. Error `path` display stays
-  the bare id for entry-document frames (test/back-compat) and shows
-  `uri#id` for foreign ones.
+  sharing the registry + operation executor — `this` for the already-bound
+  document, and cheap enough to derive on demand (eight stateless field
+  assignments) that no per-run cache is kept.
+- **Identity is the (documentURI, workflowId) pair** for cycle detection
+  (`WorkflowCallStack.enter(workflowId, via, documentUri)` — required, so a
+  foreign source pointing back at the entry document closes a detectable
+  cycle and a stack can never mix qualified and unqualified frames), and
+  `{documentURI}#{workflowId}` keys the normalized-workflow cache and
+  `dependencyRuns` dedup — as §4c anticipated. The stack knows the run's
+  entry document URI from construction and derives `path` display itself:
+  the bare id for entry-document frames (test/back-compat), `uri#id` for
+  foreign ones.
 - **`$workflows.<id>` state stays keyed by the bare id** — the only form the
   runtime-expression grammar can express; same-id-across-documents is
   last-write-wins, documented in the README as a known hazard (same class as
@@ -684,15 +690,19 @@ follows:
 - **`RunScope.documents` ledger** (canonical URI → `ArazzoDocument`, seeded
   with the entry document): every document a reference resolves to is held
   for the whole run, so the registry's size-4 LRU cannot evict a document a
-  live call tree still needs.
+  live call tree still needs. The normalizer reaches it through a run-bound
+  sibling (`forRun(documents)`, mirroring `forDocument`), so the ledger
+  appears in no public signature — when issue `#74` moves pinning into the
+  registry itself, it can vanish without an API break.
 
-Tests: 15 in a new `WorkflowExecutorCrossDocument` suite over a two-document
+Tests: 20 in a new `WorkflowExecutorCrossDocument` suite over a two-document
 fixture pair whose APIs have distinct server prefixes (so a request URL proves
 which document's sources resolved an operation), covering all four positions,
 foreign-document expression bases, a foreign workflow's own local references,
 same-id-no-false-cycle, a cross-document cycle with mixed-display `path`,
-depth across documents, and every new error reason; 3 new `WorkflowCallStack`
-qualified-key unit tests; the four old rejection tests repurposed to
+depth across documents, and every new error reason; 2 new `WorkflowCallStack`
+document-qualified unit tests (the whole suite now enters frames with a
+document URI, as the API requires); the four old rejection tests repurposed to
 `source-description-not-arazzo` (their fixtures reference a workflow of an
 *openapi* source), keeping the validate-before-run and abort-ordering
 assertions.

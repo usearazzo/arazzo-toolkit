@@ -23,7 +23,6 @@ import WorkflowExecutionState from '../state/WorkflowExecutionState.ts';
 import StepExecutor, { STEP_TARGET_FIELDS } from './StepExecutor.ts';
 import ArazzoWorkflowLocatorNormalizer, {
   type ArazzoWorkflowLocator,
-  type ParsedWorkflowReference,
 } from './ArazzoWorkflowLocatorNormalizer.ts';
 import StepRetryRunner, { type StepAttemptOutcome } from './StepRetryRunner.ts';
 import WorkflowCallStack, { type WorkflowCallVia } from './WorkflowCallStack.ts';
@@ -396,12 +395,12 @@ interface RunScope {
    */
   readonly documents: Map<string, ArazzoDocument>;
   /**
-   * Step executors by the canonical URI of the document they are bound to
-   * (see {@link StepExecutor.forDocument}), seeded with the injected executor
-   * under the entry document's URI — entry-document steps keep running
-   * through the exact instance the caller built.
+   * The workflow-reference normalizer bound to this run's document ledger
+   * (see {@link ArazzoWorkflowLocatorNormalizer.forRun}) — every reference
+   * this run resolves goes through it, so every document it touches lands in
+   * {@link RunScope.documents}.
    */
-  readonly stepExecutors: Map<string, StepExecutor>;
+  readonly workflowLocatorNormalizer: ArazzoWorkflowLocatorNormalizer;
 }
 
 /**
@@ -532,6 +531,7 @@ class WorkflowExecutor {
     // whole cancellation rather than half of one: read only at dispatch, it would
     // abort requests while the loop walked on through the remaining steps.
     const signal = options.signal ?? readAbortSignal(options.executeOptions ?? {});
+    const documents = new Map([[this.#document.uri, this.#document]]);
     const scope: RunScope = {
       // the first-class signal is also spread into the opaque bag, because that
       // bag is how anything reaches the transport: the executor's own checks
@@ -544,14 +544,17 @@ class WorkflowExecutor {
       budget: { spent: 0 },
       dependencyRuns: new Map(),
       workflows: new Map(),
-      documents: new Map([[this.#document.uri, this.#document]]),
-      stepExecutors: new Map([[this.#document.uri, this.#stepExecutor]]),
+      documents,
+      workflowLocatorNormalizer: this.#workflowLocatorNormalizer.forRun(documents),
     };
     return this.#run(
       { document: this.#document, workflowId },
       options.inputs ?? {},
       scope,
-      new WorkflowCallStack({ maxDepth: this.#maxWorkflowDepth }),
+      new WorkflowCallStack({
+        maxDepth: this.#maxWorkflowDepth,
+        entryDocumentUri: this.#document.uri,
+      }),
       'root',
     );
   }
@@ -595,14 +598,11 @@ class WorkflowExecutor {
     const { workflowId } = locator;
     // entering yields a new stack rather than mutating the caller's, so leaving is
     // implicit — and a cycle or over-deep nesting throws here, before any of this
-    // workflow's own work begins. The entry is keyed by the owning document's
-    // URI as well as the id — always, entry document included — so a foreign
-    // document's reference back into the entry document closes a detectable
-    // cycle, and two documents' workflows sharing an id do not falsely form one.
-    const nested = callStack.enter(workflowId, via, {
-      documentUri: locator.document.uri,
-      display: this.#displayId(locator),
-    });
+    // workflow's own work begins. The entry is identified by the owning
+    // document's URI as well as the id, so a foreign document's reference
+    // back into the entry document closes a detectable cycle, and two
+    // documents' workflows sharing an id do not falsely form one.
+    const nested = callStack.enter(workflowId, via, locator.document.uri);
     // the workflow boundary, checked in its own right and not only per step: a
     // run cancelled before any step — or between a prerequisite and the workflow
     // that needed it — must not go on to normalize and enter a workflow nobody
@@ -717,10 +717,7 @@ class WorkflowExecutor {
           // source) would have thrown.
           throwIfAborted(scope.signal, { workflowId, stepId, callStack: nested });
           const transferredTo = await this.#runReferencedWorkflow(
-            this.#workflowLocatorNormalizer.parseReference(transition.workflowId, {
-              workflowId,
-              stepId,
-            }),
+            transition.workflowId,
             stepId,
             invocation,
             scope,
@@ -938,28 +935,25 @@ class WorkflowExecutor {
       }
 
       if (hasWorkflowId) {
-        // parsed before the run (and before the budget charge), so a
-        // malformed reference throws without firing anything; `workflowId`
-        // on the parsed form is the bare id run state is recorded under.
-        const parsed = this.#workflowLocatorNormalizer.parseReference(
-          toValue(action.workflowId) as string,
-          { workflowId, stepId },
-        );
+        const reference = toValue(action.workflowId) as string;
         this.#chargeBudget(scope, invocation, stepId);
         const result = await this.#runReferencedWorkflow(
-          parsed,
+          reference,
           stepId,
           invocation,
           scope,
           'retry',
         );
-        state.setWorkflow(parsed.workflowId, {
-          inputs: state.getWorkflow(parsed.workflowId)?.inputs ?? {},
+        // the result's workflowId is the bare id the reference resolved to —
+        // the key run state is recorded under, whichever document owns it.
+        const refId = result.workflowId;
+        state.setWorkflow(refId, {
+          inputs: state.getWorkflow(refId)?.inputs ?? {},
           outputs: result.outputs,
         });
         retryReferences.push({
           kind: 'workflow',
-          id: parsed.reference,
+          id: reference,
           successful: !this.#settledFailed(result),
           subWorkflow: result,
         });
@@ -1031,13 +1025,14 @@ class WorkflowExecutor {
 
     const results: WorkflowExecutionResult[] = [];
     for (const dependency of dependencyRefs) {
+      const qualifiedId = this.#qualifiedId(dependency.locator);
       // a dependency already completed in this run is satisfied, not repeated: a
       // precondition holds once met, and a diamond (two dependents sharing one
       // dependency) must not duplicate its live side effects. Every dependent
       // still reports and reads that one run — including the inputs the run
       // was actually given, not whatever this dependent's own
       // `dependencyInputs` entry would have supplied had it run it.
-      const memoized = scope.dependencyRuns.get(dependency.qualifiedId);
+      const memoized = scope.dependencyRuns.get(qualifiedId);
       const inputs = memoized?.inputs ?? scope.dependencyInputs[dependency.inputsKey] ?? {};
       const result =
         memoized?.result ??
@@ -1057,7 +1052,7 @@ class WorkflowExecutor {
       // only a dependency whose chain settled non-`failed` is remembered as
       // satisfied — a failure, transferred or not, must never let a later
       // dependent skip running it.
-      scope.dependencyRuns.set(dependency.qualifiedId, { result, inputs });
+      scope.dependencyRuns.set(qualifiedId, { result, inputs });
     }
     return results;
   }
@@ -1072,21 +1067,17 @@ class WorkflowExecutor {
    * Checking the whole list up front is the point. These are authoring errors,
    * and validating them one at a time as they are run would let a bad entry
    * halfway down the list throw only after the entries before it had already
-   * made live requests. Shape and reference syntax are checked synchronously
-   * first, before the resolving pass acquires any source document — a
-   * malformed entry must not cost even a fetch made on behalf of a
-   * well-formed one before it.
+   * made live requests.
    *
    * `inputsKey` is the entry as written, the key
    * {@link WorkflowExecuteOptions.dependencyInputs} addresses the dependency
-   * by; `qualifiedId` is the run-wide identity the dependency ledger
-   * deduplicates on.
+   * by.
    */
   async #dependencyRefs(
     workflow: WorkflowElement,
     invocation: WorkflowInvocation,
     scope: RunScope,
-  ): Promise<{ locator: ArazzoWorkflowLocator; qualifiedId: string; inputsKey: string }[]> {
+  ): Promise<{ locator: ArazzoWorkflowLocator; inputsKey: string }[]> {
     const { workflowId, document } = invocation;
     const dependsOn = workflow.dependsOn;
     if (!isArrayElement(dependsOn)) {
@@ -1096,31 +1087,28 @@ class WorkflowExecutor {
       });
     }
 
-    const parsedReferences = [...dependsOn].map((entry, index) => {
+    const references = [...dependsOn].map((entry, index) => {
       if (!isStringElement(entry)) {
         throw new ExecutionError(
           `workflow "${workflowId}" has a non-string entry at dependsOn[${index}]`,
           { workflowId, reason: 'malformed-dependsOn' },
         );
       }
-      return this.#workflowLocatorNormalizer.parseReference(toValue(entry) as string, {
-        workflowId,
-      });
+      return toValue(entry) as string;
     });
 
-    const refs: { locator: ArazzoWorkflowLocator; qualifiedId: string; inputsKey: string }[] = [];
-    for (const parsed of parsedReferences) {
-      const locator = await this.#workflowLocatorNormalizer.resolve(parsed, document, {
-        documents: scope.documents,
+    const refs: { locator: ArazzoWorkflowLocator; inputsKey: string }[] = [];
+    for (const reference of references) {
+      const locator = await scope.workflowLocatorNormalizer.normalize(reference, document, {
         workflowId,
       });
       if (!locator.document.workflowIndex.has(locator.workflowId)) {
         throw new ExecutionError(
-          `workflow "${workflowId}" depends on "${parsed.reference}", which the Arazzo document at "${locator.document.uri}" does not define`,
+          `workflow "${workflowId}" depends on "${reference}", which the Arazzo document at "${locator.document.uri}" does not define`,
           { workflowId, reason: 'workflow-not-found' },
         );
       }
-      refs.push({ locator, qualifiedId: this.#qualifiedId(locator), inputsKey: parsed.reference });
+      refs.push({ locator, inputsKey: reference });
     }
     return refs;
   }
@@ -1151,30 +1139,32 @@ class WorkflowExecutor {
     const { workflowId, document, state, callStack } = invocation;
     if (!isStringElement(step.workflowId)) {
       return () =>
-        this.#stepExecutorFor(document, scope).execute(step, state, scope.executeOptions);
+        this.#stepExecutor.forDocument(document).execute(step, state, scope.executeOptions);
     }
 
-    // parsed synchronously, so a malformed reference throws here, before the
-    // retry chain begins, and the bare id this call's run state is recorded
-    // under is known without awaiting a document.
-    const parsedReference = this.#workflowLocatorNormalizer.parseReference(
-      this.#subWorkflowReference(step, stepId, workflowId),
-      { workflowId, stepId },
-    );
-    const { workflowId: subWorkflowId } = parsedReference;
+    const reference = this.#subWorkflowReference(step, stepId, workflowId);
     const stepScope = { stepId };
-    // this call's own $workflows entry, as it stood before this step's retry
-    // chain began (typically absent, but a legitimate value when an earlier,
-    // different step already called the same workflowId) — held fixed across
-    // every attempt below, so a retry never sees this call's *own*
-    // prior-attempt output. Everything else is read live per attempt.
-    const priorWorkflowEntry = state.getWorkflow(subWorkflowId);
     // the reference resolves to the same locator on every attempt, so it is
-    // resolved once for the whole retry chain, on the first attempt that
-    // needs it.
+    // resolved once for the whole retry chain, on the first attempt; that
+    // same first-attempt moment — before this call has written anything —
+    // is when this call's own $workflows entry is pinned (typically absent,
+    // but a legitimate value when an earlier, different step already called
+    // the same workflowId), held fixed across every attempt below so a retry
+    // never sees this call's *own* prior-attempt output. Everything else is
+    // read live per attempt.
     let locator: ArazzoWorkflowLocator | undefined;
+    let priorWorkflowEntry: Readonly<RuntimeExpressionWorkflowContext> | undefined;
 
     return async () => {
+      if (locator === undefined) {
+        locator = await scope.workflowLocatorNormalizer.normalize(reference, document, {
+          workflowId,
+          stepId,
+        });
+        priorWorkflowEntry = state.getWorkflow(locator.workflowId);
+      }
+      const subWorkflowId = locator.workflowId;
+
       // the sub-workflow's inputs come from the step's parameters, mapped by
       // bare name — per the specification, "all parameters map to workflow
       // inputs" for such a step. That includes an inherited parameter that
@@ -1198,11 +1188,6 @@ class WorkflowExecutor {
         stepScope,
       );
 
-      locator ??= await this.#workflowLocatorNormalizer.resolve(parsedReference, document, {
-        documents: scope.documents,
-        workflowId,
-        stepId,
-      });
       const result = await this.#run(locator, inputs, scope, callStack, 'step');
       subWorkflows.push(result);
       state.setWorkflow(subWorkflowId, { inputs, outputs: result.outputs });
@@ -1228,7 +1213,7 @@ class WorkflowExecutor {
       // the criteria and actions are the *calling* step's, so they are
       // evaluated by the parent document's step executor — only the sub-run
       // itself switched documents.
-      const stepExecutor = this.#stepExecutorFor(document, scope);
+      const stepExecutor = this.#stepExecutor.forDocument(document);
       const successful =
         !this.#settledFailed(result) && stepExecutor.evaluateCriteria(step, context);
       const matchedActions = stepExecutor.selectActions(step, successful, context);
@@ -1301,17 +1286,17 @@ class WorkflowExecutor {
    * generically from every kind of nested call.
    */
   async #runReferencedWorkflow(
-    parsed: ParsedWorkflowReference,
+    reference: string,
     stepId: string,
     invocation: WorkflowInvocation,
     scope: RunScope,
     via: WorkflowCallVia,
   ): Promise<WorkflowExecutionResult> {
-    const locator = await this.#workflowLocatorNormalizer.resolve(parsed, invocation.document, {
-      documents: scope.documents,
-      workflowId: invocation.workflowId,
-      stepId,
-    });
+    const locator = await scope.workflowLocatorNormalizer.normalize(
+      reference,
+      invocation.document,
+      { workflowId: invocation.workflowId, stepId },
+    );
     if (!locator.document.workflowIndex.has(locator.workflowId)) {
       throw new ExecutionError(
         `workflow "${locator.workflowId}" not found in Arazzo document at "${locator.document.uri}"`,
@@ -1352,38 +1337,13 @@ class WorkflowExecutor {
 
   /**
    * The run-wide identity of the workflow a locator names —
-   * `{documentURI}#{workflowId}`, the key the normalized-workflow cache, the
-   * dependency ledger, and the call stack all agree on. Qualified because a
-   * bare workflowId is only unique within its own document.
+   * `{documentURI}#{workflowId}`, the key the normalized-workflow cache and
+   * the dependency ledger share (the call stack compares the same pair,
+   * unformatted). Qualified because a bare workflowId is only unique within
+   * its own document.
    */
   #qualifiedId(locator: ArazzoWorkflowLocator): string {
     return `${locator.document.uri}#${locator.workflowId}`;
-  }
-
-  /**
-   * How the workflow reads in a reported error `path`: the bare workflowId
-   * for a workflow of the entry document — the form every same-document
-   * chain has always reported — and the qualified form for a foreign one,
-   * where the bare id would not say which document's workflow looped.
-   */
-  #displayId(locator: ArazzoWorkflowLocator): string {
-    return locator.document.uri === this.#document.uri
-      ? locator.workflowId
-      : this.#qualifiedId(locator);
-  }
-
-  /**
-   * The step executor for a document's steps — the injected instance for the
-   * entry document, a sibling derived once per run (see
-   * {@link StepExecutor.forDocument}) for a foreign one.
-   */
-  #stepExecutorFor(document: ArazzoDocument, scope: RunScope): StepExecutor {
-    const cached = scope.stepExecutors.get(document.uri);
-    if (cached !== undefined) return cached;
-
-    const derived = this.#stepExecutor.forDocument(document);
-    scope.stepExecutors.set(document.uri, derived);
-    return derived;
   }
 
   /**

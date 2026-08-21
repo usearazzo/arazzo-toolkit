@@ -14,45 +14,15 @@ import ExecutionError from '../errors/ExecutionError.ts';
 export type WorkflowCallVia = 'root' | 'step' | 'dependsOn' | 'retry' | 'goto';
 
 /**
- * One workflow invocation in progress.
+ * One workflow invocation in progress. Its identity is the (documentUri,
+ * workflowId) pair: two documents may each define a workflow of one id, and
+ * those are different workflows — comparing bare ids would call their meeting
+ * a cycle.
  */
 interface WorkflowCall {
   readonly workflowId: string;
-  /**
-   * The identity the cycle check compares — the workflowId qualified by the
-   * URI of the document that owns it, when the caller supplied one. Two
-   * documents may each define a workflow of the same id, and those are
-   * different workflows: comparing bare ids would call their meeting a cycle.
-   */
-  readonly key: string;
-  /**
-   * How this call reads in a reported `path` — typically the bare workflowId
-   * for a workflow of the run's entry document and the qualified form for a
-   * foreign one, but that choice is the caller's.
-   */
-  readonly display: string;
+  readonly documentUri: string;
   readonly via: WorkflowCallVia;
-}
-
-/**
- * Per-call options for {@link WorkflowCallStack.enter}.
- * @internal
- */
-export interface WorkflowCallEnterOptions {
-  /**
-   * Canonical URI of the document that owns the workflow, qualifying the
-   * cycle-check identity. Omitted, the bare workflowId is the identity —
-   * only sound while every call provably stays in one document, so a caller
-   * that can cross documents must pass it on *every* call (its entry
-   * document included): a foreign document's source description can point
-   * back at the entry document, and that re-entry is only caught when both
-   * frames carry the same qualified key.
-   */
-  readonly documentUri?: string;
-  /**
-   * How the call reads in a reported `path`; defaults to the bare workflowId.
-   */
-  readonly display?: string;
 }
 
 /**
@@ -66,6 +36,14 @@ export interface WorkflowCallStackOptions {
    * all nesting.
    */
   readonly maxDepth: number;
+  /**
+   * Canonical URI of the run's entry document. Frames of this document read
+   * as the bare workflowId in a reported `path` — the unambiguous,
+   * back-compatible form every same-document chain has always reported —
+   * while a foreign document's frames read as `{documentUri}#{workflowId}`,
+   * where the bare id would not say which document's workflow looped.
+   */
+  readonly entryDocumentUri: string;
 }
 
 /**
@@ -94,34 +72,37 @@ export interface WorkflowCallStackOptions {
 class WorkflowCallStack {
   readonly #calls: readonly WorkflowCall[];
   readonly #maxDepth: number;
+  readonly #entryDocumentUri: string;
 
   constructor(options: WorkflowCallStackOptions, calls: readonly WorkflowCall[] = []) {
     this.#maxDepth = options.maxDepth;
+    this.#entryDocumentUri = options.entryDocumentUri;
     this.#calls = calls;
   }
 
   /**
-   * The workflows in progress, outermost first, each as its display form.
+   * The workflows in progress, outermost first — bare ids for entry-document
+   * frames, `{documentUri}#{workflowId}` for foreign ones.
    */
   get path(): readonly string[] {
-    return this.#calls.map((call) => call.display);
+    return this.#calls.map((call) => this.#display(call.workflowId, call.documentUri));
+  }
+
+  #display(workflowId: string, documentUri: string): string {
+    return documentUri === this.#entryDocumentUri ? workflowId : `${documentUri}#${workflowId}`;
   }
 
   /**
-   * Returns the stack with `workflowId` pushed, or throws when entering it would
-   * form a cycle or exceed the nesting ceiling.
+   * Returns the stack with the workflow pushed — identified by its bare id
+   * together with the canonical URI of the document that owns it — or throws
+   * when entering it would form a cycle or exceed the nesting ceiling.
    */
-  enter(
-    workflowId: string,
-    via: WorkflowCallVia,
-    options: WorkflowCallEnterOptions = {},
-  ): WorkflowCallStack {
-    const key =
-      options.documentUri === undefined ? workflowId : `${options.documentUri}#${workflowId}`;
-    const display = options.display ?? workflowId;
-    const repeated = this.#calls.findIndex((call) => call.key === key);
+  enter(workflowId: string, via: WorkflowCallVia, documentUri: string): WorkflowCallStack {
+    const repeated = this.#calls.findIndex(
+      (call) => call.workflowId === workflowId && call.documentUri === documentUri,
+    );
     if (repeated !== -1) {
-      const path = [...this.path, display];
+      const path = [...this.path, this.#display(workflowId, documentUri)];
       // name the loop for the mechanism that formed it: every edge closing the
       // cycle being a `dependsOn` edge makes it a dependency cycle, while any
       // sub-workflow step call in the loop makes it a call cycle. One stack
@@ -140,14 +121,18 @@ class WorkflowCallStack {
     if (this.#calls.length >= this.#maxDepth) {
       throw new ExecutionError(
         `workflow "${workflowId}" nests deeper than the limit of ${this.#maxDepth} workflows`,
-        { workflowId, reason: 'workflow-depth', path: [...this.path, display] },
+        {
+          workflowId,
+          reason: 'workflow-depth',
+          path: [...this.path, this.#display(workflowId, documentUri)],
+        },
       );
     }
 
-    return new WorkflowCallStack({ maxDepth: this.#maxDepth }, [
-      ...this.#calls,
-      { workflowId, key, display, via },
-    ]);
+    return new WorkflowCallStack(
+      { maxDepth: this.#maxDepth, entryDocumentUri: this.#entryDocumentUri },
+      [...this.#calls, { workflowId, documentUri, via }],
+    );
   }
 }
 

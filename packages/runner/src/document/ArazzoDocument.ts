@@ -19,6 +19,14 @@ class ArazzoDocument extends APIDocument {
   readonly type = 'arazzo' as const;
   isEntry: boolean;
   readonly workflowIndex: ArazzoWorkflowIndex;
+  /**
+   * Name → canonical URI, resolved lazily and remembered: the underlying
+   * lookup traverses the parse result, and one name is resolved repeatedly
+   * within a run (per retry firing, per dependency validation), always to
+   * the same value — the source descriptions themselves never change after
+   * parse.
+   */
+  readonly #sourceDescriptionURIs = new Map<string, string | undefined>();
 
   constructor(
     uri: string,
@@ -60,13 +68,19 @@ class ArazzoDocument extends APIDocument {
    * and resolves the url against this document's base URI.
    */
   resolveSourceDescriptionURI(sourceDescriptionName: string): string | undefined {
+    if (this.#sourceDescriptionURIs.has(sourceDescriptionName)) {
+      return this.#sourceDescriptionURIs.get(sourceDescriptionName);
+    }
+
     const sourceDescription = this.#findSourceDescription(sourceDescriptionName);
-
-    if (sourceDescription === undefined || !isStringElement(sourceDescription.url)) return;
-
-    return url.sanitize(
-      url.stripHash(url.resolve(this.uri, toValue(sourceDescription.url) as string)),
-    );
+    const uri =
+      sourceDescription === undefined || !isStringElement(sourceDescription.url)
+        ? undefined
+        : url.sanitize(
+            url.stripHash(url.resolve(this.uri, toValue(sourceDescription.url) as string)),
+          );
+    this.#sourceDescriptionURIs.set(sourceDescriptionName, uri);
+    return uri;
   }
 
   /**
