@@ -21,6 +21,11 @@ export type { OpenAPIOperationElement, OpenAPIPathItemElement } from './document
 /* Indexes */
 export { default as ArazzoWorkflowIndex, type WorkflowId } from './document/ArazzoWorkflowIndex.ts';
 export {
+  default as ArazzoSourceDescriptionIndex,
+  type SourceDescriptionName,
+  type SourceDescriptionEntry,
+} from './document/ArazzoSourceDescriptionIndex.ts';
+export {
   default as OpenAPIOperationIndex,
   type OperationId,
 } from './document/OpenAPIOperationIndex.ts';
