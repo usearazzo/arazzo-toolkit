@@ -1,0 +1,159 @@
+arazzo: "1.0.1"
+info:
+  title: Cross-document workflow references
+  version: "1.0.0"
+  summary: >-
+    Workflows referencing workflows of another Arazzo document
+    (cross-document-child.arazzo.yaml) as
+    $sourceDescriptions.{name}.{workflowId} — from a sub-workflow step,
+    dependsOn, a retry reference, and a goto transfer — plus the cycle, depth,
+    shared-id, and error edge cases.
+sourceDescriptions:
+  - name: petstoreAPI
+    url: ./petstore.openapi.json
+    type: openapi
+  - name: childWorkflows
+    url: ./cross-document-child.arazzo.yaml
+    type: arazzo
+workflows:
+  # a sub-workflow step targeting a workflow of the child document, mapping a
+  # parameter in and the child's output back out; the following step proves
+  # control returns and runs against the ENTRY document's petstore.
+  - workflowId: crossDocumentStep
+    steps:
+      - stepId: child
+        workflowId: $sourceDescriptions.childWorkflows.childFetch
+        parameters:
+          - name: petId
+            value: "7"
+        outputs:
+          childName: $workflows.childFetch.outputs.name
+      - stepId: after
+        operationId: getInventory
+        outputs:
+          ran: $statusCode
+    outputs:
+      childName: $steps.child.outputs.childName
+      childSource: $workflows.childFetch.outputs.source
+      afterRan: $steps.after.outputs.ran
+
+  # a cross-document prerequisite; its outputs are readable through
+  # $workflows.{bare id}, and its inputs come from the dependencyInputs entry
+  # keyed by the reference as written.
+  - workflowId: crossDocumentDependsOn
+    dependsOn:
+      - $sourceDescriptions.childWorkflows.childSetup
+    steps:
+      - stepId: own
+        operationId: getInventory
+        outputs:
+          ran: $statusCode
+    outputs:
+      setupEcho: $workflows.childSetup.outputs.echo
+      ownRan: $steps.own.outputs.ran
+
+  # a diamond onto a cross-document prerequisite: both this workflow and the
+  # sub-workflow it calls depend on the child's childSetup, which must run
+  # once — memoized under its document-qualified identity.
+  - workflowId: diamondLeft
+    dependsOn:
+      - $sourceDescriptions.childWorkflows.childSetup
+    steps:
+      - stepId: call
+        workflowId: diamondRight
+  - workflowId: diamondRight
+    dependsOn:
+      - $sourceDescriptions.childWorkflows.childSetup
+    steps:
+      - stepId: own
+        operationId: getInventory
+
+  # a retry action whose reference runs a workflow of the child document
+  # before each retry attempt.
+  - workflowId: crossDocumentRetryReference
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: repair
+            type: retry
+            retryLimit: 1
+            workflowId: $sourceDescriptions.childWorkflows.childRepair
+
+  # a goto transferring one-way to a workflow of the child document.
+  - workflowId: crossDocumentGoto
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: $sourceDescriptions.childWorkflows.childFinal
+
+  # the child document defines a `shared` workflow too. This one calls it —
+  # two workflows of one id, on one call chain, in different documents: not a
+  # cycle.
+  - workflowId: shared
+    steps:
+      - stepId: call
+        workflowId: $sourceDescriptions.childWorkflows.shared
+        outputs:
+          source: $workflows.shared.outputs.source
+    outputs:
+      source: $steps.call.outputs.source
+
+  # calls the child's callsBack, which calls back into this workflow — a
+  # genuine cycle closed across the document boundary.
+  - workflowId: loopEntry
+    steps:
+      - stepId: out
+        workflowId: $sourceDescriptions.childWorkflows.callsBack
+
+  # nests entry -> child childCallsShared -> child shared; also the depth-limit
+  # case when maxWorkflowDepth is 2.
+  - workflowId: deepEntry
+    steps:
+      - stepId: call
+        workflowId: $sourceDescriptions.childWorkflows.childCallsShared
+        outputs:
+          source: $workflows.childCallsShared.outputs.source
+    outputs:
+      source: $steps.call.outputs.source
+
+  # names a source description this document does not define.
+  - workflowId: unknownSource
+    steps:
+      - stepId: only
+        workflowId: $sourceDescriptions.noSuchSource.anything
+
+  # names a workflow the child document does not define.
+  - workflowId: unknownForeignWorkflow
+    steps:
+      - stepId: only
+        workflowId: $sourceDescriptions.childWorkflows.noSuchWorkflow
+
+  # a cross-document dependsOn entry naming a workflow the child document does
+  # not define — the whole list is validated before any prerequisite (or step)
+  # runs.
+  - workflowId: dependsOnUnknownForeign
+    dependsOn:
+      - $sourceDescriptions.childWorkflows.noSuchWorkflow
+    steps:
+      - stepId: own
+        operationId: getInventory
+
+  # a $-prefixed workflowId that is a runtime expression, but not a
+  # $sourceDescriptions one.
+  - workflowId: invalidReference
+    steps:
+      - stepId: only
+        workflowId: $inputs.whatever
+
+  # the resolver package's JSON-Pointer reference form is a $ref-time
+  # construct, not a runtime expression — not a workflow reference.
+  - workflowId: pointerReference
+    steps:
+      - stepId: only
+        workflowId: "$sourceDescriptions.childWorkflows#/workflows/0"

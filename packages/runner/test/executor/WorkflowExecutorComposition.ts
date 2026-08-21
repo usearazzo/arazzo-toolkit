@@ -527,7 +527,7 @@ describe('WorkflowExecutor composition', function () {
 
       const error = await captureError(executor.execute('dependsOnLateBadEntry'));
 
-      assert.strictEqual(error.reason, 'cross-document-workflow-unsupported');
+      assert.strictEqual(error.reason, 'source-description-not-arazzo');
       assert.strictEqual(calls.length, 0);
     });
 
@@ -742,21 +742,21 @@ describe('WorkflowExecutor composition', function () {
     });
   });
 
-  context('not yet supported', function () {
-    specify('should throw for a sub-workflow step in another document', async function () {
+  context('references into a non-Arazzo source', function () {
+    specify('should throw for a sub-workflow step into an OpenAPI source', async function () {
       const { executor } = makeExecutor();
 
       const error = await captureError(executor.execute('crossDocumentStep'));
 
-      assert.strictEqual(error.reason, 'cross-document-workflow-unsupported');
+      assert.strictEqual(error.reason, 'source-description-not-arazzo');
     });
 
-    specify('should throw for a prerequisite in another document', async function () {
+    specify('should throw for a prerequisite into an OpenAPI source', async function () {
       const { executor } = makeExecutor();
 
       const error = await captureError(executor.execute('crossDocumentDependsOn'));
 
-      assert.strictEqual(error.reason, 'cross-document-workflow-unsupported');
+      assert.strictEqual(error.reason, 'source-description-not-arazzo');
     });
   });
 

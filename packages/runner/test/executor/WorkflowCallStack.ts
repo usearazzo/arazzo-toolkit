@@ -103,6 +103,48 @@ describe('WorkflowCallStack', function () {
     });
   });
 
+  context('document-qualified calls', function () {
+    specify('should not mistake one workflowId in two documents for a cycle', function () {
+      // the bare ids collide; the qualified identities do not — two documents'
+      // workflows sharing an id are different workflows.
+      const stack = root()
+        .enter('shared', 'root', { documentUri: 'file:///entry.yaml' })
+        .enter('shared', 'step', {
+          documentUri: 'file:///child.yaml',
+          display: 'file:///child.yaml#shared',
+        });
+
+      assert.deepEqual(stack.path, ['shared', 'file:///child.yaml#shared']);
+    });
+
+    specify('should detect a genuine re-entry across the document boundary', function () {
+      const stack = root()
+        .enter('loopEntry', 'root', { documentUri: 'file:///entry.yaml' })
+        .enter('callsBack', 'step', {
+          documentUri: 'file:///child.yaml',
+          display: 'file:///child.yaml#callsBack',
+        });
+
+      const error = captureError(() =>
+        stack.enter('loopEntry', 'step', { documentUri: 'file:///entry.yaml' }),
+      );
+
+      assert.strictEqual(error.reason, 'workflow-cycle');
+      // each frame reports its own display form — bare for the entry
+      // document, qualified for the foreign one.
+      assert.deepEqual(error.path, ['loopEntry', 'file:///child.yaml#callsBack', 'loopEntry']);
+    });
+
+    specify('should treat an unqualified call as keyed by the bare id alone', function () {
+      // callers that provably stay in one document may keep entering by bare
+      // id; a repeat is then a cycle regardless of any qualified frames around
+      // it not sharing the key.
+      const stack = root().enter('a', 'root');
+
+      assert.strictEqual(captureError(() => stack.enter('a', 'step')).reason, 'workflow-cycle');
+    });
+  });
+
   context('depth', function () {
     specify('should reject nesting past the limit', function () {
       const stack = root(2).enter('a', 'root').enter('b', 'step');

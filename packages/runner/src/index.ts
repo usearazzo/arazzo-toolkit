@@ -125,6 +125,12 @@ export type {
 } from './executor/OpenAPIOperationExecutor.ts';
 export { default as OpenAPIOperationLocatorNormalizer } from './executor/OpenAPIOperationLocatorNormalizer.ts';
 export type { OpenAPIOperationLocator } from './executor/OpenAPIOperationLocatorNormalizer.ts';
+export { default as ArazzoWorkflowLocatorNormalizer } from './executor/ArazzoWorkflowLocatorNormalizer.ts';
+export type {
+  ArazzoWorkflowLocator,
+  ParsedWorkflowReference,
+  WorkflowReferenceContext,
+} from './executor/ArazzoWorkflowLocatorNormalizer.ts';
 
 /* Errors */
 export { default as ArazzoRunnerError } from './errors/ArazzoRunnerError.ts';

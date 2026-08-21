@@ -3,7 +3,8 @@
 Status: the design below is implemented, across five PRs — the backbone
 (`#290`), retry (`#2`), sub-workflow steps + `dependsOn` (`#3`),
 cancellation (`#4`), and reference-retry — plus a train of follow-ups
-(`#40`–`#61`, summarized in §0) and goto-workflow transfer (issue `#65`). §0
+(`#40`–`#61`, summarized in §0), goto-workflow transfer (issue `#65`), and
+cross-document workflow references (issue `#64`). §0
 tracks what shipped, what deliberately still throws, and **what to build
 next**; the numbered sections after it are the design and its spec citations,
 kept because the reasoning outlives the code. Grounds on the merged
@@ -160,8 +161,10 @@ existing suite.
       A workflow genuinely needed multiple times with different inputs is a
       parameterized invocation — the spec's tool for that is a sub-workflow
       _step_ with `parameters`, and docs should say so. (Cross-document
-      same-named workflows: keys become fully-qualified when cross-doc support
-      lands.)
+      same-named workflows: keys became fully-qualified when cross-doc support
+      landed — `dependencyRuns` dedups on `{documentURI}#{workflowId}`, while
+      `dependencyInputs` is keyed by the `dependsOn` entry as written; see §0
+      "Shipped (cross-document workflow references)".)
   - **`runDependencies?: boolean`** (default `true`; a positive flag — an
     earlier `skipDependencies` draft read as a double negative when false):
     "completed before" doesn't mean _completed by this engine in this run_ — a
@@ -199,9 +202,9 @@ existing suite.
 **Out of scope (still throwing, unchanged reasons):** step-level goto-workflow;
 cross-document workflow refs (including one named by a `retry` reference).
 Workflow-level `parameters` and the e2e suite remain separate follow-ups.
-(Reference-retry and step-level goto-workflow, both listed here at the time
-this PR shipped, are now under "Shipped" below; cross-document workflow refs
-remain the one open item from this list.)
+(Reference-retry, step-level goto-workflow, and cross-document workflow refs,
+all listed here at the time this PR shipped, are now under "Shipped" below —
+nothing from this list remains open.)
 
 **Deviations from the design above, as built:**
 
@@ -440,8 +443,10 @@ chain, and lazy target validation.
     `referenceInputs` option if real flows need it. Its outputs are recorded
     via `state.setWorkflow`, the same call `#runDependencies` makes — this
     recording *is* "context transfers back". Cross-document
-    (`$sourceDescriptions.*`) reuses the existing `#rejectCrossDocumentWorkflow`
-    and throws the existing `cross-document-workflow-unsupported`.
+    (`$sourceDescriptions.*`) reused the then-existing
+    `#rejectCrossDocumentWorkflow` and threw
+    `cross-document-workflow-unsupported` (since resolved — such a reference
+    now runs; see §0 "Shipped (cross-document workflow references)").
   - a `stepId` reference is looked up in the current workflow's `steps` via
     `StepTransitionInterpreter.indexOfStep`, **parameterized** with an optional
     `{ reason, label }` descriptor (defaulting to `goto-target-not-found` /
@@ -516,7 +521,9 @@ goto-workflow note (both superseded by this subsection).
   (`CriterionEvaluator`/`RuntimeExpressionEvaluator`). The transfer case
   checks for cancellation **before** rejecting a cross-document target
   (matching the boundary-check-first convention every other nested call
-  follows), then runs the target through a new shared
+  follows; the rejection has since become *resolution* — same ordering, see
+  §0 "Shipped (cross-document workflow references)"), then runs the target
+  through a new shared
   `#runReferencedWorkflow` helper — entered via a new `'goto'`
   `WorkflowCallVia`, grouped with `'step'`/`'retry'` for cycle classification,
   on the *caller's* call stack (push-only, so a self-transfer is caught as
@@ -618,41 +625,80 @@ the same way, both completed and failed; a retry-workflowId reference's
 `successful` reflecting the `settledStatus` of a target that itself
 transfers).
 
+### Shipped (cross-document workflow references — issue `#64`)
+
+`$sourceDescriptions.<name>.<workflowId>` now resolves and runs in all four
+author-facing positions — a sub-workflow step's `workflowId`, a `dependsOn`
+entry, a retry's `workflowId` reference, and a `goto`'s transfer.
+`#rejectCrossDocumentWorkflow` and `reason:
+'cross-document-workflow-unsupported'` are **gone**. The design change this
+section's predecessor analyzed (document scoping in the executors) landed as
+follows:
+
+- **`ArazzoWorkflowLocator { document, workflowId }` is the canonical form**
+  every reference — plain id or expression — normalizes to, mirroring
+  `OpenAPIOperationLocator`. A new public `ArazzoWorkflowLocatorNormalizer`
+  (registry in the constructor, referencing document per call, like its
+  OpenAPI sibling) owns parse + resolve: sync `parseReference` (so state keys
+  and the retry-pinned `$workflows` entry need no await; anything `$`-prefixed
+  that is not a `SourceDescriptionsExpression` throws
+  `invalid-workflow-reference` — including the resolver package's
+  `#/workflows/...` pointer form, which is a `$ref`-time construct, not a
+  runtime expression) and async `normalize`
+  (`resolveSourceDescriptionURI` → `source-description-not-found`; run-ledger
+  or `registry.acquire` → `ArazzoDocument.is`, never the declared `type:` →
+  `source-description-not-arazzo`). Workflow existence stays with the callers,
+  which own its timing: eager for `dependsOn` (whole list, before any
+  prerequisite runs) and for `#runReferencedWorkflow` (with the calling
+  `stepId`), lazy via `#resolveWorkflow` for a sub-workflow step. A canonical
+  *string* form was considered and rejected: the entry document's own
+  workflows have no expression spelling, and source names are document-scoped,
+  so the expression form is not context-free.
+- **The document moved into the invocation**: `WorkflowInvocation.document`,
+  `#run(locator, …)`, `#resolveWorkflow(locator, scope)`, and `#evaluate`
+  taking the document per call. Every former `this.#document` read in the run
+  path follows the invocation's document; parent-side evaluation of a
+  sub-workflow step (its `parameters`, `outputs`, `successCriteria`, action
+  selection) stays on the *parent's* document — only the sub-run switches.
+- **`StepExecutor` stays document-bound** (the seam from `#34` untouched — no
+  per-call document argument, no factory option; decided over both
+  alternatives the predecessor note weighed). It gained
+  `forDocument(document)`, deriving a sibling bound to a foreign document and
+  sharing the registry + operation executor; `WorkflowExecutor` caches one
+  per document URI in `RunScope.stepExecutors`, seeded with the injected
+  instance under the entry URI.
+- **Identity is `{documentURI}#{workflowId}`** for cycle detection
+  (`WorkflowCallStack.enter(workflowId, via, { documentUri, display })` —
+  passed *always*, entry included, so a foreign source pointing back at the
+  entry document closes a detectable cycle), the normalized-workflow cache,
+  and `dependencyRuns` dedup — as §4c anticipated. Error `path` display stays
+  the bare id for entry-document frames (test/back-compat) and shows
+  `uri#id` for foreign ones.
+- **`$workflows.<id>` state stays keyed by the bare id** — the only form the
+  runtime-expression grammar can express; same-id-across-documents is
+  last-write-wins, documented in the README as a known hazard (same class as
+  two same-document calls of one workflow).
+- **`dependencyInputs` is keyed by the `dependsOn` entry as written** (bare id
+  locally, whole expression cross-document) — zero mechanism, the natural
+  behavior once the raw entry string is the lookup key.
+- **`RunScope.documents` ledger** (canonical URI → `ArazzoDocument`, seeded
+  with the entry document): every document a reference resolves to is held
+  for the whole run, so the registry's size-4 LRU cannot evict a document a
+  live call tree still needs.
+
+Tests: 15 in a new `WorkflowExecutorCrossDocument` suite over a two-document
+fixture pair whose APIs have distinct server prefixes (so a request URL proves
+which document's sources resolved an operation), covering all four positions,
+foreign-document expression bases, a foreign workflow's own local references,
+same-id-no-false-cycle, a cross-document cycle with mixed-display `path`,
+depth across documents, and every new error reason; 3 new `WorkflowCallStack`
+qualified-key unit tests; the four old rejection tests repurposed to
+`source-description-not-arazzo` (their fixtures reference a workflow of an
+*openapi* source), keeping the validate-before-run and abort-ordering
+assertions.
+
 ### Not yet implemented / missing
 
-Each currently **throws `ExecutionError`** rather than misbehaving (or is simply
-absent), and is scoped to a follow-up:
-
-- **Cross-document workflow refs** — `$sourceDescriptions.<name>.<workflowId>`
-  for sub-workflows / `dependsOn` / a retry's reference / a `goto`'s transfer
-  throws `cross-document-workflow-unsupported` (as of PR #3; same-document
-  only). The parsing and loading halves already
-  exist — `ArazzoDocumentRegistryProvider` loads Arazzo source documents, and
-  `OpenAPIOperationLocatorNormalizer` already parses
-  `$sourceDescriptions.<name>.<reference>` and acquires the named source. **The
-  blocker is document scoping in the executors**, and it is a design change, not
-  a lookup:
-  - `WorkflowExecutor` holds one `#document`, used for the workflowIndex lookup,
-    extraction/normalization, and as the `$components` / `$sourceDescriptions`
-    base for every expression it evaluates. Running a foreign workflow means all
-    of those must follow _that_ workflow's document, so the document has to
-    become part of the per-invocation frame rather than instance state.
-  - Worse, `StepExecutor` is **injected pre-bound to a document** (the
-    collaborator seam from #34). A foreign workflow's steps would resolve their
-    `operationId`s against the _entry_ document's `sourceDescriptions` — wrong,
-    and silently so. Fixing it means either a per-call document argument on
-    `StepExecutor.execute` or injecting a `(document) => StepExecutor` factory —
-    a deliberate change to a seam we just settled.
-  - Cycle-detection keys must then become genuinely fully-qualified (the document
-    URI together with the workflowId), as §4c anticipated; today workflowId alone
-    is unambiguous precisely because a run cannot leave its document.
-
-  So: its own PR, not folded into any of the reference-shaped features above.
-  (Reference-retry and goto-workflow transfer, which this note originally
-  sequenced against, both shipped first and needed none of this — a `stepId`
-  reference is same-document by construction, and a `workflowId` reference or
-  a `goto`'s transfer both reuse the existing `#rejectCrossDocumentWorkflow`
-  check rather than needing new scoping.)
 - **e2e suite** (§10) — only the deterministic stub unit suite exists; a real
   multi-step petstore run end-to-end is a separate opt-in follow-up.
 
@@ -661,19 +707,15 @@ absent), and is scoped to a follow-up:
 Reference-retry shipped 2026-08-17 — see §0 "Shipped (reference-retry)" above
 for what was built, including how each decision that section originally
 marked PROPOSED was resolved (all five shipped as proposed). Goto-workflow
-transfer (formerly item 1 here) shipped the same day — see §0 "Shipped
-(goto-workflow transfer)" above. What remains:
+transfer shipped the same day, and cross-document workflow references (the
+last item this list carried) on 2026-08-21 — see their §0 sections above.
+Nothing sequenced remains; what is left is unordered:
 
-**1. Cross-document workflow references.** The largest, because it is a design
-change rather than a lookup — the document must move into the per-invocation
-frame, and `StepExecutor`, injected pre-bound to one document, needs either a
-per-call document argument or a `(document) => StepExecutor` factory. Full
-analysis under "Cross-document workflow refs" above.
-
-**Independent of that order:** the opt-in e2e petstore suite (§10), issue `#39`
+the opt-in e2e petstore suite (§10), issue `#39`
 (parameter inheritance as an apidom refractor plugin — cross-repo), issue `#35`
 (per-source-description `server` / `serverVariables`), issue `#36` (request
-provenance for `RequestInterceptor`), and an `executeAll()` for
+provenance for `RequestInterceptor`), issue `#62` (an input channel for
+retry-reference and transfer targets), and an `executeAll()` for
 libopenapi-style batch semantics (§5's interpretation note).
 
 **Loose ends worth not losing:**
@@ -685,8 +727,19 @@ libopenapi-style batch semantics (§5's interpretation note).
 - `StepAttemptOutcome` lives in `StepRetryRunner` while being produced by
   `StepExecutor` and consumed by the executor's loop; its home is arbitrary and
   is the one type placement worth revisiting.
-- The duplicated `#evaluate` runtime-expression bridge, identical in
-  `StepExecutor` and `WorkflowExecutor`, with nothing keeping the two in step.
+- The duplicated `#evaluate` runtime-expression bridge in `StepExecutor` and
+  `WorkflowExecutor` (the workflow-side one now takes the document per call),
+  with nothing keeping the two in step — a base-class or shared-collaborator
+  candidate.
+- **Expression-time `registry.get` after eviction**: `RuntimeExpressionEvaluator`
+  resolves `$sourceDescriptions.*` through the registry's *synchronous* `get`,
+  which can miss if the LRU evicted the source mid-run. Pre-existing (OpenAPI
+  sources have the same exposure), only mitigated by the run's document ledger
+  keeping Arazzo documents alive; a real fix is a pin/release registry API.
+- **`$workflows` id collisions across documents** (see the shipped section
+  above): last-write-wins is documented, but a spec-level answer — or a
+  strict-mode diagnostic when a run records two different workflows under one
+  bare id — is worth revisiting.
 
 ## 1. Purpose & boundary
 
@@ -937,6 +990,8 @@ if isStringElement(step.workflowId):
   expression (cross-document) — resolve via the same mechanism the locator
   normalizer uses; initial version MAY support only same-document workflowIds
   and throw on cross-doc (follow-up), matching how we scoped operationId first.
+  _(The follow-up shipped: `ArazzoWorkflowLocatorNormalizer`, see §0 "Shipped
+  (cross-document workflow references)".)_
 - **Depth guard** (`maxWorkflowDepth`) bounds _legitimate_ nesting depth.
 
 ## 4c. Recursion / cycle detection (call chain)
@@ -1130,7 +1185,10 @@ identically.
 New `ExecutionError` reasons (extend the existing error type, no new class):
 `workflow-not-found`, `workflow-cycle` (self-referential call chain, §4c),
 `dependsOn-cycle`, `goto-target-not-found`, `step-budget`, `workflow-depth`,
-`cross-document-workflow-unsupported` (initial), `aborted` (PR #4 — the caller
+`cross-document-workflow-unsupported` (initial; since retired — cross-document
+references resolve now, and a bad one throws `invalid-workflow-reference`,
+`source-description-not-found`, or `source-description-not-arazzo` instead,
+per §0 "Shipped (cross-document workflow references)"), `aborted` (PR #4 — the caller
 cancelled the run; carries `workflowId`/`stepId`/`path` and the signal's own
 `reason` as `cause`), `retry-target-not-found` (reference-retry — a `retry`
 action's `stepId` reference names no step in the current workflow; carries the
@@ -1193,10 +1251,10 @@ Given size, consider 2–3 PRs rather than one:
 2. **Retry semantics** (the subtle §6) — isolated, well-tested.
 3. **Sub-workflow calls + dependsOn** (recursion, depth/cycle guards).
    Cross-document workflow refs and step-level goto-workflow: throw initially, land
-   later once semantics confirmed. _(Step-level goto-workflow has since shipped,
-   as its own follow-up rather than folded into this PR — see §0 "Shipped
-   (goto-workflow transfer)". Cross-document workflow refs remain the one
-   still throwing initially, per this original slicing.)_
+   later once semantics confirmed. _(Both have since shipped as their own
+   follow-ups rather than folded into this PR — see §0 "Shipped (goto-workflow
+   transfer)" and §0 "Shipped (cross-document workflow references)"; nothing
+   from this slicing still throws.)_
 
 ## Open questions for review (decide before coding)
 

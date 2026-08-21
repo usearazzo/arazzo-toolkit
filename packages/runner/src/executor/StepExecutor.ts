@@ -59,9 +59,11 @@ export interface ContextSource {
  */
 export interface StepExecutorOptions {
   /**
-   * The entry Arazzo document the step belongs to; used to resolve the step's
-   * operation locator against its source descriptions, and to resolve
-   * `$components` / `$sourceDescriptions` in expressions.
+   * The Arazzo document the steps belong to — typically the entry document;
+   * used to resolve each step's operation locator against its source
+   * descriptions, and to resolve `$components` / `$sourceDescriptions` in
+   * expressions. For a step of a workflow in another document, derive a
+   * sibling executor with {@link StepExecutor.forDocument}.
    */
   readonly document: ArazzoDocument;
   /**
@@ -135,6 +137,27 @@ class StepExecutor {
     this.#registry = options.registry;
     this.#locatorNormalizer = new OpenAPIOperationLocatorNormalizer(options.registry);
     this.#operationExecutor = options.operationExecutor;
+  }
+
+  /**
+   * A step executor bound to the given document, sharing this one's registry
+   * and operation executor — this instance itself when the document is
+   * already the one it is bound to.
+   *
+   * A step executor's identity includes the document its steps belong to: a
+   * plain `operationId` resolves against *that* document's source
+   * descriptions, and `$components` / `$sourceDescriptions` expressions
+   * resolve against it too. A cross-document workflow run therefore derives
+   * a sibling per foreign document rather than re-pointing this one.
+   */
+  forDocument(document: ArazzoDocument): StepExecutor {
+    if (document === this.#document) return this;
+
+    return new StepExecutor({
+      document,
+      registry: this.#registry,
+      operationExecutor: this.#operationExecutor,
+    });
   }
 
   /**
