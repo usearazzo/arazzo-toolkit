@@ -12,6 +12,17 @@ import APIDocument from './APIDocument.ts';
 import type ArazzoWorkflowIndex from './ArazzoWorkflowIndex.ts';
 
 /**
+ * One indexed source description: the parsed element and its canonical URI —
+ * already resolved against the owning document's base URI, in the exact form
+ * the document registry keys on — or `undefined` for a source with no
+ * resolvable `url`.
+ */
+interface SourceDescriptionEntry {
+  readonly element: SourceDescriptionElement;
+  readonly uri: string | undefined;
+}
+
+/**
  * An Arazzo document held by the document registry.
  * @public
  */
@@ -20,14 +31,18 @@ class ArazzoDocument extends APIDocument {
   isEntry: boolean;
   readonly workflowIndex: ArazzoWorkflowIndex;
   /**
-   * Name → source description element, built eagerly at construction the way
+   * Name → source description, built eagerly at construction the way
    * {@link ArazzoDocument.workflowIndex} is: one traversal when the document
    * is created, map lookups ever after — a name is looked up repeatedly
    * within a run (per retry firing, per dependency validation), and the
-   * source descriptions never change after parse. The first element of a
-   * duplicated name wins, matching what a first-match traversal returned.
+   * source descriptions never change after parse. The canonical URI is
+   * resolved here too, for the same reason: the base URI and the source's
+   * `url` are both fixed once the document exists, so every entry is a
+   * ready-to-use, non-relative URI rather than a resolve deferred to each
+   * consumer. The first element of a duplicated name wins, matching what a
+   * first-match traversal returned.
    */
-  readonly #sourceDescriptionIndex = new Map<string, SourceDescriptionElement>();
+  readonly #sourceDescriptionIndex = new Map<string, SourceDescriptionEntry>();
 
   constructor(
     uri: string,
@@ -42,11 +57,16 @@ class ArazzoDocument extends APIDocument {
       parseResult,
       (path) => isSourceDescriptionElement(path.node) && isStringElement(path.node.name),
     ).forEach((path) => {
-      const sourceDescription = path.node as SourceDescriptionElement;
-      const name = toValue(sourceDescription.name) as string;
-      if (!this.#sourceDescriptionIndex.has(name)) {
-        this.#sourceDescriptionIndex.set(name, sourceDescription);
-      }
+      const element = path.node as SourceDescriptionElement;
+      const name = toValue(element.name) as string;
+      if (this.#sourceDescriptionIndex.has(name)) return;
+
+      this.#sourceDescriptionIndex.set(name, {
+        element,
+        uri: isStringElement(element.url)
+          ? url.sanitize(url.stripHash(url.resolve(uri, toValue(element.url) as string)))
+          : undefined,
+      });
     });
   }
 
@@ -58,19 +78,11 @@ class ArazzoDocument extends APIDocument {
   }
 
   /**
-   * Resolves a source description name to its canonical URI.
-   *
-   * Looks up the name in this document's source description index and
-   * resolves the url against this document's base URI.
+   * Resolves a source description name to its canonical URI — precomputed at
+   * construction, resolved against this document's base URI.
    */
   resolveSourceDescriptionURI(sourceDescriptionName: string): string | undefined {
-    const sourceDescription = this.#sourceDescriptionIndex.get(sourceDescriptionName);
-
-    if (sourceDescription === undefined || !isStringElement(sourceDescription.url)) return;
-
-    return url.sanitize(
-      url.stripHash(url.resolve(this.uri, toValue(sourceDescription.url) as string)),
-    );
+    return this.#sourceDescriptionIndex.get(sourceDescriptionName)?.uri;
   }
 
   /**
@@ -82,12 +94,11 @@ class ArazzoDocument extends APIDocument {
    * description or the field is absent.
    */
   resolveSourceDescriptionField(sourceDescriptionName: string, field: string): unknown {
-    if (field === 'url') return this.resolveSourceDescriptionURI(sourceDescriptionName);
-
     const sourceDescription = this.#sourceDescriptionIndex.get(sourceDescriptionName);
     if (sourceDescription === undefined) return undefined;
+    if (field === 'url') return sourceDescription.uri;
 
-    return toValue(sourceDescription.get(field));
+    return toValue(sourceDescription.element.get(field));
   }
 
   /**
@@ -96,8 +107,8 @@ class ArazzoDocument extends APIDocument {
    * url are omitted.
    */
   sourceDescriptionURIs(): string[] {
-    return [...this.#sourceDescriptionIndex.keys()]
-      .map((name) => this.resolveSourceDescriptionURI(name))
+    return [...this.#sourceDescriptionIndex.values()]
+      .map((entry) => entry.uri)
       .filter((uri): uri is string => uri !== undefined);
   }
 }
