@@ -1,0 +1,25 @@
+{
+  "arazzo": "1.0.1",
+  "info": {
+    "title": "Cycle Cross B Workflow",
+    "version": "1.0.0"
+  },
+  "sourceDescriptions": [
+    {
+      "name": "cycleCrossA",
+      "type": "arazzo",
+      "url": "./cycle-cross-a.yaml"
+    }
+  ],
+  "workflows": [
+    {
+      "workflowId": "cycle-cross-b-workflow",
+      "steps": [
+        {
+          "stepId": "step1",
+          "workflowId": "$sourceDescriptions.cycleCrossA.cycle-cross-a-workflow"
+        }
+      ]
+    }
+  ]
+}

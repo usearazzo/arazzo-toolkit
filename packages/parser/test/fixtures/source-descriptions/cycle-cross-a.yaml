@@ -1,0 +1,13 @@
+arazzo: 1.0.1
+info:
+  title: Cycle Cross A Workflow
+  version: 1.0.0
+sourceDescriptions:
+  - name: cycleCrossB
+    type: arazzo
+    url: ./cycle-cross-b.json
+workflows:
+  - workflowId: cycle-cross-a-workflow
+    steps:
+      - stepId: step1
+        workflowId: $sourceDescriptions.cycleCrossB.cycle-cross-b-workflow
