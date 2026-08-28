@@ -181,6 +181,70 @@ describe('parse', function () {
       });
     });
 
+    context('when source description references its own document', function () {
+      const fixturePath = path.join(fixturesPath, 'cycle-self.json');
+
+      specify('should detect self-reference and add warning annotation', async function () {
+        const result = await parseArazzo(fixturePath, {
+          parse: {
+            parserOpts: {
+              'arazzo-json-1': { sourceDescriptions: true },
+            },
+          },
+        });
+
+        assert.isTrue(isParseResultElement(result));
+        // main arazzo + self source description
+        assert.strictEqual(result.length, 2);
+
+        // the self-referencing source description is skipped with a warning annotation
+        const selfParseResult = result.get(1) as ParseResultElement;
+        assert.isTrue(isParseResultElement(selfParseResult));
+        assert.isTrue(selfParseResult.classes.includes('source-description'));
+        assert.isUndefined(selfParseResult.api); // not re-parsed
+
+        const annotation = selfParseResult.get(0);
+        assert.strictEqual(annotation?.element, 'annotation');
+        assert.isTrue(annotation?.classes?.includes('warning'));
+        assert.isTrue(String(annotation?.toValue()).includes('already been visited'));
+      });
+    });
+
+    context('when circular references span YAML and JSON documents', function () {
+      const fixturePath = path.join(fixturesPath, 'cycle-cross-a.yaml');
+
+      specify('should detect cycles across parsers and add warning annotation', async function () {
+        const result = await parseArazzo(fixturePath, {
+          parse: {
+            parserOpts: {
+              'arazzo-json-1': { sourceDescriptions: true },
+              'arazzo-yaml-1': { sourceDescriptions: true },
+            },
+          },
+        });
+
+        assert.isTrue(isParseResultElement(result));
+        // main arazzo (cycle-cross-a) + cycle-cross-b source description
+        assert.strictEqual(result.length, 2);
+
+        // cycle-cross-b was parsed by the JSON parser but shares recursion state
+        // with the YAML parser that parsed cycle-cross-a
+        const cycleBParseResult = result.get(1) as ParseResultElement;
+        assert.isTrue(isParseResultElement(cycleBParseResult));
+        assert.isTrue(cycleBParseResult.classes.includes('source-description'));
+        assert.isTrue(isArazzoSpecification1Element(cycleBParseResult.api));
+
+        // the nested parse result for cycle-cross-a should contain the cycle warning
+        const nestedParseResult = cycleBParseResult.get(1) as ParseResultElement;
+        assert.isTrue(isParseResultElement(nestedParseResult));
+
+        const annotation = nestedParseResult.get(0);
+        assert.strictEqual(annotation?.element, 'annotation');
+        assert.isTrue(annotation?.classes?.includes('warning'));
+        assert.isTrue(String(annotation?.toValue()).includes('already been visited'));
+      });
+    });
+
     context('when sourceDescriptionsMaxDepth is set', function () {
       const fixturePath = path.join(fixturesPath, 'arazzo-with-arazzo.json');
 

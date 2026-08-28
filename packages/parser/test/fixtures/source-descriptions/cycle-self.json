@@ -1,0 +1,25 @@
+{
+  "arazzo": "1.0.1",
+  "info": {
+    "title": "Self-referencing Workflow",
+    "version": "1.0.0"
+  },
+  "sourceDescriptions": [
+    {
+      "name": "self",
+      "type": "arazzo",
+      "url": "./cycle-self.json"
+    }
+  ],
+  "workflows": [
+    {
+      "workflowId": "self-workflow",
+      "steps": [
+        {
+          "stepId": "step1",
+          "workflowId": "$sourceDescriptions.self.self-workflow"
+        }
+      ]
+    }
+  ]
+}
