@@ -6,6 +6,7 @@ import {
   type RequestExpression,
   type ResponseExpression,
   type Source,
+  type SourceDescriptionsExpression,
 } from '@swaggerexpert/arazzo-runtime-expression';
 import {
   compile,
@@ -37,9 +38,10 @@ export interface RuntimeExpressionEvaluatorOptions {
   readonly strict?: boolean;
   /**
    * The Arazzo document the expression is evaluated within. Required to resolve
-   * `$components.{field}.{name}` (read from this document) and
-   * `$sourceDescriptions.{name}.{reference}` (whose source name is resolved
-   * against this document). Absent references resolve to `undefined`.
+   * `$components.{field}.{name}` and `$workflows.{workflowId}.steps.{stepId}`
+   * (both read from this document) and `$sourceDescriptions.{name}.{reference}`
+   * (whose source name is resolved against this document). Absent references
+   * resolve to `undefined`.
    */
   readonly document?: ArazzoDocument;
   /**
@@ -81,8 +83,10 @@ const pointerRealm = composeRealms(new ApiDOMEvaluationRealm(), new JSONEvaluati
  *
  * The context holds only runtime state (`$inputs`, `$steps`, `$request`,
  * `$response`, …). Static, document-sourced expressions are resolved on demand:
- * `$components` from the evaluator's document, and `$sourceDescriptions` from
- * the external document (via the registry) the source name points at.
+ * `$components` and `$workflows.{workflowId}.steps.{stepId}` from the
+ * evaluator's document, and `$sourceDescriptions` from the external document
+ * (via the registry) the source name points at. A step reference resolves to
+ * the Step Object as authored — a locator, not the step's execution result.
  *
  * A reference resolves to `undefined` when it is absent. Runtime values
  * originate from JSON (or ApiDOM), which cannot represent `undefined` — an
@@ -214,8 +218,10 @@ class RuntimeExpressionEvaluator {
           this.#get(this.#context.workflows?.[node.workflowId]?.[node.field], node.fieldName),
           node.jsonPointer?.value,
         );
+      case 'WorkflowsStepsExpression':
+        return this.#step(this.#document, node.workflowId, node.stepId);
       case 'SourceDescriptionsExpression':
-        return this.#sourceDescription(node.sourceName, node.reference);
+        return this.#sourceDescription(node);
       case 'ComponentsExpression':
         return this.#component(node.componentType, node.componentName);
       default:
@@ -256,12 +262,24 @@ class RuntimeExpressionEvaluator {
   }
 
   /**
+   * Resolves `{workflowId}.steps.{stepId}` to the Step Object in an Arazzo
+   * document. Returns `undefined` when the document is absent or not Arazzo, or
+   * the workflow or step is unknown.
+   */
+  #step(document: APIDocument | undefined, workflowId: string, stepId: string): unknown {
+    if (document === undefined || !ArazzoDocument.is(document)) return undefined;
+    const pointer = document.stepIndex.getStep(workflowId, stepId);
+    return pointer === undefined ? undefined : this.#drillDocument(document, pointer);
+  }
+
+  /**
    * Resolves `$sourceDescriptions.{name}.{reference}` with the resolution
    * priority defined by the Arazzo Specification:
    *
    * 1. `{reference}` is matched as an operationId (OpenAPI source) or workflowId
    *    (Arazzo source) in the referenced document, resolving to that operation
-   *    or workflow.
+   *    or workflow. A `{workflowId}.steps.{stepId}` reference resolves to that
+   *    step of the referenced Arazzo document.
    * 2. failing that, `{reference}` is matched as a field of the Source
    *    Description Object itself (e.g. `url`, `type`) — so
    *    `$sourceDescriptions.{name}.url` yields the source's URL. An operationId
@@ -269,12 +287,19 @@ class RuntimeExpressionEvaluator {
    *
    * Returns `undefined` when nothing matches.
    */
-  #sourceDescription(sourceName: string, reference: string): unknown {
+  #sourceDescription({
+    sourceName,
+    reference,
+    stepsReference,
+  }: SourceDescriptionsExpression): unknown {
     const uri = this.#document?.resolveSourceDescriptionURI(sourceName);
 
-    // tier 1: operationId / workflowId in the referenced document.
+    // tier 1: operationId / workflowId / workflow step in the referenced document.
     const apiDocument = uri === undefined ? undefined : this.#registry?.get(uri);
     if (apiDocument !== undefined) {
+      if (stepsReference !== undefined) {
+        return this.#step(apiDocument, stepsReference.workflowId, stepsReference.stepId);
+      }
       const pointer = OpenAPIDocument.is(apiDocument)
         ? apiDocument.operationIndex.get(reference)
         : ArazzoDocument.is(apiDocument)

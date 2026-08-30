@@ -3,6 +3,7 @@ import { toValue } from '@speclynx/apidom-core';
 
 import APIDocument from './APIDocument.ts';
 import type ArazzoWorkflowIndex from './ArazzoWorkflowIndex.ts';
+import type ArazzoStepIndex from './ArazzoStepIndex.ts';
 import type ArazzoSourceDescriptionIndex from './ArazzoSourceDescriptionIndex.ts';
 
 /**
@@ -19,6 +20,11 @@ class ArazzoDocument extends APIDocument {
    */
   readonly workflowIndex: ArazzoWorkflowIndex;
   /**
+   * WorkflowId → stepId → JSON Pointer to the step within the parse result.
+   * Built by the provider, like {@link ArazzoDocument.workflowIndex}.
+   */
+  readonly stepIndex: ArazzoStepIndex;
+  /**
    * Name → source description element and canonical URI (already resolved
    * against this document's base URI). Built by the provider, like
    * {@link ArazzoDocument.workflowIndex}.
@@ -29,12 +35,14 @@ class ArazzoDocument extends APIDocument {
     uri: string,
     parseResult: ParseResultElement,
     workflowIndex: ArazzoWorkflowIndex,
+    stepIndex: ArazzoStepIndex,
     sourceDescriptionIndex: ArazzoSourceDescriptionIndex,
     isEntry = false,
   ) {
     super(uri, parseResult);
     this.isEntry = isEntry;
     this.workflowIndex = workflowIndex;
+    this.stepIndex = stepIndex;
     this.sourceDescriptionIndex = sourceDescriptionIndex;
   }
 
