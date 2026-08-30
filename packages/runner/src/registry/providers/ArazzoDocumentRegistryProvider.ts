@@ -9,9 +9,13 @@ import {
 } from '@speclynx/apidom-reference/configuration/empty';
 import { UnmatchedResolverError } from '@speclynx/apidom-reference/configuration/empty';
 import { toValue } from '@speclynx/apidom-core';
-import { isStringElement } from '@speclynx/apidom-datamodel';
+import { isArrayElement, isStringElement } from '@speclynx/apidom-datamodel';
 import { traverse, type Path } from '@speclynx/apidom-traverse';
-import type { SourceDescriptionElement, WorkflowElement } from '@speclynx/apidom-ns-arazzo-1';
+import {
+  isStepElement,
+  type SourceDescriptionElement,
+  type WorkflowElement,
+} from '@speclynx/apidom-ns-arazzo-1';
 
 import * as constants from '../../constants.ts';
 import ArazzoDocument from '../../document/ArazzoDocument.ts';
@@ -20,6 +24,7 @@ import DocumentRegistryProvider, {
   type DocumentRegistryProviderOptions,
 } from './DocumentRegistryProvider.ts';
 import ArazzoWorkflowIndex from '../../document/ArazzoWorkflowIndex.ts';
+import ArazzoStepIndex from '../../document/ArazzoStepIndex.ts';
 import ArazzoSourceDescriptionIndex from '../../document/ArazzoSourceDescriptionIndex.ts';
 
 /**
@@ -91,13 +96,16 @@ class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
    */
   async provide(uri: string): Promise<ArazzoDocument> {
     const parseResult = await parseArazzo(uri, this.#buildParseOptions());
-    const { workflowIndex, sourceDescriptionIndex } = this.#buildIndexes(uri, parseResult);
+    const { workflowIndex, stepIndex, sourceDescriptionIndex } = this.#buildIndexes(
+      uri,
+      parseResult,
+    );
 
-    return new ArazzoDocument(uri, parseResult, workflowIndex, sourceDescriptionIndex);
+    return new ArazzoDocument(uri, parseResult, workflowIndex, stepIndex, sourceDescriptionIndex);
   }
 
   /**
-   * Builds both indexes in one traversal of the parse result.
+   * Builds all indexes in one traversal of the parse result.
    *
    * A source description's canonical URI is resolved here too — against the
    * document's base URI, into the exact form the document registry keys on —
@@ -107,8 +115,13 @@ class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
   #buildIndexes(
     uri: string,
     parseResult: ParseResultElement,
-  ): { workflowIndex: ArazzoWorkflowIndex; sourceDescriptionIndex: ArazzoSourceDescriptionIndex } {
+  ): {
+    workflowIndex: ArazzoWorkflowIndex;
+    stepIndex: ArazzoStepIndex;
+    sourceDescriptionIndex: ArazzoSourceDescriptionIndex;
+  } {
     const workflowIndex = new ArazzoWorkflowIndex();
+    const stepIndex = new ArazzoStepIndex();
     const sourceDescriptionIndex = new ArazzoSourceDescriptionIndex();
 
     traverse(parseResult.api, {
@@ -119,7 +132,21 @@ class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
         if (typeof workflowId !== 'string') return path.skip();
         if (workflowId === '') return path.skip();
 
-        workflowIndex.set(workflowId, path.formatPath('jsonpointer'));
+        const workflowPointer = path.formatPath('jsonpointer');
+        workflowIndex.set(workflowId, workflowPointer);
+
+        // steps are indexed by list position; malformed entries are left to the
+        // executor to report, the index simply omits them.
+        const steps = new Map<string, string>();
+        if (isArrayElement(workflow.steps)) {
+          [...workflow.steps].forEach((step, index) => {
+            if (!isStepElement(step)) return;
+            const stepId = toValue(step.stepId);
+            if (typeof stepId !== 'string' || stepId === '') return;
+            if (!steps.has(stepId)) steps.set(stepId, `${workflowPointer}/steps/${index}`);
+          });
+        }
+        stepIndex.set(workflowId, steps);
 
         return path.skip();
       },
@@ -142,7 +169,7 @@ class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
       },
     });
 
-    return { workflowIndex, sourceDescriptionIndex };
+    return { workflowIndex, stepIndex, sourceDescriptionIndex };
   }
 
   #buildParseOptions(): ApiDOMReferenceOptions {

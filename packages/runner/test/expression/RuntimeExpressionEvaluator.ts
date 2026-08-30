@@ -367,6 +367,86 @@ describe('RuntimeExpressionEvaluator', function () {
     );
   });
 
+  context('workflow step references', function () {
+    // `$workflows.{workflowId}.steps.{stepId}` (Arazzo 1.1.0) locates a step as
+    // authored — in the evaluator's document, or via `$sourceDescriptions` in a
+    // referenced Arazzo document. It never reads the step's execution result.
+    let entryDoc: ArazzoDocument;
+    let registry: DocumentRegistry;
+    let evaluator: RuntimeExpressionEvaluator;
+
+    before(async function () {
+      registry = new DocumentRegistry();
+      entryDoc = await registry.acquireEntryDocument(
+        path.join(fixturesPath, 'cross-document.arazzo.yaml'),
+      );
+      await registry.acquire(entryDoc.resolveSourceDescriptionURI('childWorkflows')!);
+      evaluator = new RuntimeExpressionEvaluator(
+        {},
+        { document: entryDoc, registry, strict: false },
+      );
+    });
+
+    specify('should resolve $workflows step to the Step Object of the entry document', function () {
+      const step = evaluator.evaluate('$workflows.crossDocumentStep.steps.after') as {
+        stepId?: string;
+      };
+      assert.strictEqual(step?.stepId, 'after');
+    });
+
+    specify('should resolve $sourceDescriptions workflow step in an Arazzo source', function () {
+      const step = evaluator.evaluate(
+        '$sourceDescriptions.childWorkflows.childFetch.steps.get',
+      ) as {
+        stepId?: string;
+        operationId?: string;
+      };
+      assert.strictEqual(step?.stepId, 'get');
+      assert.strictEqual(step?.operationId, 'getPetById');
+    });
+
+    specify(
+      'should still resolve a bare $sourceDescriptions workflowId to the Workflow Object',
+      function () {
+        const workflow = evaluator.evaluate('$sourceDescriptions.childWorkflows.childFetch') as {
+          workflowId?: string;
+        };
+        assert.strictEqual(workflow?.workflowId, 'childFetch');
+      },
+    );
+
+    specify('should return undefined for an unknown step', function () {
+      assert.isUndefined(evaluator.evaluate('$workflows.crossDocumentStep.steps.missing'));
+      assert.isUndefined(
+        evaluator.evaluate('$sourceDescriptions.childWorkflows.childFetch.steps.missing'),
+      );
+    });
+
+    specify('should return undefined for an unknown workflow', function () {
+      assert.isUndefined(evaluator.evaluate('$workflows.missing.steps.after'));
+      assert.isUndefined(
+        evaluator.evaluate('$sourceDescriptions.childWorkflows.missing.steps.get'),
+      );
+    });
+
+    specify('should return undefined for a step reference into an OpenAPI source', function () {
+      assert.isUndefined(evaluator.evaluate('$sourceDescriptions.petstoreAPI.getPetById.steps.x'));
+    });
+
+    specify('should throw for an unknown step in strict mode', function () {
+      const strict = new RuntimeExpressionEvaluator({}, { document: entryDoc, registry });
+      assert.throws(
+        () => strict.evaluate('$workflows.crossDocumentStep.steps.missing'),
+        RuntimeExpressionError,
+      );
+    });
+
+    specify('should return undefined when no document is configured', function () {
+      const bare = new RuntimeExpressionEvaluator({}, { strict: false });
+      assert.isUndefined(bare.evaluate('$workflows.crossDocumentStep.steps.after'));
+    });
+  });
+
   context('criterion context expressions', function () {
     // The `context` of a Criterion Object is a runtime expression whose resolved
     // value is what the criterion's condition is then evaluated against.
