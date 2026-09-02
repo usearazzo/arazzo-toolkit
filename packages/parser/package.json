@@ -1,14 +1,16 @@
 {
   "name": "@usearazzo/parser",
   "version": "1.0.1-alpha.0",
-  "description": "Parser for Arazzo Documents producing SpecLynx ApiDOM data model.",
+  "description": "Parser for the Arazzo Specification language: documents, runtime expressions, and criterion conditions.",
   "keywords": [
     "arazzo",
     "arazzo-specification",
     "parser",
     "datamodel",
     "workflow",
-    "workflows"
+    "workflows",
+    "runtime-expression",
+    "criterion"
   ],
   "publishConfig": {
     "access": "public",
@@ -63,6 +65,8 @@
     "@speclynx/apidom-parser-adapter-openapi-yaml-3-0": "^5.2.1",
     "@speclynx/apidom-parser-adapter-openapi-yaml-3-1": "^5.2.1",
     "@speclynx/apidom-reference": "^5.2.1",
+    "@swaggerexpert/arazzo-criterion": "^1.0.1",
+    "@swaggerexpert/arazzo-runtime-expression": "^3.2.0",
     "ramda-adjunct": "^6.0.0",
     "type-fest": "^5.4.4"
   },

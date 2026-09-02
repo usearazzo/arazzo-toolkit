@@ -1,13 +1,21 @@
 # @usearazzo/parser
 
-`@usearazzo/parser` is a parser for [Arazzo Specification](https://spec.openapis.org/arazzo/latest.html) documents.
-It produces [SpecLynx ApiDOM](https://github.com/speclynx/apidom) data model using the [Arazzo 1.x namespace](https://github.com/speclynx/apidom/tree/main/packages/apidom-ns-arazzo-1#readme).
+`@usearazzo/parser` is a parser for the [Arazzo Specification](https://spec.openapis.org/arazzo/latest.html) language.
+It covers all three syntaxes the specification defines:
+
+- **Documents**: `parseArazzo` / `parseOpenAPI` produce [SpecLynx ApiDOM](https://github.com/speclynx/apidom) data model using the [Arazzo 1.x namespace](https://github.com/speclynx/apidom/tree/main/packages/apidom-ns-arazzo-1#readme).
+- **Runtime expressions** (`$inputs.x`, `$steps.y.outputs.z`, `$response.body#/a/b`, …): `parseRuntimeExpression`.
+- **Criterion conditions** (the `simple` criterion grammar): `parseCriterionCondition`.
+
+`parseRuntimeExpression` and `parseCriterionCondition` are pure, context-free syntax parsers: a string in, an AST plus position-carrying diagnostics out. They perform no evaluation and require no document; evaluating a parsed expression or condition against runtime state is [@usearazzo/runner](../runner#readme)'s job. [JSONPath](https://datatracker.ietf.org/doc/html/rfc9535) and [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) are general-purpose syntaxes with their own ecosystems and are out of scope for this package. Use `@swaggerexpert/jsonpath` or a JSON Pointer library directly for those.
 
 **Supported Arazzo versions:**
+
 - [Arazzo 1.0.0](https://spec.openapis.org/arazzo/v1.0.0)
 - [Arazzo 1.0.1](https://spec.openapis.org/arazzo/v1.0.1)
 
 **Supported OpenAPI versions (for source descriptions):**
+
 - [OpenAPI 2.0](https://spec.openapis.org/oas/v2.0)
 - [OpenAPI 3.0.x](https://spec.openapis.org/oas/v3.0.4)
 - [OpenAPI 3.1.x](https://spec.openapis.org/oas/v3.1.2)
@@ -22,7 +30,7 @@ npm install @usearazzo/parser
 
 ## Usage
 
-`@usearazzo/parser` provides a `parseArazzo` function for parsing Arazzo documents.
+`@usearazzo/parser` provides `parseArazzo` and `parseOpenAPI` for parsing documents, and `parseRuntimeExpression` / `parseCriterionCondition` for parsing the two embedded Arazzo grammars.
 
 ## Parsing Arazzo Documents
 
@@ -101,9 +109,9 @@ import { parseArazzo } from '@usearazzo/parser';
 const parseResult = await parseArazzo(source, {
   parse: {
     parserOpts: {
-      strict: true,      // Use strict parsing mode (default: true)
-      sourceMap: false,  // Include source maps (default: false)
-      style: false,      // Capture style information for round-trip preservation (default: false)
+      strict: true, // Use strict parsing mode (default: true)
+      sourceMap: false, // Include source maps (default: false)
+      style: false, // Capture style information for round-trip preservation (default: false)
     },
   },
 });
@@ -131,8 +139,8 @@ import { parseArazzo } from '@usearazzo/parser';
 try {
   await parseArazzo('invalid content');
 } catch (error) {
-  console.error(error.message);  // 'Failed to parse Arazzo Document'
-  console.error(error.cause);    // Original error from underlying parser
+  console.error(error.message); // 'Failed to parse Arazzo Document'
+  console.error(error.cause); // Original error from underlying parser
 }
 ```
 
@@ -175,7 +183,6 @@ Note: `retrievalURI` is not set when parsing from inline content (string) or pla
 
 Source maps allow you to track the original position (line, column) of each element in the parsed document. This is useful for error reporting, IDE integrations, linting, and any tooling that needs to show precise locations in the original source.
 
-
 To enable source maps, set `sourceMap: true` and `strict: false` in the parser options:
 
 ```js
@@ -203,12 +210,12 @@ const parseResult = await parseArazzo('/path/to/arazzo.yaml', {
 const arazzoSpec = parseResult.api;
 
 // Access source map properties directly on the element
-arazzoSpec.startLine;      // 0-based line number where element begins
+arazzoSpec.startLine; // 0-based line number where element begins
 arazzoSpec.startCharacter; // 0-based column number where element begins
-arazzoSpec.startOffset;    // 0-based character offset from document start
-arazzoSpec.endLine;        // 0-based line number where element ends
-arazzoSpec.endCharacter;   // 0-based column number where element ends
-arazzoSpec.endOffset;      // 0-based character offset where element ends
+arazzoSpec.startOffset; // 0-based character offset from document start
+arazzoSpec.endLine; // 0-based line number where element ends
+arazzoSpec.endCharacter; // 0-based column number where element ends
+arazzoSpec.endOffset; // 0-based character offset where element ends
 
 // Access source map on nested elements
 const workflow = arazzoSpec.workflows.get(0);
@@ -325,7 +332,7 @@ const parseResult = await parseArazzo('/path/to/arazzo.json', {
 
 ### Result structure
 
-When source descriptions are parsed, each parsed document that is a *direct* source description of the main Arazzo document is added to the main `ParseResultElement` as an additional top-level element. The first element is always the main Arazzo document, and subsequent top-level elements are these directly parsed source descriptions. When recursive parsing discovers further source descriptions from within an already parsed source description, those recursively parsed documents are attached as nested `ParseResultElement` instances beneath the source-description element that referenced them (they are not duplicated at the top level). Consumers that need to see all documents should traverse both the top-level elements and any nested `ParseResultElement`s reachable from source-description elements.
+When source descriptions are parsed, each parsed document that is a _direct_ source description of the main Arazzo document is added to the main `ParseResultElement` as an additional top-level element. The first element is always the main Arazzo document, and subsequent top-level elements are these directly parsed source descriptions. When recursive parsing discovers further source descriptions from within an already parsed source description, those recursively parsed documents are attached as nested `ParseResultElement` instances beneath the source-description element that referenced them (they are not duplicated at the top level). Consumers that need to see all documents should traverse both the top-level elements and any nested `ParseResultElement`s reachable from source-description elements.
 
 Source descriptions are parsed into their appropriate SpecLynx ApiDOM namespace data models based on document type:
 
@@ -417,6 +424,7 @@ if (sdParseResult.errors.length === 0) {
 ```
 
 This approach is useful when you need to:
+
 - Access a specific source description by its position in the `sourceDescriptions` array
 - Get the `retrievalURI` metadata indicating where the document was fetched from
 - Correlate parsed documents with their source description definitions
@@ -535,6 +543,65 @@ const parseResult = await parseOpenAPI('/path/to/openapi.json');
 // From URL
 const parseResult = await parseOpenAPI('https://example.com/openapi.yaml');
 ```
+
+## Parsing Runtime Expressions
+
+The `parseRuntimeExpression` function parses an [Arazzo Runtime Expression](https://spec.openapis.org/arazzo/latest.html#runtime-expressions) into its AST. The expression must be the bare form without surrounding braces (e.g. `$inputs.username`, not `{$inputs.username}`). Invalid syntax never throws: it is reported through the returned `result`, so the function is safe to use as a pure syntax check (e.g. for linting expressions embedded in a document) without any evaluation context.
+
+```js
+import { parseRuntimeExpression } from '@usearazzo/parser';
+
+// Valid expression
+const { result, tree } = parseRuntimeExpression('$steps.myStep.outputs.result');
+// result.success === true
+// tree === { type: 'StepsExpression', stepId: 'myStep', field: 'outputs', outputName: 'result' }
+
+// Invalid expression
+const invalid = parseRuntimeExpression('$unknown.thing');
+// invalid.result.success === false
+// invalid.tree === undefined
+// invalid.result.maxMatched - offset into the string parsing succeeded up to
+```
+
+`parseRuntimeExpression` is a thin wrapper around [@swaggerexpert/arazzo-runtime-expression](https://www.npmjs.com/package/@swaggerexpert/arazzo-runtime-expression), which is re-exported as a foundation dependency: `ASTNode` (exported here as `RuntimeExpressionASTNode`) and `ParseResult` (`ParseRuntimeExpressionResult`) are its types, following the same pattern as the ApiDOM `ParseResultElement` re-export above. Splitting a `{expression}` template into literal and expression spans, or interpolating one, is left to that package's own `extract` / `interpolate` functions, outside this package's document/expression/condition parsing surface.
+
+`parseRuntimeExpression` does throw in two cases, both re-exported (or standard) so they can be caught by type:
+
+- `TypeError` when `expression` is not a string.
+- `ArazzoRuntimeExpressionParseError` on an unexpected internal parser error, distinct from invalid syntax (which never throws).
+
+```js
+import { parseRuntimeExpression, ArazzoRuntimeExpressionParseError } from '@usearazzo/parser';
+
+try {
+  parseRuntimeExpression(expression);
+} catch (error) {
+  if (error instanceof ArazzoRuntimeExpressionParseError) {
+    console.error('Unexpected parser error:', error.cause);
+  }
+  throw error;
+}
+```
+
+## Parsing Criterion Conditions
+
+The `parseCriterionCondition` function parses the [Criterion Object](https://spec.openapis.org/arazzo/latest.html#criterion-object)'s `simple` condition grammar into its AST. Like `parseRuntimeExpression`, invalid syntax never throws and is reported through the returned `result`. Each embedded runtime expression operand is parsed too, carried on its `RuntimeExpression` AST node as a `parseRuntimeExpression`-produced sub-AST.
+
+```js
+import { parseCriterionCondition } from '@usearazzo/parser';
+
+// Valid condition
+const { result, tree } = parseCriterionCondition('$statusCode == 200');
+// result.success === true
+// tree.type === 'BinaryExpression'
+
+// Invalid condition
+const invalid = parseCriterionCondition('$statusCode ===');
+// invalid.result.success === false
+// invalid.tree === undefined
+```
+
+`parseCriterionCondition` wraps [@swaggerexpert/arazzo-criterion](https://www.npmjs.com/package/@swaggerexpert/arazzo-criterion) the same way: `ConditionAST` (`CriterionConditionAST`) and `ParseResult` (`ParseCriterionConditionResult`) are re-exported foundation types, and it throws the same two ways: `TypeError` for a non-string `condition`, and a re-exported `ArazzoCriterionParseError` for an unexpected internal parser error.
 
 ## SpecLynx ApiDOM tooling
 
