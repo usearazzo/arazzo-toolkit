@@ -194,6 +194,74 @@ describe('parse', function () {
       });
     });
 
+    context('when source descriptions share a document', function () {
+      const fixturePath = path.join(fixturesPath, 'shared-a.json');
+
+      specify(
+        'should parse the shared document once and point later references at it',
+        async function () {
+          const result = await parseArazzo(fixturePath, {
+            parse: { parserOpts: { sourceDescriptions: true } },
+          });
+
+          // shared-a + petStore + shared-b
+          assert.strictEqual(result.length, 3);
+
+          const petStore = result.get(1) as ParseResultElement;
+          assert.strictEqual(petStore.meta.get('name'), 'petStore');
+          assert.isTrue(isOpenApi3_1Element(petStore.api));
+
+          // shared-b references the same OpenAPI document through a different path (diamond)
+          const sharedB = result.get(2) as ParseResultElement;
+          assert.isTrue(isArazzoSpecification1Element(sharedB.api));
+          assert.strictEqual(sharedB.length, 3);
+
+          const petStoreApi = sharedB.get(1) as ParseResultElement;
+          assert.isTrue(isParseResultElement(petStoreApi));
+          assert.isTrue(petStoreApi.classes.includes('source-description'));
+          assert.strictEqual(petStoreApi.meta.get('name'), 'petStoreApi');
+          assert.strictEqual(
+            petStoreApi.meta.get('retrievalURI'),
+            path.join(fixturesPath, 'openapi.json'),
+          );
+          assert.isUndefined(petStoreApi.api); // not re-parsed
+          assert.strictEqual(petStoreApi.warnings.length, 0); // not a cycle
+          assert.strictEqual(petStoreApi.meta.get('parseResult'), petStore);
+
+          const annotation = petStoreApi.get(0);
+          assert.strictEqual(annotation?.element, 'annotation');
+          assert.isTrue(annotation?.classes?.includes('info'));
+          assert.isTrue(String(annotation?.toValue()).includes('already been parsed'));
+
+          // the parsed document is reachable from shared-b's source description element
+          const sourceDescription = (
+            sharedB.api as ArazzoSpecification1Element
+          ).sourceDescriptions!.get(0);
+          assert.strictEqual(sourceDescription?.meta.get('parseResult'), petStore);
+        },
+      );
+
+      specify(
+        'should still report the reference back to an ancestor as a cycle',
+        async function () {
+          const result = await parseArazzo(fixturePath, {
+            parse: { parserOpts: { sourceDescriptions: true } },
+          });
+
+          const sharedB = result.get(2) as ParseResultElement;
+          const sharedA = sharedB.get(2) as ParseResultElement;
+          assert.strictEqual(sharedA.meta.get('name'), 'sharedA');
+          assert.isUndefined(sharedA.api);
+          assert.isUndefined(sharedA.meta.get('parseResult'));
+
+          const annotation = sharedA.get(0);
+          assert.strictEqual(annotation?.element, 'annotation');
+          assert.isTrue(annotation?.classes?.includes('warning'));
+          assert.isTrue(String(annotation?.toValue()).includes('already been visited'));
+        },
+      );
+    });
+
     context('when source description references its own document', function () {
       const fixturePath = path.join(fixturesPath, 'cycle-self.json');
 

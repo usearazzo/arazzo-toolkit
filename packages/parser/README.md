@@ -500,12 +500,36 @@ const parseResult = await parseArazzo('/path/to/arazzo-a.json', {
 // The cycle is handled gracefully - check for warning annotations
 ```
 
+Reaching the same document a second time through a different path is not a cycle. A document shared by several
+Arazzo documents (typically one OpenAPI description used by every workflow document) is parsed only once, and every
+later source description referencing it gets a `ParseResultElement` that has no `api` of its own, carries an `info`
+annotation, and points at the `ParseResultElement` where the document was parsed via its `'parseResult'` metadata.
+The `SourceDescriptionElement`'s `'parseResult'` metadata points at that same `ParseResultElement`:
+
+```js
+// arazzo-a.json references openapi.json and arazzo-b.json
+// arazzo-b.json references openapi.json as well (shared, not a cycle)
+
+const parseResult = await parseArazzo('/path/to/arazzo-a.json', {
+  parse: {
+    parserOpts: {
+      sourceDescriptions: true,
+    },
+  },
+});
+
+const arazzoB = parseResult.get(2);
+const sharedOpenApi = arazzoB.api.sourceDescriptions.get(0).meta.get('parseResult');
+sharedOpenApi === parseResult.get(1); // true; the OpenAPI document parsed for arazzo-a.json
+```
+
 ### Error and warning handling
 
 When issues occur during source description parsing, the parser does not throw errors. Instead, it adds annotation elements to the source description's parse result:
 
 - **`error`** class - Parsing failed (e.g., file not found, invalid document, max depth exceeded)
 - **`warning`** class - Non-fatal issues (e.g., cycle detected, type mismatch between declared and actual)
+- **`info`** class - Nothing went wrong (e.g., a shared document was reused instead of being parsed again)
 
 This allows partial parsing to succeed even if some source descriptions have issues:
 

@@ -53,25 +53,25 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@babel/runtime-corejs3": "^8.0.0",
-    "@speclynx/apidom-datamodel": "^5.2.1",
-    "@speclynx/apidom-error": "^5.2.1",
-    "@speclynx/apidom-ns-arazzo-1": "^5.2.1",
-    "@speclynx/apidom-parser-adapter-arazzo-json-1": "^5.2.1",
-    "@speclynx/apidom-parser-adapter-arazzo-yaml-1": "^5.2.1",
-    "@speclynx/apidom-parser-adapter-openapi-json-2": "^5.2.1",
-    "@speclynx/apidom-parser-adapter-openapi-json-3-0": "^5.2.1",
-    "@speclynx/apidom-parser-adapter-openapi-json-3-1": "^5.2.1",
-    "@speclynx/apidom-parser-adapter-openapi-yaml-2": "^5.2.1",
-    "@speclynx/apidom-parser-adapter-openapi-yaml-3-0": "^5.2.1",
-    "@speclynx/apidom-parser-adapter-openapi-yaml-3-1": "^5.2.1",
-    "@speclynx/apidom-reference": "^5.2.1",
+    "@speclynx/apidom-datamodel": "^5.2.2",
+    "@speclynx/apidom-error": "^5.2.2",
+    "@speclynx/apidom-ns-arazzo-1": "^5.2.2",
+    "@speclynx/apidom-parser-adapter-arazzo-json-1": "^5.2.2",
+    "@speclynx/apidom-parser-adapter-arazzo-yaml-1": "^5.2.2",
+    "@speclynx/apidom-parser-adapter-openapi-json-2": "^5.2.2",
+    "@speclynx/apidom-parser-adapter-openapi-json-3-0": "^5.2.2",
+    "@speclynx/apidom-parser-adapter-openapi-json-3-1": "^5.2.2",
+    "@speclynx/apidom-parser-adapter-openapi-yaml-2": "^5.2.2",
+    "@speclynx/apidom-parser-adapter-openapi-yaml-3-0": "^5.2.2",
+    "@speclynx/apidom-parser-adapter-openapi-yaml-3-1": "^5.2.2",
+    "@speclynx/apidom-reference": "^5.2.2",
     "@swaggerexpert/arazzo-criterion": "^1.0.1",
     "@swaggerexpert/arazzo-runtime-expression": "^3.2.0",
     "ramda-adjunct": "^6.0.0",
     "type-fest": "^5.4.4"
   },
   "devDependencies": {
-    "@speclynx/apidom-core": "^5.2.1"
+    "@speclynx/apidom-core": "^5.2.2"
   },
   "files": [
     "src/**/*.mjs",

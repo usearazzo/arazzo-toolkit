@@ -231,6 +231,54 @@ describe('dereferenceArazzo', function () {
       });
     });
 
+    context('when source descriptions share a document', function () {
+      const fixturePath = path.join(fixturesPath, 'shared-a.json');
+
+      specify(
+        'should dereference the shared document once and point later references at it',
+        async function () {
+          const result = await dereferenceArazzo(fixturePath, {
+            dereference: {
+              strategyOpts: {
+                sourceDescriptions: true,
+              },
+            },
+          });
+
+          // shared-a + petStore + shared-b
+          assert.strictEqual(result.length, 3);
+
+          const petStore = result.get(1) as ParseResultElement;
+          assert.strictEqual(petStore.meta.get('name'), 'petStore');
+          assert.isTrue(isOpenApi3_1Element(petStore.api));
+
+          // shared-b references the same OpenAPI document through a different path (diamond)
+          const sharedB = result.get(2) as ParseResultElement;
+          assert.isTrue(isArazzoSpecification1Element(sharedB.api));
+          assert.strictEqual(sharedB.length, 3);
+
+          const petStoreApi = sharedB.get(1) as ParseResultElement;
+          assert.isTrue(petStoreApi.classes.includes('source-description'));
+          assert.strictEqual(petStoreApi.meta.get('name'), 'petStoreApi');
+          assert.isUndefined(petStoreApi.api); // not dereferenced again
+          assert.strictEqual(petStoreApi.warnings.length, 0); // not a cycle
+          assert.strictEqual(petStoreApi.meta.get('parseResult'), petStore);
+
+          const annotation = petStoreApi.get(0);
+          assert.strictEqual(annotation?.element, 'annotation');
+          assert.isTrue(annotation?.classes?.includes('info'));
+          assert.isTrue(String(annotation?.toValue()).includes('already been dereferenced'));
+
+          // the reference back to shared-a is still a cycle
+          const sharedA = sharedB.get(2) as ParseResultElement;
+          assert.isUndefined(sharedA.api);
+          assert.isUndefined(sharedA.meta.get('parseResult'));
+          assert.isTrue(sharedA.get(0)?.classes?.includes('warning'));
+          assert.isTrue(String(sharedA.get(0)?.toValue()).includes('already been visited'));
+        },
+      );
+    });
+
     context('when sourceDescriptionsMaxDepth is set', function () {
       const fixturePath = path.join(fixturesPath, 'arazzo-with-arazzo.json');
 
