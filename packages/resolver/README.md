@@ -4,11 +4,13 @@
 It produces [SpecLynx ApiDOM](https://github.com/speclynx/apidom) data models using the appropriate namespace ([Arazzo 1.x](https://github.com/speclynx/apidom/tree/main/packages/apidom-ns-arazzo-1#readme), [OpenAPI 2.0](https://github.com/speclynx/apidom/tree/main/packages/apidom-ns-openapi-2#readme), [OpenAPI 3.0.x](https://github.com/speclynx/apidom/tree/main/packages/apidom-ns-openapi-3-0#readme), [OpenAPI 3.1.x](https://github.com/speclynx/apidom/tree/main/packages/apidom-ns-openapi-3-1#readme)).
 
 **Supported Arazzo versions:**
+
 - [Arazzo 1.0.0](https://spec.openapis.org/arazzo/v1.0.0)
 - [Arazzo 1.0.1](https://spec.openapis.org/arazzo/v1.0.1)
 - [Arazzo 1.1.0](https://spec.openapis.org/arazzo/v1.1.0)
 
 **Supported OpenAPI versions (for source descriptions):**
+
 - [OpenAPI 2.0](https://spec.openapis.org/oas/v2.0)
 - [OpenAPI 3.0.x](https://spec.openapis.org/oas/v3.0.4)
 - [OpenAPI 3.1.x](https://spec.openapis.org/oas/v3.1.2)
@@ -42,10 +44,12 @@ After dereferencing, all references are resolved inline, making the document sel
 ### Functions
 
 **Arazzo:**
+
 - **`dereferenceArazzo(uri)`** - Dereferences from a file system path or HTTP(S) URL
 - **`dereferenceArazzoElement(element)`** - Dereferences a SpecLynx ApiDOM element
 
 **OpenAPI:**
+
 - **`dereferenceOpenAPI(uri)`** - Dereferences from a file system path or HTTP(S) URL
 - **`dereferenceOpenAPIElement(element)`** - Dereferences a SpecLynx ApiDOM element
 
@@ -124,8 +128,15 @@ Strategy-specific options take precedence over global options.
 
   Each dereferenced source description is added with a `'source-description'` class and metadata (`name`, `type`, `retrievalURI`).
   Only [OpenAPI 2.0](https://spec.openapis.org/oas/v2.0), [OpenAPI 3.0.x](https://spec.openapis.org/oas/v3.0.4), [OpenAPI 3.1.x](https://spec.openapis.org/oas/v3.1.2), and [Arazzo 1.x](https://spec.openapis.org/arazzo/v1.1.0) documents are accepted as source descriptions.
+
 - **sourceDescriptionsMaxDepth** - Maximum recursion depth for dereferencing nested Arazzo source descriptions.
   Defaults to `+Infinity`. Circular references are automatically detected and skipped.
+
+  A document referenced from more than one place (e.g., one OpenAPI description shared by several Arazzo documents)
+  is dereferenced only once. Every later source description referencing it gets its own `ParseResultElement` with the usual
+  metadata, an `'info'` annotation, and a `'parseResult'` meta pointing at the `ParseResultElement` where the document was dereferenced.
+  The `SourceDescriptionElement`'s `'parseResult'` meta points at that same `ParseResultElement`, so the dereferenced
+  document is reachable from every source description that references it.
 
 ###### Error handling
 
@@ -239,13 +250,13 @@ import { dereferenceArazzo } from '@usearazzo/resolver';
 
 const parseResult = await dereferenceArazzo('/path/to/arazzo.json', {
   resolve: {
-    baseURI: 'https://example.com/',  // Base URI for relative references
+    baseURI: 'https://example.com/', // Base URI for relative references
   },
   parse: {
     parserOpts: {
-      strict: false,    // Required for sourceMap and style (default: true)
-      sourceMap: true,  // Include source maps in parsed documents
-      style: true,      // Capture format-specific style information for round-trip preservation
+      strict: false, // Required for sourceMap and style (default: true)
+      sourceMap: true, // Include source maps in parsed documents
+      style: true, // Capture format-specific style information for round-trip preservation
     },
   },
 });
@@ -316,8 +327,8 @@ try {
   await dereferenceArazzo('/path/to/arazzo.json');
 } catch (error) {
   if (error instanceof DereferenceError) {
-    console.error(error.message);  // 'Failed to dereference Arazzo Document at "/path/to/arazzo.json"'
-    console.error(error.cause);    // Original error from underlying resolver
+    console.error(error.message); // 'Failed to dereference Arazzo Document at "/path/to/arazzo.json"'
+    console.error(error.cause); // Original error from underlying resolver
   }
 }
 
@@ -325,8 +336,8 @@ try {
   await dereferenceOpenAPI('/path/to/openapi.json');
 } catch (error) {
   if (error instanceof DereferenceError) {
-    console.error(error.message);  // 'Failed to dereference OpenAPI Document at "/path/to/openapi.json"'
-    console.error(error.cause);    // Original error from underlying resolver
+    console.error(error.message); // 'Failed to dereference OpenAPI Document at "/path/to/openapi.json"'
+    console.error(error.cause); // Original error from underlying resolver
   }
 }
 ```
@@ -435,6 +446,7 @@ if (sdParseResult.errors.length === 0) {
 ```
 
 This approach is useful when you need to:
+
 - Access a specific source description by its position in the `sourceDescriptions` array
 - Get the `retrievalURI` metadata indicating where the document was fetched from
 - Correlate dereferenced documents with their source description definitions

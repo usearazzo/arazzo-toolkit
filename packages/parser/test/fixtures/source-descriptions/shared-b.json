@@ -1,0 +1,30 @@
+{
+  "arazzo": "1.0.1",
+  "info": {
+    "title": "Shared B",
+    "version": "1.0.0"
+  },
+  "sourceDescriptions": [
+    {
+      "name": "petStoreApi",
+      "url": "./openapi.json",
+      "type": "openapi"
+    },
+    {
+      "name": "sharedA",
+      "url": "./shared-a.json",
+      "type": "arazzo"
+    }
+  ],
+  "workflows": [
+    {
+      "workflowId": "workflowB",
+      "steps": [
+        {
+          "stepId": "stepB",
+          "operationId": "petStoreApi.getPets"
+        }
+      ]
+    }
+  ]
+}
