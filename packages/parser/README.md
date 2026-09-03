@@ -157,16 +157,19 @@ console.dir(defaultParseOpenAPIOptions, { depth: null });
 
 ## Error handling
 
-When parsing fails, a `ParseError` is thrown. The original error is available via the `cause` property:
+When parsing fails, a `ParseError` is thrown (from both `parseArazzo` and `parseOpenAPI`). The original error is available via the `cause` property:
 
 ```js
-import { parseArazzo } from '@usearazzo/parser';
+import { parseArazzo, ParseError } from '@usearazzo/parser';
 
 try {
   await parseArazzo('invalid content');
 } catch (error) {
-  console.error(error.message); // 'Failed to parse Arazzo Document'
-  console.error(error.cause); // Original error from underlying parser
+  if (error instanceof ParseError) {
+    console.error(error.message); // 'Failed to parse Arazzo Document'
+    console.error(error.cause); // Original error from underlying parser
+  }
+  throw error;
 }
 ```
 

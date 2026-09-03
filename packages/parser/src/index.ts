@@ -1,5 +1,7 @@
 export type { ParseResultElement } from '@speclynx/apidom-datamodel';
 
+export { default as ParseError } from './errors/ParseError.ts';
+
 export {
   parse as parseArazzo,
   defaultOptions as defaultParseArazzoOptions,
