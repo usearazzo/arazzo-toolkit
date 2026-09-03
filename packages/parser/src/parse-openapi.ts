@@ -135,52 +135,45 @@ export async function parse(
   let mergedOptions = mergeOptions(defaultOptions as ApiDOMReferenceOptions, options);
   const strict = mergedOptions.parse?.parserOpts?.strict ?? true;
   let sourceProvenance: string;
+  let document: string | undefined;
 
   if (isPlainObject(source)) {
-    const document = JSON.stringify(source, null, 2);
-    mergedOptions = mergeOptions(mergedOptions, {
-      resolve: { resolverOpts: { document } },
-    });
+    document = JSON.stringify(source, null, 2);
     source = 'memory://openapi.json';
     sourceProvenance = '[object]';
   } else if (await detectOpenApiJSON2(source, { strict })) {
-    mergedOptions = mergeOptions(mergedOptions, {
-      resolve: { resolverOpts: { document: source } },
-    });
+    document = source;
     source = 'memory://openapi.json';
     sourceProvenance = '[inline JSON]';
   } else if (await detectOpenApiYAML2(source, { strict })) {
-    mergedOptions = mergeOptions(mergedOptions, {
-      resolve: { resolverOpts: { document: source } },
-    });
+    document = source;
     source = 'memory://openapi.yaml';
     sourceProvenance = '[inline YAML]';
   } else if (await detectOpenApiJSON3_0(source, { strict })) {
-    mergedOptions = mergeOptions(mergedOptions, {
-      resolve: { resolverOpts: { document: source } },
-    });
+    document = source;
     source = 'memory://openapi.json';
     sourceProvenance = '[inline JSON]';
   } else if (await detectOpenApiYAML3_0(source, { strict })) {
-    mergedOptions = mergeOptions(mergedOptions, {
-      resolve: { resolverOpts: { document: source } },
-    });
+    document = source;
     source = 'memory://openapi.yaml';
     sourceProvenance = '[inline YAML]';
   } else if (await detectOpenApiJSON3_1(source, { strict })) {
-    mergedOptions = mergeOptions(mergedOptions, {
-      resolve: { resolverOpts: { document: source } },
-    });
+    document = source;
     source = 'memory://openapi.json';
     sourceProvenance = '[inline JSON]';
   } else if (await detectOpenApiYAML3_1(source, { strict })) {
-    mergedOptions = mergeOptions(mergedOptions, {
-      resolve: { resolverOpts: { document: source } },
-    });
+    document = source;
     source = 'memory://openapi.yaml';
     sourceProvenance = '[inline YAML]';
   } else {
     sourceProvenance = source;
+  }
+
+  // in-memory documents are served by MemoryResolver under their synthetic memory:// URI
+  if (document !== undefined) {
+    mergedOptions = mergeOptions(mergedOptions, {
+      resolve: { resolverOpts: { document, uri: source } },
+    });
   }
 
   // next we assume that source is either file system URI or HTTP(S) URL

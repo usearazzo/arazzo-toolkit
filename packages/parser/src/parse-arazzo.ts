@@ -151,24 +151,18 @@ export async function parse(
   let mergedOptions = mergeOptions(defaultOptions as ApiDOMReferenceOptions, options);
   const strict = mergedOptions.parse?.parserOpts?.strict ?? true;
   let sourceProvenance: string;
+  let document: string | undefined;
 
   if (isPlainObject(source)) {
-    const document = JSON.stringify(source, null, 2);
-    mergedOptions = mergeOptions(mergedOptions, {
-      resolve: { resolverOpts: { document } },
-    });
+    document = JSON.stringify(source, null, 2);
     source = 'memory://arazzo.json';
     sourceProvenance = '[object]';
   } else if (await detectArazzoJSON(source, { strict })) {
-    mergedOptions = mergeOptions(mergedOptions, {
-      resolve: { resolverOpts: { document: source } },
-    });
+    document = source;
     source = 'memory://arazzo.json';
     sourceProvenance = '[inline JSON]';
   } else if (await detectArazzoYAML(source, { strict })) {
-    mergedOptions = mergeOptions(mergedOptions, {
-      resolve: { resolverOpts: { document: source } },
-    });
+    document = source;
     source = 'memory://arazzo.yaml';
     sourceProvenance = '[inline YAML]';
   } else {
@@ -176,6 +170,13 @@ export async function parse(
       url.isHttpUrl(source) || url.getProtocol(source) === 'file' || url.isURI(`file://${source}`)
         ? source
         : '[inline CONTENT]';
+  }
+
+  // in-memory documents are served by MemoryResolver under their synthetic memory:// URI
+  if (document !== undefined) {
+    mergedOptions = mergeOptions(mergedOptions, {
+      resolve: { resolverOpts: { document, uri: source } },
+    });
   }
 
   // next we assume that source is either file system URI or HTTP(S) URL

@@ -15,12 +15,18 @@ export type { File, FileOptions };
 class MemoryResolver extends Resolver {
   declare document?: string;
 
+  declare uri?: string;
+
   constructor() {
     super({ name: 'memory' });
   }
 
   canRead(file: File): boolean {
-    return file.uri.startsWith('memory://') && this.document !== undefined;
+    // only the exact URI this resolver was configured to serve is matched,
+    // so a relative source description URL resolved against it (e.g.
+    // "memory://arazzo.json/nope.yaml") falls through instead of being
+    // served the same in-memory document
+    return file.uri === this.uri && this.document !== undefined;
   }
 
   async read(file: File): Promise<Buffer> {

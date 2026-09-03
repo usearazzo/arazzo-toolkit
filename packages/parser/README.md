@@ -287,6 +287,8 @@ Arazzo documents can reference external API specifications (OpenAPI, Arazzo) thr
 
 **Note:** Source descriptions parsing is disabled by default for performance reasons. Enable it explicitly when you need to resolve and parse referenced API specifications.
 
+**Note:** Relative source description `url`s are resolved against the URI the parent Arazzo document was retrieved from. When the parent is passed as a plain object or inline string, that URI is a synthetic `memory://` one, so a relative `url` resolves to a `memory://` URI that no resolver can retrieve and produces an `error` annotation. Use absolute `http(s)://` or `file://` URLs in that case, or declare an absolute `$self` on the parent document.
+
 ### Enabling source descriptions parsing
 
 To parse source descriptions, enable the `sourceDescriptions` option in `parserOpts`:
