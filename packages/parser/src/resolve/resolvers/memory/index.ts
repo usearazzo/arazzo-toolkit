@@ -1,4 +1,5 @@
 import {
+  url,
   Resolver,
   File,
   ResolverError,
@@ -12,21 +13,47 @@ export type { File, FileOptions };
 /**
  * @public
  */
+export interface MemoryResolverOptions {
+  /**
+   * Content of the in-memory document.
+   */
+  readonly document: string;
+  /**
+   * URI the in-memory document is served under. Relative references
+   * within the document resolve against it.
+   */
+  readonly uri: string;
+}
+
+/**
+ * Serves an in-memory document under exactly one URI.
+ * @public
+ */
 class MemoryResolver extends Resolver {
-  declare document?: string;
+  readonly document: string;
 
-  declare uri?: string;
+  readonly uri: string;
 
-  constructor() {
+  constructor({ document, uri }: MemoryResolverOptions) {
     super({ name: 'memory' });
+    this.document = document;
+    // must match the File.uri derivation in apidom-reference's parse()
+    this.uri = url.sanitize(url.stripHash(uri));
   }
 
   canRead(file: File): boolean {
-    // only the exact URI this resolver was configured to serve is matched,
-    // so a relative source description URL resolved against it (e.g.
-    // "memory://arazzo.json/nope.yaml") falls through instead of being
-    // served the same in-memory document
-    return file.uri === this.uri && this.document !== undefined;
+    if (file.uri === this.uri) return true;
+    // a foreign memory:// URI can only be a relative URL resolved against a synthetic
+    // memory:// base; apidom records the message of an error thrown here verbatim in
+    // the source description annotation, whereas an error thrown from read() would be
+    // wrapped and its message lost
+    if (file.uri.startsWith('memory://')) {
+      throw new ResolverError(
+        'relative URL cannot be resolved because the parent document was parsed from ' +
+          'inline content. Provide resolve.baseURI or an absolute $self.',
+      );
+    }
+    return false;
   }
 
   async read(file: File): Promise<Buffer> {

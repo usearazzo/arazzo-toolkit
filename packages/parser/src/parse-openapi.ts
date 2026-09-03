@@ -1,5 +1,5 @@
 import { ParseResultElement } from '@speclynx/apidom-datamodel';
-import { parse as parseURI, mergeOptions } from '@speclynx/apidom-reference/configuration/empty';
+import { parse as parseURI } from '@speclynx/apidom-reference/configuration/empty';
 import type { ApiDOMReferenceOptions } from '@speclynx/apidom-reference/configuration/empty';
 import OpenApiJSON2Parser from '@speclynx/apidom-reference/parse/parsers/openapi-json-2';
 import OpenApiYAML2Parser from '@speclynx/apidom-reference/parse/parsers/openapi-yaml-2';
@@ -17,6 +17,7 @@ import { isPlainObject } from 'ramda-adjunct';
 import type { PartialDeep } from 'type-fest';
 
 import ParseError from './errors/ParseError.ts';
+import { mergeOptions } from './options/util.ts';
 import MemoryResolver from './resolve/resolvers/memory/index.ts';
 import { defaultOptions as arazzoDefaultOptions } from './parse-arazzo.ts';
 
@@ -43,10 +44,7 @@ export const defaultOptions: Options = {
     parserOpts: { ...arazzoDefaultOptions.parse!.parserOpts },
   },
   resolve: {
-    resolvers: [
-      new MemoryResolver(),
-      ...arazzoDefaultOptions.resolve!.resolvers!.filter((r) => r.name !== 'memory'),
-    ],
+    resolvers: [...arazzoDefaultOptions.resolve!.resolvers!],
     resolverOpts: {},
   },
 };
@@ -169,10 +167,18 @@ export async function parse(
     sourceProvenance = source;
   }
 
-  // in-memory documents are served by MemoryResolver under their synthetic memory:// URI
+  // in-memory documents are served under their synthetic memory:// URI, or under the
+  // caller-supplied base URI so that relative references resolve against a real location
   if (document !== undefined) {
+    // raw options, not merged: mergeOptions defaults baseURI to the current working directory
+    source = options.resolve?.baseURI || source;
     mergedOptions = mergeOptions(mergedOptions, {
-      resolve: { resolverOpts: { document, uri: source } },
+      resolve: {
+        resolvers: [
+          ...mergedOptions.resolve.resolvers,
+          new MemoryResolver({ document, uri: source }),
+        ],
+      },
     });
   }
 

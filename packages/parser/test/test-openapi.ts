@@ -39,6 +39,15 @@ describe('parseOpenAPI', function () {
 
       assert.isFalse(result.isEmpty);
     });
+
+    specify('should set retrievalURI metadata when resolve.baseURI is provided', async function () {
+      // the file does not exist; the in-memory document is served under this URI
+      const baseURI = path.join(fixturesPath, 'in-memory-openapi.json');
+      const result = await parseOpenAPI(openapiObject, { resolve: { baseURI } });
+
+      assert.isTrue(isOpenApi3_1Element(result.api));
+      assert.strictEqual(result.meta.get('retrievalURI'), baseURI);
+    });
   });
 
   context('given inline JSON string', function () {
