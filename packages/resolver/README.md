@@ -6,6 +6,7 @@ It produces [SpecLynx ApiDOM](https://github.com/speclynx/apidom) data models us
 **Supported Arazzo versions:**
 - [Arazzo 1.0.0](https://spec.openapis.org/arazzo/v1.0.0)
 - [Arazzo 1.0.1](https://spec.openapis.org/arazzo/v1.0.1)
+- [Arazzo 1.1.0](https://spec.openapis.org/arazzo/v1.1.0)
 
 **Supported OpenAPI versions (for source descriptions):**
 - [OpenAPI 2.0](https://spec.openapis.org/oas/v2.0)
@@ -122,7 +123,7 @@ Strategy-specific options take precedence over global options.
   - `string[]` - dereference only source descriptions with matching names (e.g., `['petStore', 'paymentApi']`)
 
   Each dereferenced source description is added with a `'source-description'` class and metadata (`name`, `type`, `retrievalURI`).
-  Only [OpenAPI 2.0](https://spec.openapis.org/oas/v2.0), [OpenAPI 3.0.x](https://spec.openapis.org/oas/v3.0.4), [OpenAPI 3.1.x](https://spec.openapis.org/oas/v3.1.2), and [Arazzo 1.x](https://spec.openapis.org/arazzo/v1.0.1) documents are accepted as source descriptions.
+  Only [OpenAPI 2.0](https://spec.openapis.org/oas/v2.0), [OpenAPI 3.0.x](https://spec.openapis.org/oas/v3.0.4), [OpenAPI 3.1.x](https://spec.openapis.org/oas/v3.1.2), and [Arazzo 1.x](https://spec.openapis.org/arazzo/v1.1.0) documents are accepted as source descriptions.
 - **sourceDescriptionsMaxDepth** - Maximum recursion depth for dereferencing nested Arazzo source descriptions.
   Defaults to `+Infinity`. Circular references are automatically detected and skipped.
 

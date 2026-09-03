@@ -10,6 +10,7 @@ A comprehensive JavaScript/TypeScript toolkit for **parsing**, **resolving**, **
 **Supported Arazzo versions:**
 - [Arazzo 1.0.0](https://spec.openapis.org/arazzo/v1.0.0)
 - [Arazzo 1.0.1](https://spec.openapis.org/arazzo/v1.0.1)
+- [Arazzo 1.1.0](https://spec.openapis.org/arazzo/v1.1.0)
 
 **Supported OpenAPI versions (for source descriptions):**
 - [OpenAPI 2.0](https://spec.openapis.org/oas/v2.0)

@@ -6,6 +6,7 @@ It performs semantic validation and semantic linting — with JSON Schema valida
 **Supported Arazzo versions:**
 - [Arazzo 1.0.0](https://spec.openapis.org/arazzo/v1.0.0)
 - [Arazzo 1.0.1](https://spec.openapis.org/arazzo/v1.0.1)
+- [Arazzo 1.1.0](https://spec.openapis.org/arazzo/v1.1.0)
 
 **Requirements:**
 - Node.js >= 20.10.0
