@@ -118,6 +118,31 @@ const parseResult = await parseArazzo(source, {
 });
 ```
 
+### Base URI for inline content
+
+When parsing from a plain object or inline string, the document has no location of its own, so relative references (such as source description `url`s) have nothing to resolve against. Provide `resolve.baseURI` to tell the parser where the document should be treated as coming from. The in-memory content is still used for the document itself; only relative references are resolved against the base URI, and it is recorded as the `retrievalURI` metadata:
+
+```js
+import { parseArazzo } from '@usearazzo/parser';
+
+const arazzoDocument = {
+  arazzo: '1.0.1',
+  info: { title: 'My API Workflow', version: '1.0.0' },
+  sourceDescriptions: [{ name: 'myApi', type: 'openapi', url: './openapi.json' }],
+  workflows: [],
+};
+
+const parseResult = await parseArazzo(arazzoDocument, {
+  resolve: { baseURI: '/path/to/arazzo.json' },
+  parse: { parserOpts: { sourceDescriptions: true } },
+});
+
+parseResult.meta.get('retrievalURI'); // '/path/to/arazzo.json'
+parseResult.get(1).meta.get('retrievalURI'); // '/path/to/openapi.json'
+```
+
+Relative references are resolved against the base URI the same way as for a file system path or URL passed directly to `parseArazzo`, so it must be absolute; a relative value is not resolved against the working directory. The base URI itself is never read: the in-memory content is always what gets parsed, so it need not exist or have a recognized extension. It is served by the parser's own `memory` resolver, which is placed ahead of any resolvers configured through `resolve.resolvers`. `parseOpenAPI` accepts the option in the same way.
+
 ### Default options
 
 You can import the default options:
@@ -178,7 +203,7 @@ const uri = parseResult.meta.get('retrievalURI');
 // '/path/to/arazzo.json'
 ```
 
-Note: `retrievalURI` is not set when parsing from inline content (string) or plain objects.
+Note: `retrievalURI` is not set when parsing from inline content (string) or plain objects, unless `resolve.baseURI` is provided (see [Base URI for inline content](#base-uri-for-inline-content)).
 
 ### Source maps
 
@@ -288,7 +313,7 @@ Arazzo documents can reference external API specifications (OpenAPI, Arazzo) thr
 
 **Note:** Source descriptions parsing is disabled by default for performance reasons. Enable it explicitly when you need to resolve and parse referenced API specifications.
 
-**Note:** Relative source description `url`s are resolved against the URI the parent Arazzo document was retrieved from. When the parent is passed as a plain object or inline string, that URI is a synthetic `memory://` one, so a relative `url` resolves to a `memory://` URI that no resolver can retrieve and produces an `error` annotation. Use absolute `http(s)://` or `file://` URLs in that case, or declare an absolute `$self` on the parent document.
+**Note:** Relative source description `url`s are resolved against the URI the parent Arazzo document was retrieved from. When the parent is passed as a plain object or inline string without `resolve.baseURI`, that URI is a synthetic `memory://` one, so a relative `url` resolves to a `memory://` URI that no resolver can retrieve. The source description gets an `error` annotation stating this: `Error parsing source description "memory://arazzo.json/openapi.json": relative URL cannot be resolved because the parent document was parsed from inline content. Provide resolve.baseURI or an absolute $self.` Provide `resolve.baseURI` in that case (see [Base URI for inline content](#base-uri-for-inline-content)), use absolute `http(s)://` or `file://` URLs, or declare a `$self` with a scheme (`file://`, `https://`) on the parent document.
 
 ### Enabling source descriptions parsing
 

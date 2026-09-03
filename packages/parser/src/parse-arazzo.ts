@@ -2,7 +2,6 @@ import { ParseResultElement } from '@speclynx/apidom-datamodel';
 import {
   url,
   parse as parseURI,
-  mergeOptions,
   UnmatchedParserError,
 } from '@speclynx/apidom-reference/configuration/empty';
 import type { ApiDOMReferenceOptions } from '@speclynx/apidom-reference/configuration/empty';
@@ -23,6 +22,7 @@ import { isPlainObject } from 'ramda-adjunct';
 import type { PartialDeep } from 'type-fest';
 
 import ParseError from './errors/ParseError.ts';
+import { mergeOptions } from './options/util.ts';
 import MemoryResolver from './resolve/resolvers/memory/index.ts';
 
 /**
@@ -56,7 +56,6 @@ export const defaultOptions: Options = {
   },
   resolve: {
     resolvers: [
-      new MemoryResolver(),
       // regex patterns, not glob strings - picomatch's glob matching never
       // matches a dotfile basename (e.g. .arazzo.yaml) without `dot: true`,
       // which FileResolver does not set.
@@ -172,10 +171,19 @@ export async function parse(
         : '[inline CONTENT]';
   }
 
-  // in-memory documents are served by MemoryResolver under their synthetic memory:// URI
+  // in-memory documents are served under their synthetic memory:// URI, or under the
+  // caller-supplied base URI so that relative source description URLs resolve against
+  // a real location
   if (document !== undefined) {
+    // raw options, not merged: mergeOptions defaults baseURI to the current working directory
+    source = options.resolve?.baseURI || source;
     mergedOptions = mergeOptions(mergedOptions, {
-      resolve: { resolverOpts: { document, uri: source } },
+      resolve: {
+        resolvers: [
+          ...mergedOptions.resolve.resolvers,
+          new MemoryResolver({ document, uri: source }),
+        ],
+      },
     });
   }
 

@@ -3,13 +3,26 @@ import { fileURLToPath } from 'node:url';
 
 import { assert } from 'chai';
 import { isParseResultElement, ParseResultElement } from '@speclynx/apidom-datamodel';
-import { isArazzoSpecification1Element } from '@speclynx/apidom-ns-arazzo-1';
+import {
+  isArazzoSpecification1Element,
+  type ArazzoSpecification1Element,
+} from '@speclynx/apidom-ns-arazzo-1';
 import { isOpenApi3_1Element } from '@speclynx/apidom-ns-openapi-3-1';
 
 import { parseArazzo } from '../src/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesPath = path.join(__dirname, 'fixtures', 'source-descriptions');
+
+const inlineYAML = (name: string, url: string) => `arazzo: 1.0.1
+info:
+  title: x
+  version: "1"
+sourceDescriptions:
+  - name: ${name}
+    type: openapi
+    url: ${url}
+workflows: []`;
 
 describe('parse', function () {
   context('given sourceDescriptions option', function () {
@@ -320,23 +333,15 @@ describe('parse', function () {
           const annotation = sdParseResult.get(0);
           assert.strictEqual(annotation?.element, 'annotation');
           assert.isTrue(annotation?.classes?.includes('error'));
-          assert.isTrue(String(annotation?.toValue()).includes('Could not find a resolver'));
+          assert.strictEqual(
+            annotation?.toValue(),
+            'Error parsing source description "memory://arazzo.json/nope.yaml": relative URL cannot be resolved because the parent document was parsed from inline content. Provide resolve.baseURI or an absolute $self.',
+          );
         },
       );
 
       specify('should behave the same for inline YAML', async function () {
-        const yaml = [
-          'arazzo: 1.0.1',
-          'info:',
-          '  title: x',
-          '  version: "1"',
-          'sourceDescriptions:',
-          '  - name: gone',
-          '    type: openapi',
-          '    url: ./nope.yaml',
-          'workflows: []',
-        ].join('\n');
-        const result = await parseArazzo(yaml, {
+        const result = await parseArazzo(inlineYAML('gone', './nope.yaml'), {
           parse: { parserOpts: { sourceDescriptions: true } },
         });
 
@@ -352,6 +357,95 @@ describe('parse', function () {
         const annotation = sdParseResult.get(0);
         assert.strictEqual(annotation?.element, 'annotation');
         assert.isTrue(annotation?.classes?.includes('error'));
+      });
+    });
+
+    context('when inline source is parsed with resolve.baseURI', function () {
+      const doc = {
+        arazzo: '1.0.1',
+        info: { title: 'x', version: '1' },
+        sourceDescriptions: [{ name: 'petStore', type: 'openapi', url: './openapi.json' }],
+        workflows: [],
+      };
+      // the file does not exist; the in-memory document is served under this URI
+      const baseURI = path.join(fixturesPath, 'arazzo.json');
+      const expectedSourceDescriptionURI = path.join(fixturesPath, 'openapi.json');
+
+      const cases: [string, string | Record<string, unknown>, string][] = [
+        ['object', doc, baseURI],
+        ['object with extensionless baseURI', doc, path.join(fixturesPath, 'arazzo')],
+        ['inline YAML', inlineYAML('petStore', './openapi.json'), baseURI],
+      ];
+
+      for (const [label, source, base] of cases) {
+        specify(`should resolve relative source description URLs (${label})`, async function () {
+          const result = await parseArazzo(source, {
+            resolve: { baseURI: base },
+            parse: { parserOpts: { sourceDescriptions: true } },
+          });
+
+          assert.strictEqual(result.length, 2);
+          assert.isTrue(isArazzoSpecification1Element(result.api));
+          assert.strictEqual(result.meta.get('retrievalURI'), base);
+
+          const sdParseResult = result.get(1) as ParseResultElement;
+          assert.isTrue(sdParseResult.classes.includes('source-description'));
+          assert.strictEqual(sdParseResult.meta.get('retrievalURI'), expectedSourceDescriptionURI);
+          assert.strictEqual(sdParseResult.errors.length, 0);
+          assert.isTrue(isOpenApi3_1Element(sdParseResult.api));
+        });
+      }
+
+      specify(
+        'should serve the in-memory document even when baseURI exists on disk',
+        async function () {
+          const result = await parseArazzo(
+            { ...doc, info: { title: 'in-memory', version: '1' } },
+            {
+              // a real file with a different title; FileResolver could read it
+              resolve: { baseURI: path.join(fixturesPath, 'arazzo-with-openapi.json') },
+            },
+          );
+
+          assert.isTrue(isArazzoSpecification1Element(result.api));
+          const api = result.api as ArazzoSpecification1Element;
+          assert.strictEqual(api.info!.title!.toValue(), 'in-memory');
+        },
+      );
+
+      specify('should serve the in-memory document with custom resolvers', async function () {
+        // no resolver can fetch the sibling, but the parent itself must still be served
+        const result = await parseArazzo(doc, {
+          resolve: { baseURI: 'https://example.com/api/arazzo.json', resolvers: [] },
+          parse: { parserOpts: { sourceDescriptions: true } },
+        });
+
+        assert.isTrue(isArazzoSpecification1Element(result.api));
+        assert.strictEqual(result.meta.get('retrievalURI'), 'https://example.com/api/arazzo.json');
+
+        const sdParseResult = result.get(1) as ParseResultElement;
+        assert.strictEqual(
+          sdParseResult.meta.get('retrievalURI'),
+          'https://example.com/api/openapi.json',
+        );
+        assert.isUndefined(sdParseResult.api);
+        assert.isTrue(
+          String(sdParseResult.get(0)?.toValue()).includes('Could not find a resolver'),
+        );
+      });
+
+      specify('should detect a source description referencing baseURI itself', async function () {
+        const result = await parseArazzo(
+          { ...doc, sourceDescriptions: [{ name: 'self', type: 'arazzo', url: './arazzo.json' }] },
+          {
+            resolve: { baseURI },
+            parse: { parserOpts: { sourceDescriptions: true } },
+          },
+        );
+
+        const sdParseResult = result.get(1) as ParseResultElement;
+        assert.isUndefined(sdParseResult.api); // not re-parsed
+        assert.isTrue(String(sdParseResult.get(0)?.toValue()).includes('already been visited'));
       });
     });
   });
