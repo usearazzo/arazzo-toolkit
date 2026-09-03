@@ -237,7 +237,7 @@ describe('parse', function () {
           const sourceDescription = (
             sharedB.api as ArazzoSpecification1Element
           ).sourceDescriptions!.get(0);
-          assert.strictEqual(sourceDescription.meta.get('parseResult'), petStore);
+          assert.strictEqual(sourceDescription?.meta.get('parseResult'), petStore);
         },
       );
 
