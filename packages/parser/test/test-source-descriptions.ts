@@ -289,5 +289,70 @@ describe('parse', function () {
         assert.isTrue(annotation?.classes?.includes('error'));
       });
     });
+
+    context('when inline source has a relative source description URL', function () {
+      const doc = {
+        arazzo: '1.0.1',
+        info: { title: 'x', version: '1' },
+        sourceDescriptions: [{ name: 'gone', type: 'openapi', url: './nope.yaml' }],
+        workflows: [],
+      };
+
+      specify(
+        'should add error annotation instead of serving the parent document',
+        async function () {
+          const result = await parseArazzo(doc, {
+            parse: { parserOpts: { sourceDescriptions: true } },
+          });
+
+          assert.strictEqual(result.length, 2);
+
+          // the relative URL resolves against the synthetic memory:// base and is then rejected
+          const sdParseResult = result.get(1) as ParseResultElement;
+          assert.isTrue(isParseResultElement(sdParseResult));
+          assert.isTrue(sdParseResult.classes.includes('source-description'));
+          assert.strictEqual(
+            sdParseResult.meta.get('retrievalURI'),
+            'memory://arazzo.json/nope.yaml',
+          );
+          assert.isUndefined(sdParseResult.api); // not re-parsed as the parent document
+
+          const annotation = sdParseResult.get(0);
+          assert.strictEqual(annotation?.element, 'annotation');
+          assert.isTrue(annotation?.classes?.includes('error'));
+          assert.isTrue(String(annotation?.toValue()).includes('Could not find a resolver'));
+        },
+      );
+
+      specify('should behave the same for inline YAML', async function () {
+        const yaml = [
+          'arazzo: 1.0.1',
+          'info:',
+          '  title: x',
+          '  version: "1"',
+          'sourceDescriptions:',
+          '  - name: gone',
+          '    type: openapi',
+          '    url: ./nope.yaml',
+          'workflows: []',
+        ].join('\n');
+        const result = await parseArazzo(yaml, {
+          parse: { parserOpts: { sourceDescriptions: true } },
+        });
+
+        assert.strictEqual(result.length, 2);
+
+        const sdParseResult = result.get(1) as ParseResultElement;
+        assert.strictEqual(
+          sdParseResult.meta.get('retrievalURI'),
+          'memory://arazzo.yaml/nope.yaml',
+        );
+        assert.isUndefined(sdParseResult.api);
+
+        const annotation = sdParseResult.get(0);
+        assert.strictEqual(annotation?.element, 'annotation');
+        assert.isTrue(annotation?.classes?.includes('error'));
+      });
+    });
   });
 });
