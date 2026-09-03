@@ -1,5 +1,5 @@
+import { parseRuntimeExpression } from '@usearazzo/parser';
 import {
-  parse,
   test,
   interpolate,
   type ASTNode,
@@ -167,9 +167,9 @@ class RuntimeExpressionEvaluator {
    * Parses an expression to its AST, throwing on failure regardless of strict mode.
    */
   #parse(expression: string): ASTNode {
-    let result: ReturnType<typeof parse>;
+    let result: ReturnType<typeof parseRuntimeExpression>;
     try {
-      result = parse(expression);
+      result = parseRuntimeExpression(expression);
     } catch (error: unknown) {
       throw new RuntimeExpressionError(`Failed to parse runtime expression "${expression}"`, {
         cause: error,

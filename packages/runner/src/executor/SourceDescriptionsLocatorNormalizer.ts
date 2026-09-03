@@ -1,4 +1,4 @@
-import { parse as parseRuntimeExpression } from '@swaggerexpert/arazzo-runtime-expression';
+import { parseRuntimeExpression } from '@usearazzo/parser';
 
 import type DocumentRegistry from '../registry/DocumentRegistry.ts';
 
