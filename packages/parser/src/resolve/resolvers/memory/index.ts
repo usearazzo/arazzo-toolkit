@@ -43,11 +43,11 @@ class MemoryResolver extends Resolver {
 
   canRead(file: File): boolean {
     if (file.uri === this.uri) return true;
-    // a foreign memory:// URI can only be a relative URL resolved against a synthetic
-    // memory:// base; apidom records the message of an error thrown here verbatim in
-    // the source description annotation, whereas an error thrown from read() would be
-    // wrapped and its message lost
-    if (file.uri.startsWith('memory://')) {
+    // a URI under this resolver's synthetic memory:// base can only be a relative URL
+    // resolved against it; apidom records the message of an error thrown here verbatim
+    // in the source description annotation, whereas an error thrown from read() would
+    // be wrapped and its message lost
+    if (this.uri.startsWith('memory://') && file.uri.startsWith(`${this.uri}/`)) {
       throw new ResolverError(
         'relative URL cannot be resolved because the parent document was parsed from ' +
           'inline content. Provide resolve.baseURI or an absolute $self.',
