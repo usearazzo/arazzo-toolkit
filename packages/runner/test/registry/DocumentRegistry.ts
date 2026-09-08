@@ -93,6 +93,14 @@ describe('DocumentRegistry', function () {
         assert.strictEqual(doc1, doc2);
       });
 
+      specify('should find the cached document by relative and absolute path', async function () {
+        const registry = new DocumentRegistry();
+        const doc = await registry.acquireEntryDocument(relativePath);
+
+        assert.strictEqual(registry.get(relativePath), doc);
+        assert.strictEqual(registry.get(fixturePath), doc);
+      });
+
       specify('should resolve source descriptions against the document', async function () {
         const registry = new DocumentRegistry();
         const entryDoc = await registry.acquireEntryDocument(relativePath);

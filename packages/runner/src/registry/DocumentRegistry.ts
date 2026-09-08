@@ -54,14 +54,7 @@ class DocumentRegistry {
    * caches, and returns it.
    */
   async acquire(uri: string): Promise<APIDocument> {
-    // a relative file system path resolves against the current working directory; the
-    // canonical URI doubles as the cache key and as the base URI for source description
-    // URLs, where a relative base resolves against the filesystem root instead of the document
-    const absoluteURI =
-      !url.isHttpUrl(uri) && url.getProtocol(uri) !== 'file' && !uri.startsWith('/')
-        ? url.resolve(url.fromFileSystemPath(url.cwd()), uri)
-        : uri;
-    const canonicalURI = url.sanitize(url.stripHash(absoluteURI));
+    const canonicalURI = this.#canonicalize(uri);
     const cachedDocument = this.#get(canonicalURI);
     if (cachedDocument) return cachedDocument;
 
@@ -88,7 +81,24 @@ class DocumentRegistry {
    * for having acquired the document beforehand.
    */
   get(uri: string): APIDocument | undefined {
-    return this.#get(url.sanitize(url.stripHash(uri)));
+    return this.#get(this.#canonicalize(uri));
+  }
+
+  /**
+   * Canonical form of a URI, used as the cache key and handed to providers.
+   *
+   * A relative file system path resolves against the current working directory
+   * first: the canonical URI doubles as the base URI for source description
+   * URLs, where a relative base resolves against the filesystem root instead of
+   * the document. The working directory is encoded so a directory name
+   * containing `#`, `?` or `%` survives URL parsing.
+   */
+  #canonicalize(uri: string): string {
+    const absoluteURI =
+      !url.isHttpUrl(uri) && url.getProtocol(uri) !== 'file' && !uri.startsWith('/')
+        ? url.resolve(url.fromFileSystemPath(url.cwd()), uri)
+        : uri;
+    return url.sanitize(url.stripHash(absoluteURI));
   }
 
   /**
