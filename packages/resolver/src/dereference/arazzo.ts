@@ -101,10 +101,11 @@ export async function dereference(uri: string, options: Options = {}): Promise<P
 
   // a relative file system path resolves against the current working directory; the string
   // doubles as the base URI for relative references, where a relative base resolves against
-  // the filesystem root instead of the document. `uri` itself is left untouched so error
-  // messages below quote what the caller passed in.
+  // the filesystem root instead of the document. A leading slash or backslash (UNC,
+  // drive-rooted) is already rooted and passes through untouched. `uri` itself is left as
+  // is so error messages below quote what the caller passed in.
   const retrievalURI =
-    !url.isHttpUrl(uri) && url.getProtocol(uri) !== 'file' && !uri.startsWith('/')
+    !url.isHttpUrl(uri) && url.getProtocol(uri) !== 'file' && !/^[\\/]/.test(uri)
       ? url.resolve(url.fromFileSystemPath(url.cwd()), uri)
       : uri;
 

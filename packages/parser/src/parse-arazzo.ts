@@ -176,14 +176,11 @@ export async function parse(
     // doubles as the base URI for relative source description URLs, where a relative base
     // resolves against the filesystem root instead of the document. Not gated on the
     // provenance above: isURI(`file://${source}`) rejects a first segment with a space,
-    // which is a valid relative path. String(source) tolerates a caller passing
-    // null/undefined at runtime despite the string type, deferring to parseURI below for a
-    // proper ParseError instead of throwing here.
-    if (
-      !url.isHttpUrl(source) &&
-      url.getProtocol(source) !== 'file' &&
-      !String(source).startsWith('/')
-    ) {
+    // which is a valid relative path. A leading slash or backslash (UNC, drive-rooted) is
+    // already rooted and passes through untouched. RegExp.test coerces a null/undefined
+    // passed at runtime despite the string type, deferring to parseURI below for a proper
+    // ParseError instead of throwing here.
+    if (!url.isHttpUrl(source) && url.getProtocol(source) !== 'file' && !/^[\\/]/.test(source)) {
       source = url.resolve(url.fromFileSystemPath(url.cwd()), source);
     }
   }

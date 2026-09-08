@@ -90,12 +90,13 @@ class DocumentRegistry {
    * A relative file system path resolves against the current working directory
    * first: the canonical URI doubles as the base URI for source description
    * URLs, where a relative base resolves against the filesystem root instead of
-   * the document. The working directory is encoded so a directory name
-   * containing `#`, `?` or `%` survives URL parsing.
+   * the document. A leading slash or backslash (UNC, drive-rooted) is already
+   * rooted and passes through untouched. The working directory is encoded so a
+   * directory name containing `#`, `?` or `%` survives URL parsing.
    */
   #canonicalize(uri: string): string {
     const absoluteURI =
-      !url.isHttpUrl(uri) && url.getProtocol(uri) !== 'file' && !uri.startsWith('/')
+      !url.isHttpUrl(uri) && url.getProtocol(uri) !== 'file' && !/^[\\/]/.test(uri)
         ? url.resolve(url.fromFileSystemPath(url.cwd()), uri)
         : uri;
     return url.sanitize(url.stripHash(absoluteURI));

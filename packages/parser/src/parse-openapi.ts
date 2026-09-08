@@ -170,14 +170,11 @@ export async function parse(
 
     // a relative file system path resolves against the current working directory; the string
     // doubles as the base URI for relative references, where a relative base resolves against
-    // the filesystem root instead of the document. String(source) tolerates a caller passing
-    // null/undefined at runtime despite the string type, deferring to parseURI below for a
-    // proper ParseError instead of throwing here.
-    if (
-      !url.isHttpUrl(source) &&
-      url.getProtocol(source) !== 'file' &&
-      !String(source).startsWith('/')
-    ) {
+    // the filesystem root instead of the document. A leading slash or backslash (UNC,
+    // drive-rooted) is already rooted and passes through untouched. RegExp.test coerces a
+    // null/undefined passed at runtime despite the string type, deferring to parseURI below
+    // for a proper ParseError instead of throwing here.
+    if (!url.isHttpUrl(source) && url.getProtocol(source) !== 'file' && !/^[\\/]/.test(source)) {
       source = url.resolve(url.fromFileSystemPath(url.cwd()), source);
     }
   }

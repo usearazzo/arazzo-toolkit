@@ -40,8 +40,14 @@ function canonicalizeDocumentURI(source: string): string {
   if (url.isHttpUrl(source)) {
     return source;
   }
-  // cwd is encoded first so a directory name containing `#`, `?` or `%` survives URL parsing
-  return url.sanitize(url.resolve(url.fromFileSystemPath(url.cwd()), source));
+  // a leading slash or backslash (UNC, drive-rooted) is already rooted and passes through
+  // untouched; cwd is encoded first so a directory name containing `#`, `?` or `%` survives
+  // URL parsing
+  const absoluteURI =
+    url.getProtocol(source) !== 'file' && !/^[\\/]/.test(source)
+      ? url.resolve(url.fromFileSystemPath(url.cwd()), source)
+      : source;
+  return url.sanitize(absoluteURI);
 }
 
 /**
