@@ -105,9 +105,11 @@ export async function parse(
  * The function handles three types of input:
  * 1. Object - converts to JSON string and parses (source maps supported with `strict: false`)
  * 2. String content - uses Arazzo detection to identify and parse inline JSON or YAML content
- * 3. URI string - if not detected as Arazzo content, treats as file system path or HTTP(S) URL
+ * 3. URI string - if not detected as Arazzo content, treats as file system path or HTTP(S) URL.
+ *    A relative file system path resolves against the current working directory.
  *
- * @param source - The Arazzo Document as an object, string content, or a file system path / HTTP(S) URL
+ * @param source - The Arazzo Document as an object, string content, or a file system path / HTTP(S) URL.
+ *   A relative file system path resolves against the current working directory.
  * @param options - Reference options (uses defaultOptions when not provided)
  * @returns A promise that resolves to the parsed Arazzo Document as ApiDOM data model
  * @throws ParseError - When parsing fails for any reason. The original error is available via the `cause` property.
@@ -169,6 +171,18 @@ export async function parse(
       url.isHttpUrl(source) || url.getProtocol(source) === 'file' || url.isURI(`file://${source}`)
         ? source
         : '[inline CONTENT]';
+
+    // a relative file system path resolves against the current working directory; the string
+    // doubles as the base URI for relative source description URLs, where a relative base
+    // resolves against the filesystem root instead of the document. Not gated on the
+    // provenance above: isURI(`file://${source}`) rejects a first segment with a space,
+    // which is a valid relative path. A leading slash or backslash (UNC, drive-rooted) is
+    // already rooted and passes through untouched. RegExp.test coerces a null/undefined
+    // passed at runtime despite the string type, deferring to parseURI below for a proper
+    // ParseError instead of throwing here.
+    if (!url.isHttpUrl(source) && url.getProtocol(source) !== 'file' && !/^[\\/]/.test(source)) {
+      source = url.resolve(url.fromFileSystemPath(url.cwd()), source);
+    }
   }
 
   // in-memory documents are served under their synthetic memory:// URI, or under the

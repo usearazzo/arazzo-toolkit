@@ -41,6 +41,20 @@ describe('dereferenceArazzo', function () {
 
       assert.deepEqual(toValue(actual), expected);
     });
+
+    context('given relative file system path', function () {
+      // relative to the working directory mocha runs from
+      const relativePath = path.relative(process.cwd(), rootFilePath);
+
+      for (const source of [relativePath, `./${relativePath}`]) {
+        specify(`should resolve "${source}" against the working directory`, async function () {
+          const result = await dereferenceArazzo(source);
+
+          assert.isTrue(isArazzoSpecification1Element(result.api));
+          assert.strictEqual(result.meta.get('retrievalURI'), rootFilePath);
+        });
+      }
+    });
   });
 
   context('given file system path to YAML file', function () {

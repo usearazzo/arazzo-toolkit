@@ -1,9 +1,12 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { assert } from 'chai';
 import { isArazzoSpecification1Element } from '@speclynx/apidom-ns-arazzo-1';
 import { isOpenApi3_0Element } from '@speclynx/apidom-ns-openapi-3-0';
+import { url } from '@speclynx/apidom-reference/configuration/empty';
 
 import { DocumentRegistry, ArazzoDocument, OpenAPIDocument } from '../../src/index.ts';
 import InvalidEntryDocumentError from '../../src/errors/InvalidEntryDocumentError.ts';
@@ -69,6 +72,85 @@ describe('DocumentRegistry', function () {
 
       assert.strictEqual(doc1, doc2);
     });
+
+    context('given relative file system path', function () {
+      // relative to the working directory mocha runs from
+      const relativePath = path.relative(process.cwd(), fixturePath);
+
+      specify('should resolve the path against the working directory', async function () {
+        const registry = new DocumentRegistry();
+        const doc = await registry.acquireEntryDocument(relativePath);
+
+        assert.instanceOf(doc, ArazzoDocument);
+        assert.strictEqual(doc.uri, fixturePath);
+      });
+
+      specify('should share the cache entry with the absolute path', async function () {
+        const registry = new DocumentRegistry();
+        const doc1 = await registry.acquireEntryDocument(relativePath);
+        const doc2 = await registry.acquire(fixturePath);
+
+        assert.strictEqual(doc1, doc2);
+      });
+
+      specify('should find the cached document by relative and absolute path', async function () {
+        const registry = new DocumentRegistry();
+        const doc = await registry.acquireEntryDocument(relativePath);
+
+        assert.strictEqual(registry.get(relativePath), doc);
+        assert.strictEqual(registry.get(fixturePath), doc);
+      });
+
+      specify('should resolve source descriptions against the document', async function () {
+        const registry = new DocumentRegistry();
+        const entryDoc = await registry.acquireEntryDocument(relativePath);
+        const sourceURI = entryDoc.resolveSourceDescriptionURI('petstoreAPI');
+
+        assert.strictEqual(sourceURI, openapiFixturePath);
+
+        const openapiDoc = await registry.acquire(sourceURI!);
+        assert.instanceOf(openapiDoc, OpenAPIDocument);
+      });
+    });
+
+    context(
+      'given relative path from a working directory with URI-reserved characters',
+      function () {
+        specify('should resolve the path and its source descriptions', async function () {
+          const cwd = process.cwd();
+          // ordinary in a directory name, reserved in a URI
+          const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'arazzo#100%-'));
+          for (const name of ['petstore-order-workflow.arazzo.yaml', 'petstore.openapi.json']) {
+            fs.copyFileSync(path.join(__dirname, '..', 'fixtures', name), path.join(tmpDir, name));
+          }
+          process.chdir(tmpDir);
+
+          try {
+            const registry = new DocumentRegistry();
+            const entryDoc = await registry.acquireEntryDocument(
+              'petstore-order-workflow.arazzo.yaml',
+            );
+
+            assert.strictEqual(
+              entryDoc.uri,
+              url.fromFileSystemPath(path.join(tmpDir, 'petstore-order-workflow.arazzo.yaml')),
+            );
+
+            const sourceURI = entryDoc.resolveSourceDescriptionURI('petstoreAPI');
+            assert.strictEqual(
+              sourceURI,
+              url.fromFileSystemPath(path.join(tmpDir, 'petstore.openapi.json')),
+            );
+
+            const openapiDoc = await registry.acquire(sourceURI!);
+            assert.instanceOf(openapiDoc, OpenAPIDocument);
+          } finally {
+            process.chdir(cwd);
+            fs.rmSync(tmpDir, { recursive: true, force: true });
+          }
+        });
+      },
+    );
 
     context('given entry document with OpenAPI source description', function () {
       specify('should acquire OpenAPI source document', async function () {

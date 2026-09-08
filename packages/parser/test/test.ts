@@ -169,6 +169,20 @@ describe('parse', function () {
 
       assert.strictEqual(result.meta.get('retrievalURI'), fixturePath);
     });
+
+    context('given relative file system path', function () {
+      // relative to the working directory mocha runs from
+      const relativePath = path.relative(process.cwd(), fixturePath);
+
+      for (const source of [relativePath, `./${relativePath}`]) {
+        specify(`should resolve "${source}" against the working directory`, async function () {
+          const result = await parseArazzo(source);
+
+          assert.isTrue(isArazzoSpecification1Element(result.api));
+          assert.strictEqual(result.meta.get('retrievalURI'), fixturePath);
+        });
+      }
+    });
   });
 
   context('given options', function () {

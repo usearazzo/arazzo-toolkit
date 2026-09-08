@@ -1,5 +1,6 @@
 import { Element, isParseResultElement, ParseResultElement } from '@speclynx/apidom-datamodel';
 import {
+  url,
   dereference as dereferenceURI,
   dereferenceApiDOM as dereferenceApiDOMElement,
   mergeOptions,
@@ -98,8 +99,18 @@ export const defaultOptions: Options = {
 export async function dereference(uri: string, options: Options = {}): Promise<ParseResultElement> {
   const mergedOptions = mergeOptions(defaultOptions as ApiDOMReferenceOptions, options);
 
+  // a relative file system path resolves against the current working directory; the string
+  // doubles as the base URI for relative references, where a relative base resolves against
+  // the filesystem root instead of the document. A leading slash or backslash (UNC,
+  // drive-rooted) is already rooted and passes through untouched. `uri` itself is left as
+  // is so error messages below quote what the caller passed in.
+  const retrievalURI =
+    !url.isHttpUrl(uri) && url.getProtocol(uri) !== 'file' && !/^[\\/]/.test(uri)
+      ? url.resolve(url.fromFileSystemPath(url.cwd()), uri)
+      : uri;
+
   try {
-    const parseResult = await dereferenceURI(uri, mergedOptions);
+    const parseResult = await dereferenceURI(retrievalURI, mergedOptions);
 
     // validate that the dereferenced document is an Arazzo specification
     if (!isArazzoSpecification1Element(parseResult.api)) {
@@ -108,7 +119,7 @@ export async function dereference(uri: string, options: Options = {}): Promise<P
       );
     }
 
-    parseResult.meta.set('retrievalURI', uri);
+    parseResult.meta.set('retrievalURI', retrievalURI);
     return parseResult;
   } catch (error: unknown) {
     throw new DereferenceError(`Failed to dereference Arazzo Document at "${uri}"`, {
