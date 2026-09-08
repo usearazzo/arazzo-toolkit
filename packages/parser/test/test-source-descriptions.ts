@@ -25,6 +25,33 @@ sourceDescriptions:
 workflows: []`;
 
 describe('parse', function () {
+  context('given relative file system path', function () {
+    const fixturePath = path.join(fixturesPath, 'arazzo-with-openapi.json');
+    // relative to the working directory mocha runs from
+    const relativePath = path.relative(process.cwd(), fixturePath);
+
+    specify(
+      'should resolve relative source description URLs against the document',
+      async function () {
+        const result = await parseArazzo(relativePath, {
+          parse: { parserOpts: { sourceDescriptions: true } },
+        });
+
+        assert.strictEqual(result.length, 2);
+        assert.strictEqual(result.meta.get('retrievalURI'), fixturePath);
+
+        const sdParseResult = result.get(1) as ParseResultElement;
+        assert.isTrue(sdParseResult.classes.includes('source-description'));
+        assert.strictEqual(
+          sdParseResult.meta.get('retrievalURI'),
+          path.join(fixturesPath, 'openapi.json'),
+        );
+        assert.strictEqual(sdParseResult.errors.length, 0);
+        assert.isTrue(isOpenApi3_1Element(sdParseResult.api));
+      },
+    );
+  });
+
   context('given sourceDescriptions option', function () {
     context('when sourceDescriptions is false (default)', function () {
       const fixturePath = path.join(fixturesPath, 'arazzo-with-openapi.json');

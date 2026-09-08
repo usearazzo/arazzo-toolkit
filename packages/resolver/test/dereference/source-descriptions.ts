@@ -56,6 +56,32 @@ describe('dereferenceArazzo', function () {
         assert.isTrue(sdParseResult.classes.includes('source-description'));
       });
 
+      specify(
+        'should resolve source descriptions given a relative file system path',
+        async function () {
+          // relative to the working directory mocha runs from
+          const relativePath = path.relative(process.cwd(), fixturePath);
+          const result = await dereferenceArazzo(relativePath, {
+            dereference: {
+              strategyOpts: {
+                sourceDescriptions: true,
+              },
+            },
+          });
+
+          assert.strictEqual(result.meta.get('retrievalURI'), fixturePath);
+          assert.strictEqual(result.length, 2);
+
+          const sdParseResult = result.get(1) as ParseResultElement;
+          assert.strictEqual(
+            sdParseResult.meta.get('retrievalURI'),
+            path.join(fixturesPath, 'openapi.json'),
+          );
+          assert.strictEqual(sdParseResult.errors.length, 0);
+          assert.isTrue(isOpenApi3_1Element(sdParseResult.api));
+        },
+      );
+
       specify('should include source description metadata', async function () {
         const result = await dereferenceArazzo(fixturePath, {
           dereference: {

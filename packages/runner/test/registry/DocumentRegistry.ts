@@ -70,6 +70,38 @@ describe('DocumentRegistry', function () {
       assert.strictEqual(doc1, doc2);
     });
 
+    context('given relative file system path', function () {
+      // relative to the working directory mocha runs from
+      const relativePath = path.relative(process.cwd(), fixturePath);
+
+      specify('should resolve the path against the working directory', async function () {
+        const registry = new DocumentRegistry();
+        const doc = await registry.acquireEntryDocument(relativePath);
+
+        assert.instanceOf(doc, ArazzoDocument);
+        assert.strictEqual(doc.uri, fixturePath);
+      });
+
+      specify('should share the cache entry with the absolute path', async function () {
+        const registry = new DocumentRegistry();
+        const doc1 = await registry.acquireEntryDocument(relativePath);
+        const doc2 = await registry.acquire(fixturePath);
+
+        assert.strictEqual(doc1, doc2);
+      });
+
+      specify('should resolve source descriptions against the document', async function () {
+        const registry = new DocumentRegistry();
+        const entryDoc = await registry.acquireEntryDocument(relativePath);
+        const sourceURI = entryDoc.resolveSourceDescriptionURI('petstoreAPI');
+
+        assert.strictEqual(sourceURI, openapiFixturePath);
+
+        const openapiDoc = await registry.acquire(sourceURI!);
+        assert.instanceOf(openapiDoc, OpenAPIDocument);
+      });
+    });
+
     context('given entry document with OpenAPI source description', function () {
       specify('should acquire OpenAPI source document', async function () {
         const registry = new DocumentRegistry();

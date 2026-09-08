@@ -53,6 +53,8 @@ After dereferencing, all references are resolved inline, making the document sel
 - **`dereferenceOpenAPI(uri)`** - Dereferences from a file system path or HTTP(S) URL
 - **`dereferenceOpenAPIElement(element)`** - Dereferences a SpecLynx ApiDOM element
 
+A relative file system path resolves against the current working directory.
+
 ### Arazzo Documents
 
 #### From file

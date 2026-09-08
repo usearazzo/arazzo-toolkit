@@ -47,6 +47,20 @@ describe('dereferenceOpenAPI', function () {
       assert.isTrue(result.hasMetaProperty('retrievalURI'));
       assert.strictEqual(result.meta.get('retrievalURI'), rootFilePath);
     });
+
+    context('given relative file system path', function () {
+      // relative to the working directory mocha runs from
+      const relativePath = path.relative(process.cwd(), rootFilePath);
+
+      for (const source of [relativePath, `./${relativePath}`]) {
+        specify(`should resolve "${source}" against the working directory`, async function () {
+          const result = await dereferenceOpenAPI(source);
+
+          assert.isTrue(isOpenApi3_1Element(result.api));
+          assert.strictEqual(result.meta.get('retrievalURI'), rootFilePath);
+        });
+      }
+    });
   });
 
   context('given file system path to YAML file', function () {

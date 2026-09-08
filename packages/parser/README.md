@@ -37,6 +37,8 @@ The expression and condition parsers are pure syntax parsers: a string in, an AS
 
 Documents come back as ApiDOM, so source positions for editor tooling, formatting-preserving round trips, and one-call parsing of every source description an Arazzo document points at are all options away.
 
+A relative file system path resolves against the current working directory, so `./samples/onboarding.arazzo.yaml` and `path.resolve('samples/onboarding.arazzo.yaml')` are equivalent.
+
 ## Installation
 
 ```sh
