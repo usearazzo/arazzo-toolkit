@@ -59,7 +59,7 @@ class DocumentRegistry {
     // URLs, where a relative base resolves against the filesystem root instead of the document
     const absoluteURI =
       !url.isHttpUrl(uri) && url.getProtocol(uri) !== 'file' && !uri.startsWith('/')
-        ? url.resolve(url.cwd(), uri)
+        ? url.resolve(url.fromFileSystemPath(url.cwd()), uri)
         : uri;
     const canonicalURI = url.sanitize(url.stripHash(absoluteURI));
     const cachedDocument = this.#get(canonicalURI);

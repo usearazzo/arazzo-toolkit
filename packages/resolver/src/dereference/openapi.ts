@@ -96,7 +96,7 @@ export async function dereference(uri: string, options: Options = {}): Promise<P
   // messages below quote what the caller passed in.
   const retrievalURI =
     !url.isHttpUrl(uri) && url.getProtocol(uri) !== 'file' && !uri.startsWith('/')
-      ? url.resolve(url.cwd(), uri)
+      ? url.resolve(url.fromFileSystemPath(url.cwd()), uri)
       : uri;
 
   try {

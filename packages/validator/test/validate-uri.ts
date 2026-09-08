@@ -1,4 +1,6 @@
 import { assert } from 'chai';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -32,6 +34,30 @@ describe('validateURI', function () {
       assert.lengthOf(errors, 0);
     });
   });
+
+  context(
+    'given a relative path from a working directory with URI-reserved characters',
+    function () {
+      specify('should return no errors', async function () {
+        const cwd = process.cwd();
+        // ordinary in a directory name, reserved in a URI
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'arazzo#100%-'));
+        for (const name of ['arazzo-full-valid.yaml', 'petstore.openapi.json']) {
+          fs.copyFileSync(path.join(fixturesPath, name), path.join(tmpDir, name));
+        }
+        process.chdir(tmpDir);
+
+        try {
+          const diagnostics = await validateURI('arazzo-full-valid.yaml');
+          const errors = diagnostics.filter((d) => d.severity === DiagnosticSeverity.Error);
+          assert.lengthOf(errors, 0);
+        } finally {
+          process.chdir(cwd);
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+        }
+      });
+    },
+  );
 
   context('given an invalid Arazzo document', function () {
     specify('should return errors', async function () {

@@ -40,7 +40,8 @@ function canonicalizeDocumentURI(source: string): string {
   if (url.isHttpUrl(source)) {
     return source;
   }
-  return url.sanitize(url.resolve(url.cwd(), source));
+  // cwd is encoded first so a directory name containing `#`, `?` or `%` survives URL parsing
+  return url.sanitize(url.resolve(url.fromFileSystemPath(url.cwd()), source));
 }
 
 /**

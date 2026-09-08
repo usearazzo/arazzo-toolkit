@@ -178,7 +178,7 @@ export async function parse(
       url.getProtocol(source) !== 'file' &&
       !String(source).startsWith('/')
     ) {
-      source = url.resolve(url.cwd(), source);
+      source = url.resolve(url.fromFileSystemPath(url.cwd()), source);
     }
   }
 

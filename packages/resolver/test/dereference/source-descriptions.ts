@@ -1,8 +1,11 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { assert } from 'chai';
 import { isParseResultElement, ParseResultElement } from '@speclynx/apidom-datamodel';
+import { url } from '@speclynx/apidom-reference/configuration/empty';
 import { isArazzoSpecification1Element } from '@speclynx/apidom-ns-arazzo-1';
 import { isSwaggerElement } from '@speclynx/apidom-ns-openapi-2';
 import { isOpenApi3_0Element } from '@speclynx/apidom-ns-openapi-3-0';
@@ -14,6 +17,40 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesPath = path.join(__dirname, 'fixtures', 'source-descriptions');
 
 describe('dereferenceArazzo', function () {
+  context('given relative path from a working directory with URI-reserved characters', function () {
+    specify('should resolve the path and its source descriptions', async function () {
+      const cwd = process.cwd();
+      // ordinary in a directory name, reserved in a URI
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'arazzo#100%-'));
+      for (const name of ['arazzo-with-openapi.json', 'openapi.json']) {
+        fs.copyFileSync(path.join(fixturesPath, name), path.join(tmpDir, name));
+      }
+      process.chdir(tmpDir);
+
+      try {
+        const result = await dereferenceArazzo('arazzo-with-openapi.json', {
+          dereference: { strategyOpts: { sourceDescriptions: true } },
+        });
+
+        assert.strictEqual(
+          result.meta.get('retrievalURI'),
+          url.fromFileSystemPath(path.join(tmpDir, 'arazzo-with-openapi.json')),
+        );
+
+        const sdParseResult = result.get(1) as ParseResultElement;
+        assert.strictEqual(
+          sdParseResult.meta.get('retrievalURI'),
+          url.fromFileSystemPath(path.join(tmpDir, 'openapi.json')),
+        );
+        assert.strictEqual(sdParseResult.errors.length, 0);
+        assert.isTrue(isOpenApi3_1Element(sdParseResult.api));
+      } finally {
+        process.chdir(cwd);
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+  });
+
   context('given sourceDescriptions option', function () {
     context('when sourceDescriptions is false (default)', function () {
       const fixturePath = path.join(fixturesPath, 'arazzo-with-openapi.json');
