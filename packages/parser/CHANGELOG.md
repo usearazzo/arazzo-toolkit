@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.2](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.1...v1.0.1-alpha.2) (2026-09-08)
+
+### Bug Fixes
+
+- **parser:** resolve relative file paths against working directory ([#148](https://github.com/usearazzo/arazzo-toolkit/issues/148)) ([41b5b22](https://github.com/usearazzo/arazzo-toolkit/commit/41b5b22ff1940b13b5c6419ac8787c1d722483b2)), closes [#147](https://github.com/usearazzo/arazzo-toolkit/issues/147)
+
 ## 1.0.1-alpha.1 (2026-09-08)
 
 - refactor(validator)!: remove CLI layer and fix URI resolution (#11) ([76f8556](https://github.com/usearazzo/arazzo-toolkit/commit/76f8556bbece403c38dc8f68e020ab359fee563c)), closes [#11](https://github.com/usearazzo/arazzo-toolkit/issues/11)
