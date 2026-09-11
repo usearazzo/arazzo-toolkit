@@ -68,9 +68,8 @@ can be avoided by having an initial discussion.
 
 #### Branching model
 
-- Feature branches should be prefixed with `feature/`.
-- Bugfix branches should be prefixed with `fix/`.
-- After the forward slash, include a short description of what you're fixing. For example: `fix/fix-everything-that-was-broken`.
+- Prefix branches with the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) type of the work: `feat/`, `fix/`, `chore/`, `refactor/`, `test/`, `docs/`.
+- After the forward slash, include a short kebab-case description of what you're doing. For example: `fix/fix-everything-that-was-broken`.
 - If there's an issue filed that you're addressing in your branch, include the issue number directly after the forward slash. For example: `fix/1234-fix-all-the-other-things`.
 
 #### Committing
@@ -91,8 +90,7 @@ can be avoided by having an initial discussion.
 
 2.  **Fork & Branch:** Create a fork of the repository and make your changes in a descriptively named branch.
 
-3.  **Code & Test:** Write your code and add tests to cover your changes. Make sure the existing test suite passes.
-  *   See [DEVELOPMENT.md](DEVELOPMENT.md) for setup instructions, testing commands, and development workflows.
+3.  **Code & Test:** Write your code and add tests to cover your changes. Make sure the existing test suite passes (`nvm use && npm install && npm test`).
 
 4.  **Update Documentation:** If you've added a new feature or changed an existing one, be sure to update the relevant documentation.
 
