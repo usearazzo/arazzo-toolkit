@@ -5,6 +5,10 @@ node_modules/
 .vscode/settings.json
 isolate-*.log
 .log*
-.claude/
+!.claude/
+.claude/settings.local.json
+.claude/worktrees/*
+.claude/scheduled_tasks*
+!.claude/worktrees/.gitkeep
 .env
 .mcp.json

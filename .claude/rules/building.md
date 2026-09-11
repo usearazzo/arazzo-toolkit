@@ -1,0 +1,4 @@
+- Build individual modified packages: `cd packages/<package-name> && npm run build:es` (ES modules only, faster for development)
+- `runner`'s `build:es` first bundles `swagger-client` via webpack into `src/vendor/swagger-client.mjs` — it is slower than the other packages, and the bundle is a build artifact, not source
+- Full `npm run build` at the root runs `lerna run build` (declarations + ES + CJS + UMD browser bundle per package)
+- Set `CPU_CORES` env var to match your CPU cores for faster parallel builds (the root `.env` sets it to 2; npm does not load it automatically)
