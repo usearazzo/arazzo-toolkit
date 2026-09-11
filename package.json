@@ -24,7 +24,8 @@
     "clean": "lerna run clean",
     "test": "lerna run test",
     "link": "npm link --workspaces",
-    "unlink": "npm unlink --global @usearazzo/parser @usearazzo/resolver @usearazzo/runner"
+    "unlink": "npm unlink --global @usearazzo/parser @usearazzo/resolver @usearazzo/runner",
+    "prepare": "husky"
   },
   "repository": {
     "type": "git",
