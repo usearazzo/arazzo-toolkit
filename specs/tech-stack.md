@@ -16,7 +16,7 @@ Arazzo Toolkit uses the following technology choices based on the current reposi
 - **Primary language(s):** TypeScript (sources), emitted as JavaScript by Babel.
 - **Rendering model:** N/A (library).
 - **Deployment/runtime shape:** ISOMORPHIC — Node.js 20.10+ and evergreen browsers. Every package ships ESM, CommonJS, and a UMD browser bundle. The isomorphic contract is load-bearing: the validator canonicalizes URIs with isomorphic utilities because it is bundled for the browser, and the parser resolves relative input against the page URL there.
-- **Current maturity:** EARLY_STAGE — `1.0.1-alpha.2` in Lerna fixed mode. Only `@usearazzo/parser` is published; `resolver`, `validator`, and `runner` carry `"private": true` as a publish guard (the source is public; `private` only stops `lerna publish`).
+- **Current maturity:** EARLY_STAGE — `1.0.1-alpha.2` in Lerna fixed mode. `@usearazzo/parser` and `@usearazzo/resolver` are published; `validator` and `runner` carry `"private": true` as a publish guard (the source is public; `private` only stops `lerna publish`).
 
 ## Core Stack
 
@@ -65,7 +65,7 @@ Arazzo Toolkit uses the following technology choices based on the current reposi
 - **Deployment target:** npm registry (`@usearazzo` scope, public access, provenance) plus `unpkg` for the UMD bundles.
 - **Environment management:** none required. The only environment variable the tooling reads is `CPU_CORES`.
 - **Observability:** NONE_OBSERVED in the libraries. The runner exposes run state and a settled result per workflow; no logging or tracing hooks exist (tracked as #85).
-- **Error handling / resilience:** every package throws one typed error root for its layer — `ParseError`, `DereferenceError`, `ArazzoRunnerError` (with `ExecutionError`, `ClientError`, `CriterionError`, and others carrying string `reason` codes). The validator never throws for invalid documents; it returns diagnostics. Runner guards: `maxSteps` (1000, shared across the call tree), `maxWorkflowDepth` (32), cycle detection, cooperative cancellation via `AbortSignal`.
+- **Error handling / resilience:** every package throws typed errors for its layer — `ParseError`; `DereferenceError`, `ResolveError`, and `BundleError`, one per resolver operation; `ArazzoRunnerError` (with `ExecutionError`, `ClientError`, `CriterionError`, and others carrying string `reason` codes). The validator never throws for invalid documents; it returns diagnostics. Runner guards: `maxSteps` (1000, shared across the call tree), `maxWorkflowDepth` (32), cycle detection, cooperative cancellation via `AbortSignal`.
 
 ## Constraints and Conventions
 
@@ -73,7 +73,7 @@ Arazzo Toolkit uses the following technology choices based on the current reposi
 - **One engine, no disagreement.** The validator and runner must agree on any document they both see. A divergence is a bug against the shared ApiDOM foundation, not a per-tool interpretation.
 - **Public API is deliberate.** Every export from `src/index.ts` carries `@public` TSDoc for api-extractor, a README entry, and a typed error class where it can fail. Canonical reference documentation lives in `usearazzo/website` (`_reference/parser.md` today, which matches `src/index.ts` one to one; the validator rules reference will live there too). In-repo READMEs are intentionally short and link to the website.
 - **Layering is parse → resolve → validate → run.** `resolver` and `validator` depend on `parser`; `runner` depends on both. No package reaches into another via relative paths.
-- **The resolver takes paths and URLs only.** In-memory dereferencing is `@speclynx/apidom-reference`'s job (`dereferenceApiDOM`, `bundle`); callers with an object or string parse first and call `dereferenceArazzoElement` with `resolve.baseURI`. The resolver does not grow a `MemoryResolver`.
+- **The resolver takes paths and URLs only.** `dereference*`, `resolve*`, and `bundle*` read from the file system or HTTP(S). Callers with an object or string parse first and hand the `ParseResultElement` to `dereference*Element` or `resolve*Element` with `resolve.baseURI`. Bundling has no element variant: only a whole document bundles, mirroring `@speclynx/apidom-reference`, which has no `bundleApiDOM`. The resolver does not grow a `MemoryResolver`.
 - **Validator trust boundary is permissive by design.** `parseContext.fileAllowList` defaults to `['*']` and `sourceDescriptionsResolution` is on, matching the parser and `apidom-ls`. Callers validating untrusted documents opt down (`fileAllowList: []`, `sourceDescriptionsResolution: false`) per the README security section. This is a decision, not a gap.
 - **Runner architecture contract** (see `packages/runner/README.md` § Architecture): providers build indexes in one traversal, documents are containers; every layer reads run state but never mutates it, `WorkflowExecutor` is the single writer; collaborators are constructor-bound and injectable, with `forDocument()`-style derivation instead of per-call parameters.
 - **Authoring errors throw, failed runs resolve.** Malformed documents raise `ExecutionError` with a named `reason` before any live request; unmet `successCriteria` yield `status: 'failed'` as a normal result.
