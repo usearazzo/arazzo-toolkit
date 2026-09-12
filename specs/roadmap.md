@@ -18,14 +18,15 @@ Phases are intentionally small — each one is a shippable, independently review
 
 ## Phase 1 — Publish @usearazzo/resolver
 
-**Goal:** the resolver is installable from npm with a surface that will not change under consumers.  
+**Goal:** `@usearazzo/resolver` is on npm with a surface that covers dereferencing, resolving, and bundling for Arazzo and OpenAPI; the first release is cut by hand, every release after it goes through `release.yml` trusted publishing.  
 **Depends on:** none  
 **Priority:** High
 
+- Expose resolving and bundling next to the existing dereferencing functions, for both Arazzo and OpenAPI, from paths and URLs and from ApiDOM elements, each backed by the matching `@speclynx/apidom-reference` strategies and a typed error class. Rewrite the resolver invariant in `specs/tech-stack.md` to match.
 - Audit `packages/resolver/src/index.ts` against `packages/resolver/README.md`; every export carries `@public` and a README entry, `typescript:declaration` runs clean.
-- Document the in-memory contract in the README: the resolver takes paths and URLs; object and string input is parsed first and dereferenced via `dereferenceArazzoElement` with `resolve.baseURI`, since in-memory dereferencing belongs to `@speclynx/apidom-reference`.
-- Fix the `@usearazzo/parser` dependency pin to the published parser version.
-- Remove `"private": true` and confirm `release.yml` picks the package up with `--no-private`.
+- Cut the README down to the parser's concise shape and write `_reference/resolver.md` in `usearazzo/website` as the full reference, including the in-memory contract: the resolver takes paths and URLs; object and string input is parsed first and handed to the `*Element` variants with `resolve.baseURI`, since in-memory dereferencing belongs to `@speclynx/apidom-reference`.
+- Fix the `@usearazzo/parser` dependency pin to the published parser version and align the package version with `lerna.json`.
+- Remove `"private": true`; publish the first alpha manually, register the GitHub Actions trusted publisher for the package on npm, and confirm `release.yml` picks the package up with `--no-private` from then on.
 
 ## Phase 2 — Arazzo version conformance fixtures
 
