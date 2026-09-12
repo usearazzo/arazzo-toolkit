@@ -1,37 +1,48 @@
-import { Element, ParseResultElement } from '@speclynx/apidom-datamodel';
+import { Element, isParseResultElement } from '@speclynx/apidom-datamodel';
 import {
   url,
-  dereference as dereferenceURI,
-  dereferenceApiDOM as dereferenceApiDOMElement,
+  resolve as resolveURI,
+  resolveApiDOM as resolveApiDOMElement,
   mergeOptions,
-  UnmatchedDereferenceStrategyError,
+  UnmatchedResolveStrategyError,
 } from '@speclynx/apidom-reference/configuration/empty';
-import type { ApiDOMReferenceOptions } from '@speclynx/apidom-reference/configuration/empty';
+import type {
+  ApiDOMReferenceOptions,
+  ReferenceSet,
+} from '@speclynx/apidom-reference/configuration/empty';
 import OpenAPI2DereferenceStrategy from '@speclynx/apidom-reference/dereference/strategies/openapi-2';
 import OpenAPI3_0DereferenceStrategy from '@speclynx/apidom-reference/dereference/strategies/openapi-3-0';
 import OpenAPI3_1DereferenceStrategy from '@speclynx/apidom-reference/dereference/strategies/openapi-3-1';
+import OpenAPI2ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/openapi-2';
+import OpenAPI3_0ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/openapi-3-0';
+import OpenAPI3_1ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/openapi-3-1';
 import JSONParser from '@speclynx/apidom-reference/parse/parsers/json';
 import YAMLParser from '@speclynx/apidom-reference/parse/parsers/yaml-1-2';
 import BinaryParser from '@speclynx/apidom-reference/parse/parsers/binary';
 import type { PartialDeep } from 'type-fest';
 import { defaultParseOpenAPIOptions as parserDefaultOptions } from '@usearazzo/parser';
 
-import DereferenceError from '../errors/DereferenceError.ts';
+import ResolveError from '../errors/ResolveError.ts';
 import { elementContext, isOpenApiElement } from '../element-context/openapi.ts';
 
 /**
- * Options for dereferencing OpenAPI Documents.
+ * Options for resolving OpenAPI Documents.
  * @public
  */
 export type Options = PartialDeep<ApiDOMReferenceOptions>;
 
 /**
- * Default reference options for dereferencing OpenAPI Documents.
+ * Default reference options for resolving OpenAPI Documents.
  * @public
  */
 export const defaultOptions: Options = {
   resolve: {
     resolvers: [...parserDefaultOptions.resolve!.resolvers!],
+    strategies: [
+      new OpenAPI2ResolveStrategy(),
+      new OpenAPI3_0ResolveStrategy(),
+      new OpenAPI3_1ResolveStrategy(),
+    ],
   },
   parse: {
     parsers: [
@@ -53,31 +64,33 @@ export const defaultOptions: Options = {
 };
 
 /**
- * Dereferences an OpenAPI Document from a file system path or HTTP(S) URL.
+ * Resolves an OpenAPI Document from a file system path or HTTP(S) URL.
  *
- * This function resolves all JSON References ($ref) in the OpenAPI Document.
+ * This function collects the OpenAPI Document and every external document its
+ * JSON References ($ref) reach into a ReferenceSet. Nothing is dereferenced;
+ * the root reference of the set holds the parsed entry document.
  *
  * Supports OpenAPI 2.0 (Swagger), OpenAPI 3.0.x, and OpenAPI 3.1.x.
  *
  * @param uri - A file system path or HTTP(S) URL to the OpenAPI Document
  * @param options - Reference options (uses defaultOptions when not provided)
- * @returns A promise that resolves to the dereferenced OpenAPI Document as ApiDOM element
- * @throws DereferenceError - When dereferencing fails or document is not an OpenAPI specification. The original error is available via the `cause` property.
+ * @returns A promise that resolves to the ReferenceSet of the OpenAPI Document and its external references
+ * @throws ResolveError - When resolving fails or document is not an OpenAPI specification. The original error is available via the `cause` property.
  *
  * @example
- * // Dereference from file
- * const result = await dereferenceOpenAPI('/path/to/openapi.json');
+ * // Resolve from file
+ * const refSet = await resolveOpenAPI('/path/to/openapi.json');
  *
  * @example
- * // Dereference from URL
- * const result = await dereferenceOpenAPI('https://example.com/openapi.yaml');
+ * // Resolve from URL
+ * const refSet = await resolveOpenAPI('https://example.com/openapi.yaml');
  *
  * @example
- * // Dereference with custom options
- * const result = await dereferenceOpenAPI('/path/to/openapi.json', customReferenceOptions);
+ * // Resolve with custom options
+ * const refSet = await resolveOpenAPI('/path/to/openapi.json', customReferenceOptions);
  * @public
  */
-export async function dereference(uri: string, options: Options = {}): Promise<ParseResultElement> {
+export async function resolve(uri: string, options: Options = {}): Promise<ReferenceSet> {
   const mergedOptions = mergeOptions(defaultOptions as ApiDOMReferenceOptions, options);
 
   // a relative file system path resolves against the current working directory; the string
@@ -91,85 +104,89 @@ export async function dereference(uri: string, options: Options = {}): Promise<P
       : uri;
 
   try {
-    const parseResult = await dereferenceURI(retrievalURI, mergedOptions);
+    const refSet = await resolveURI(retrievalURI, mergedOptions);
+    const parseResult = refSet.rootRef?.value;
 
-    // validate that the dereferenced document is an OpenAPI specification
-    if (!isOpenApiElement(parseResult.api)) {
-      throw new UnmatchedDereferenceStrategyError(
-        `Could not find a dereference strategy that can dereference "${uri}" as an OpenAPI specification`,
+    // validate that the resolved document is an OpenAPI specification
+    if (!isParseResultElement(parseResult) || !isOpenApiElement(parseResult.api)) {
+      throw new UnmatchedResolveStrategyError(
+        `Could not find a resolve strategy that can resolve "${uri}" as an OpenAPI specification`,
       );
     }
 
     parseResult.meta.set('retrievalURI', retrievalURI);
-    return parseResult;
+    return refSet;
   } catch (error: unknown) {
-    throw new DereferenceError(`Failed to dereference OpenAPI Document at "${uri}"`, {
+    throw new ResolveError(`Failed to resolve OpenAPI Document at "${uri}"`, {
       cause: error,
     });
   }
 }
 
 /**
- * Dereferences an ApiDOM element representing an OpenAPI Document.
+ * Resolves an ApiDOM element representing an OpenAPI Document.
  *
- * This function resolves all JSON References ($ref) in the OpenAPI Document element.
+ * This function collects the element and every external document its
+ * JSON References ($ref) reach into a ReferenceSet. Nothing is dereferenced.
  *
  * Supported scenarios:
  * - ParseResultElement with retrievalURI metadata: baseURI derived automatically
  * - ParseResultElement without retrievalURI: requires `options.resolve.baseURI`
  * - Child element (e.g., PathItemElement) with parseResult in strategyOpts:
- *   requires `options.dereference.strategyOpts.parseResult` for component resolution,
+ *   requires `options.dereference.strategyOpts.parseResult`,
  *   and `options.resolve.baseURI` if parseResult lacks retrievalURI metadata
  *
  * @param element - An ApiDOM element (ParseResultElement or child element like PathItemElement)
  * @param options - Reference options (uses defaultOptions when not provided)
- * @returns A promise that resolves to the dereferenced element
- * @throws DereferenceError - When baseURI is required but not provided, or when dereferencing fails
+ * @returns A promise that resolves to the ReferenceSet of the element and its external references
+ * @throws ResolveError - When baseURI is required but not provided, or when resolving fails
  *
  * @example
- * Dereference ParseResultElement with retrievalURI (from file parsing)
+ * Resolve ParseResultElement with retrievalURI (from file parsing)
  * ```typescript
  * import { parseOpenAPI } from '@usearazzo/parser';
  *
  * const parseResult = await parseOpenAPI('/path/to/openapi.json');
- * const dereferenced = await dereferenceOpenAPIElement(parseResult);
+ * const refSet = await resolveOpenAPIElement(parseResult);
  * ```
  *
  * @example
- * Dereference ParseResultElement without retrievalURI (from inline parsing)
+ * Resolve ParseResultElement without retrievalURI (from inline parsing)
  * ```typescript
  * const parseResult = await parseOpenAPI({ openapi: '3.1.0', ... });
- * const dereferenced = await dereferenceOpenAPIElement(parseResult, {
+ * const refSet = await resolveOpenAPIElement(parseResult, {
  *   resolve: { baseURI: 'https://example.com/openapi.json' },
  * });
  * ```
  *
  * @example
- * Dereference child element (e.g., PathItemElement)
+ * Resolve child element (e.g., PathItemElement)
  * ```typescript
  * const parseResult = await parseOpenAPI('/path/to/openapi.json');
  * const pathItem = parseResult.api.paths.get('/users');
- * const dereferenced = await dereferenceOpenAPIElement(pathItem, {
+ * const refSet = await resolveOpenAPIElement(pathItem, {
  *   dereference: { strategyOpts: { parseResult } },
  * });
  * ```
  * @public
  */
-export async function dereferenceElement<T extends Element>(
+export async function resolveElement<T extends Element>(
   element: T,
   options: Options = {},
-): Promise<T> {
+): Promise<ReferenceSet> {
   const mergedOptions = mergeOptions(defaultOptions as ApiDOMReferenceOptions, options);
-  const { baseURI, mediaType, refSet, missingBaseURI } = elementContext(element, mergedOptions);
+  const { baseURI, mediaType, missingBaseURI } = elementContext(element, mergedOptions);
 
   if (missingBaseURI !== undefined) {
-    throw new DereferenceError(
-      `baseURI option is required when dereferencing a ${missingBaseURI} without retrievalURI metadata`,
+    throw new ResolveError(
+      `baseURI option is required when resolving a ${missingBaseURI} without retrievalURI metadata`,
     );
   }
 
+  // the seeded refSet is not forwarded: resolve strategies deep-merge their own ReferenceSet
+  // over `dereference.refSet`, which would strip the prototype off the seeded instance
   try {
-    return await dereferenceApiDOMElement(
+    return await resolveApiDOMElement(
       element,
       mergeOptions(mergedOptions, {
         resolve: {
@@ -178,10 +195,9 @@ export async function dereferenceElement<T extends Element>(
         parse: {
           mediaType,
         },
-        dereference: { refSet },
       }),
     );
   } catch (error: unknown) {
-    throw new DereferenceError('Failed to dereference OpenAPI Document', { cause: error });
+    throw new ResolveError('Failed to resolve OpenAPI Document', { cause: error });
   }
 }

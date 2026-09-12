@@ -1,0 +1,8 @@
+{
+  "name": "limit",
+  "in": "query",
+  "description": "Maximum number of users to return",
+  "schema": {
+    "type": "integer"
+  }
+}
