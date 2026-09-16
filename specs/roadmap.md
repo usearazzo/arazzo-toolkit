@@ -16,7 +16,7 @@ Phases are intentionally small — each one is a shippable, independently review
 
 **Lifecycle:** when a phase ships, append ` ✅` (a single space followed by the U+2705 checkmark) to its `## Phase N — Title` heading and leave the rest of the block in place — do not delete or renumber. The leading space is load-bearing — completion-verify steps `grep -F` for the exact ` ✅` suffix. Phase numbers are stable identifiers; completed phases stay in the file as history. New work takes the next number after the largest existing phase.
 
-## Phase 1 — Publish @usearazzo/resolver ✅
+## Phase 1 — Publish @usearazzo/resolver
 
 **Goal:** `@usearazzo/resolver` is on npm with a surface that covers dereferencing, resolving, and bundling for Arazzo and OpenAPI; the first release is cut by hand, every release after it goes through `release.yml` trusted publishing.  
 **Depends on:** none  
