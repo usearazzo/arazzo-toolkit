@@ -19,11 +19,19 @@ import OpenAPI3_1ResolveStrategy from '@speclynx/apidom-reference/resolve/strate
 import JSONParser from '@speclynx/apidom-reference/parse/parsers/json';
 import YAMLParser from '@speclynx/apidom-reference/parse/parsers/yaml-1-2';
 import BinaryParser from '@speclynx/apidom-reference/parse/parsers/binary';
+import { isSwaggerElement, mediaTypes as openApi2MediaTypes } from '@speclynx/apidom-ns-openapi-2';
+import {
+  isOpenApi3_0Element,
+  mediaTypes as openApi3_0MediaTypes,
+} from '@speclynx/apidom-ns-openapi-3-0';
+import {
+  isOpenApi3_1Element,
+  mediaTypes as openApi3_1MediaTypes,
+} from '@speclynx/apidom-ns-openapi-3-1';
 import type { PartialDeep } from 'type-fest';
 import { defaultParseOpenAPIOptions as parserDefaultOptions } from '@usearazzo/parser';
 
 import ResolveError from '../errors/ResolveError.ts';
-import { elementContext, isOpenApiElement } from '../element-context/openapi.ts';
 
 /**
  * Options for resolving OpenAPI Documents.
@@ -175,16 +183,33 @@ export async function resolveElement<T extends Element>(
   options: Options = {},
 ): Promise<ReferenceSet> {
   const mergedOptions = mergeOptions(defaultOptions as ApiDOMReferenceOptions, options);
-  const { baseURI, mediaType, missingBaseURI } = elementContext(element, mergedOptions);
+  let baseURI = mergedOptions.resolve?.baseURI;
+  let mediaType: string = 'text/plain';
 
-  if (missingBaseURI !== undefined) {
-    throw new ResolveError(
-      `baseURI option is required when resolving a ${missingBaseURI} without retrievalURI metadata`,
-    );
+  if (isParseResultElement(element)) {
+    mediaType = inferOpenApiMediaType(element.api);
+    if (element.hasMetaProperty('retrievalURI')) {
+      baseURI = element.meta.get('retrievalURI') as string;
+    } else if (!baseURI) {
+      throw new ResolveError(
+        'baseURI option is required when resolving a ParseResultElement without retrievalURI metadata',
+      );
+    }
+  } else if (isParseResultElement(mergedOptions.dereference?.strategyOpts?.parseResult)) {
+    // a child element resolves against the URI of its root document
+    const { parseResult } = mergedOptions.dereference.strategyOpts;
+
+    mediaType = inferOpenApiMediaType(parseResult.api);
+    if (parseResult.hasMetaProperty('retrievalURI')) {
+      baseURI = parseResult.meta.get('retrievalURI') as string;
+    } else if (!baseURI) {
+      throw new ResolveError(
+        'baseURI option is required when resolving a child element without retrievalURI metadata',
+      );
+    }
   }
 
-  // the seeded refSet is not forwarded: resolve strategies deep-merge their own ReferenceSet
-  // over `dereference.refSet`, which would strip the prototype off the seeded instance
+  // no ReferenceSet is seeded: resolve strategies always build their own
   try {
     return await resolveApiDOMElement(
       element,
@@ -200,4 +225,27 @@ export async function resolveElement<T extends Element>(
   } catch (error: unknown) {
     throw new ResolveError('Failed to resolve OpenAPI Document', { cause: error });
   }
+}
+
+/**
+ * Checks if the element is a valid OpenAPI specification element.
+ */
+function isOpenApiElement(element: unknown): boolean {
+  return isSwaggerElement(element) || isOpenApi3_0Element(element) || isOpenApi3_1Element(element);
+}
+
+/**
+ * Gets the appropriate mediaType for an OpenAPI element.
+ */
+function inferOpenApiMediaType(element: unknown): string {
+  if (isSwaggerElement(element)) {
+    return openApi2MediaTypes.latest();
+  }
+  if (isOpenApi3_0Element(element)) {
+    return openApi3_0MediaTypes.latest();
+  }
+  if (isOpenApi3_1Element(element)) {
+    return openApi3_1MediaTypes.latest();
+  }
+  return 'text/plain';
 }

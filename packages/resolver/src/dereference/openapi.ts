@@ -1,9 +1,11 @@
-import { Element, ParseResultElement } from '@speclynx/apidom-datamodel';
+import { Element, isParseResultElement, ParseResultElement } from '@speclynx/apidom-datamodel';
 import {
   url,
   dereference as dereferenceURI,
   dereferenceApiDOM as dereferenceApiDOMElement,
   mergeOptions,
+  ReferenceSet,
+  Reference,
   UnmatchedDereferenceStrategyError,
 } from '@speclynx/apidom-reference/configuration/empty';
 import type { ApiDOMReferenceOptions } from '@speclynx/apidom-reference/configuration/empty';
@@ -13,11 +15,19 @@ import OpenAPI3_1DereferenceStrategy from '@speclynx/apidom-reference/dereferenc
 import JSONParser from '@speclynx/apidom-reference/parse/parsers/json';
 import YAMLParser from '@speclynx/apidom-reference/parse/parsers/yaml-1-2';
 import BinaryParser from '@speclynx/apidom-reference/parse/parsers/binary';
+import { isSwaggerElement, mediaTypes as openApi2MediaTypes } from '@speclynx/apidom-ns-openapi-2';
+import {
+  isOpenApi3_0Element,
+  mediaTypes as openApi3_0MediaTypes,
+} from '@speclynx/apidom-ns-openapi-3-0';
+import {
+  isOpenApi3_1Element,
+  mediaTypes as openApi3_1MediaTypes,
+} from '@speclynx/apidom-ns-openapi-3-1';
 import type { PartialDeep } from 'type-fest';
 import { defaultParseOpenAPIOptions as parserDefaultOptions } from '@usearazzo/parser';
 
 import DereferenceError from '../errors/DereferenceError.ts';
-import { elementContext, isOpenApiElement } from '../element-context/openapi.ts';
 
 /**
  * Options for dereferencing OpenAPI Documents.
@@ -160,12 +170,50 @@ export async function dereferenceElement<T extends Element>(
   options: Options = {},
 ): Promise<T> {
   const mergedOptions = mergeOptions(defaultOptions as ApiDOMReferenceOptions, options);
-  const { baseURI, mediaType, refSet, missingBaseURI } = elementContext(element, mergedOptions);
+  const refSet = mergedOptions.dereference?.refSet ?? new ReferenceSet();
+  let baseURI = mergedOptions.resolve?.baseURI;
+  let mediaType: string = 'text/plain';
 
-  if (missingBaseURI !== undefined) {
-    throw new DereferenceError(
-      `baseURI option is required when dereferencing a ${missingBaseURI} without retrievalURI metadata`,
-    );
+  if (refSet.size === 0) {
+    if (isParseResultElement(element)) {
+      if (isOpenApiElement(element.api)) {
+        mediaType = inferOpenApiMediaType(element.api);
+      }
+      if (element.hasMetaProperty('retrievalURI')) {
+        baseURI = element.meta.get('retrievalURI') as string;
+      } else if (!baseURI) {
+        throw new DereferenceError(
+          'baseURI option is required when dereferencing a ParseResultElement without retrievalURI metadata',
+        );
+      }
+    } else if (isParseResultElement(mergedOptions.dereference?.strategyOpts?.parseResult)) {
+      // dereferencing child element requires refSet for component resolution
+      const { parseResult } = mergedOptions.dereference.strategyOpts;
+      let rootURI: string;
+
+      if (isOpenApiElement(parseResult.api)) {
+        mediaType = inferOpenApiMediaType(parseResult.api);
+      }
+
+      if (parseResult.hasMetaProperty('retrievalURI')) {
+        rootURI = parseResult.meta.get('retrievalURI') as string;
+      } else if (baseURI) {
+        rootURI = baseURI;
+      } else {
+        throw new DereferenceError(
+          'baseURI option is required when dereferencing a child element without retrievalURI metadata',
+        );
+      }
+
+      const elementReference = new Reference({
+        uri: `${rootURI}#fragment`,
+        value: new ParseResultElement([element]),
+      });
+      const rootReference = new Reference({ uri: rootURI, value: parseResult });
+
+      refSet.add(elementReference).add(rootReference);
+      baseURI = rootURI;
+    }
   }
 
   try {
@@ -184,4 +232,27 @@ export async function dereferenceElement<T extends Element>(
   } catch (error: unknown) {
     throw new DereferenceError('Failed to dereference OpenAPI Document', { cause: error });
   }
+}
+
+/**
+ * Checks if the element is a valid OpenAPI specification element.
+ */
+function isOpenApiElement(element: unknown): boolean {
+  return isSwaggerElement(element) || isOpenApi3_0Element(element) || isOpenApi3_1Element(element);
+}
+
+/**
+ * Gets the appropriate mediaType for an OpenAPI element.
+ */
+function inferOpenApiMediaType(element: unknown): string {
+  if (isSwaggerElement(element)) {
+    return openApi2MediaTypes.latest();
+  }
+  if (isOpenApi3_0Element(element)) {
+    return openApi3_0MediaTypes.latest();
+  }
+  if (isOpenApi3_1Element(element)) {
+    return openApi3_1MediaTypes.latest();
+  }
+  return 'text/plain';
 }

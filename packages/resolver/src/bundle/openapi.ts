@@ -18,11 +18,13 @@ import OpenAPI3_1ResolveStrategy from '@speclynx/apidom-reference/resolve/strate
 import JSONParser from '@speclynx/apidom-reference/parse/parsers/json';
 import YAMLParser from '@speclynx/apidom-reference/parse/parsers/yaml-1-2';
 import BinaryParser from '@speclynx/apidom-reference/parse/parsers/binary';
+import { isSwaggerElement } from '@speclynx/apidom-ns-openapi-2';
+import { isOpenApi3_0Element } from '@speclynx/apidom-ns-openapi-3-0';
+import { isOpenApi3_1Element } from '@speclynx/apidom-ns-openapi-3-1';
 import type { PartialDeep } from 'type-fest';
 import { defaultParseOpenAPIOptions as parserDefaultOptions } from '@usearazzo/parser';
 
 import BundleError from '../errors/BundleError.ts';
-import { isOpenApiElement } from '../element-context/openapi.ts';
 
 /**
  * Options for bundling OpenAPI Documents.
@@ -125,4 +127,11 @@ export async function bundle(uri: string, options: Options = {}): Promise<ParseR
       cause: error,
     });
   }
+}
+
+/**
+ * Checks if the element is a valid OpenAPI specification element.
+ */
+function isOpenApiElement(element: unknown): boolean {
+  return isSwaggerElement(element) || isOpenApi3_0Element(element) || isOpenApi3_1Element(element);
 }

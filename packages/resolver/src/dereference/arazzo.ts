@@ -1,9 +1,11 @@
-import { Element, ParseResultElement } from '@speclynx/apidom-datamodel';
+import { Element, isParseResultElement, ParseResultElement } from '@speclynx/apidom-datamodel';
 import {
   url,
   dereference as dereferenceURI,
   dereferenceApiDOM as dereferenceApiDOMElement,
   mergeOptions,
+  ReferenceSet,
+  Reference,
   UnmatchedDereferenceStrategyError,
 } from '@speclynx/apidom-reference/configuration/empty';
 import type { ApiDOMReferenceOptions } from '@speclynx/apidom-reference/configuration/empty';
@@ -14,12 +16,11 @@ import OpenAPI31DereferenceStrategy from '@speclynx/apidom-reference/dereference
 import JSONParser from '@speclynx/apidom-reference/parse/parsers/json';
 import YAMLParser from '@speclynx/apidom-reference/parse/parsers/yaml-1-2';
 import BinaryParser from '@speclynx/apidom-reference/parse/parsers/binary';
-import { isArazzoSpecification1Element } from '@speclynx/apidom-ns-arazzo-1';
+import { isArazzoSpecification1Element, mediaTypes } from '@speclynx/apidom-ns-arazzo-1';
 import type { PartialDeep } from 'type-fest';
 import { defaultParseArazzoOptions as parserDefaultOptions } from '@usearazzo/parser';
 
 import DereferenceError from '../errors/DereferenceError.ts';
-import { elementContext } from '../element-context/arazzo.ts';
 
 /**
  * Options for dereferencing Arazzo Documents.
@@ -194,12 +195,50 @@ export async function dereferenceElement<T extends Element>(
   options: Options = {},
 ): Promise<T> {
   const mergedOptions = mergeOptions(defaultOptions as ApiDOMReferenceOptions, options);
-  const { baseURI, mediaType, refSet, missingBaseURI } = elementContext(element, mergedOptions);
+  const refSet = mergedOptions.dereference?.refSet ?? new ReferenceSet();
+  let baseURI = mergedOptions.resolve?.baseURI;
+  let mediaType: string = 'text/plain';
 
-  if (missingBaseURI !== undefined) {
-    throw new DereferenceError(
-      `baseURI option is required when dereferencing a ${missingBaseURI} without retrievalURI metadata`,
-    );
+  if (refSet.size === 0) {
+    if (isParseResultElement(element)) {
+      if (isArazzoSpecification1Element(element.api)) {
+        mediaType = mediaTypes.latest();
+      }
+      if (element.hasMetaProperty('retrievalURI')) {
+        baseURI = element.meta.get('retrievalURI') as string;
+      } else if (!baseURI) {
+        throw new DereferenceError(
+          'baseURI option is required when dereferencing a ParseResultElement without retrievalURI metadata',
+        );
+      }
+    } else if (isParseResultElement(mergedOptions.dereference?.strategyOpts?.parseResult)) {
+      // dereferencing child element requires refSet for component resolution
+      const { parseResult } = mergedOptions.dereference.strategyOpts;
+      let rootURI: string;
+
+      if (isArazzoSpecification1Element(parseResult.api)) {
+        mediaType = mediaTypes.latest();
+      }
+
+      if (parseResult.hasMetaProperty('retrievalURI')) {
+        rootURI = parseResult.meta.get('retrievalURI') as string;
+      } else if (baseURI) {
+        rootURI = baseURI;
+      } else {
+        throw new DereferenceError(
+          'baseURI option is required when dereferencing a child element without retrievalURI metadata',
+        );
+      }
+
+      const elementReference = new Reference({
+        uri: `${rootURI}#fragment`,
+        value: new ParseResultElement([element]),
+      });
+      const rootReference = new Reference({ uri: rootURI, value: parseResult });
+
+      refSet.add(elementReference).add(rootReference);
+      baseURI = rootURI;
+    }
   }
 
   try {

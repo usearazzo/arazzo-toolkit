@@ -21,12 +21,11 @@ import OpenAPI31ResolveStrategy from '@speclynx/apidom-reference/resolve/strateg
 import JSONParser from '@speclynx/apidom-reference/parse/parsers/json';
 import YAMLParser from '@speclynx/apidom-reference/parse/parsers/yaml-1-2';
 import BinaryParser from '@speclynx/apidom-reference/parse/parsers/binary';
-import { isArazzoSpecification1Element } from '@speclynx/apidom-ns-arazzo-1';
+import { isArazzoSpecification1Element, mediaTypes } from '@speclynx/apidom-ns-arazzo-1';
 import type { PartialDeep } from 'type-fest';
 import { defaultParseArazzoOptions as parserDefaultOptions } from '@usearazzo/parser';
 
 import ResolveError from '../errors/ResolveError.ts';
-import { elementContext } from '../element-context/arazzo.ts';
 
 /**
  * Options for resolving Arazzo Documents.
@@ -180,16 +179,33 @@ export async function resolveElement<T extends Element>(
   options: Options = {},
 ): Promise<ReferenceSet> {
   const mergedOptions = mergeOptions(defaultOptions as ApiDOMReferenceOptions, options);
-  const { baseURI, mediaType, missingBaseURI } = elementContext(element, mergedOptions);
+  let baseURI = mergedOptions.resolve?.baseURI;
+  let mediaType: string = 'text/plain';
 
-  if (missingBaseURI !== undefined) {
-    throw new ResolveError(
-      `baseURI option is required when resolving a ${missingBaseURI} without retrievalURI metadata`,
-    );
+  if (isParseResultElement(element)) {
+    mediaType = isArazzoSpecification1Element(element.api) ? mediaTypes.latest() : 'text/plain';
+    if (element.hasMetaProperty('retrievalURI')) {
+      baseURI = element.meta.get('retrievalURI') as string;
+    } else if (!baseURI) {
+      throw new ResolveError(
+        'baseURI option is required when resolving a ParseResultElement without retrievalURI metadata',
+      );
+    }
+  } else if (isParseResultElement(mergedOptions.dereference?.strategyOpts?.parseResult)) {
+    // a child element resolves against the URI of its root document
+    const { parseResult } = mergedOptions.dereference.strategyOpts;
+
+    mediaType = isArazzoSpecification1Element(parseResult.api) ? mediaTypes.latest() : 'text/plain';
+    if (parseResult.hasMetaProperty('retrievalURI')) {
+      baseURI = parseResult.meta.get('retrievalURI') as string;
+    } else if (!baseURI) {
+      throw new ResolveError(
+        'baseURI option is required when resolving a child element without retrievalURI metadata',
+      );
+    }
   }
 
-  // the seeded refSet is not forwarded: resolve strategies deep-merge their own ReferenceSet
-  // over `dereference.refSet`, which would strip the prototype off the seeded instance
+  // no ReferenceSet is seeded: resolve strategies always build their own
   try {
     return await resolveApiDOMElement(
       element,
