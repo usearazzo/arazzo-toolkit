@@ -97,9 +97,9 @@ If no candidates qualify, omit this section.
 
 ## Phase 6 — Review the edit
 
-Immediately after the `specs/lessons.md` edit lands, invoke the built-in `review` skill via the `Skill` tool with argument `local changes`. The `review` skill handles a working-tree diff when given that argument — treat it as a normal capability of the skill.
+Immediately after the `specs/lessons.md` edit lands, invoke the built-in `review` skill via the `Skill` tool with argument `low local changes`. The `review` skill handles a working-tree diff when given that argument — treat it as a normal capability of the skill.
 
-- Invoke the `Skill` tool with `skill: "code-review"` and `args: "local changes"`.
+- Invoke the `Skill` tool with `skill: "code-review"` and `args: "low local changes"`. The explicit `low` level is load-bearing — omitting it makes the skill reuse whatever level was last typed interactively in the session (including expensive `high`/`max`/`ultra` tiers), which this automated sanity-check pass does not need.
 - Do not skip or defer this step; it is part of the skill's contract.
 - Do **not** narrate the invocation mechanism, describe the skill as PR-oriented, explain arguments, or frame the call as a workaround. Just run it and report its findings.
 - Surface the reviewer's findings verbatim; do not summarise them away.

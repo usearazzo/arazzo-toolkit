@@ -215,7 +215,7 @@ For very large diffs (≥ ~2000 lines or ≥ ~30 files), pass the subagent the c
 
 ### A. Built-in `/code-review` skill
 
-Invoke the `Skill` tool with `skill: "code-review"` and ``args: "branch changes against main (`git diff main...HEAD`)"``. The string is best-effort — `/code-review` is built around PR URLs and a "local changes" working-tree mode, so it may interpret a branch-vs-main scope fluidly or report it has nothing concrete to review; either result is fine. Surface whatever it returns verbatim, do not narrate the invocation mechanism, do not retry. The load-bearing reviewer is the three-perspective deep review in **B** below; `/code-review` here is a sanity-check pass. If the invocation itself fails (tool error, unreachable), surface the error and continue to B.
+Invoke the `Skill` tool with `skill: "code-review"` and ``args: "low branch changes against main (`git diff main...HEAD`)"``. The string is best-effort — `/code-review` is built around PR URLs and a "local changes" working-tree mode, so it may interpret a branch-vs-main scope fluidly or report it has nothing concrete to review; either result is fine. The leading `low` is load-bearing — without an explicit level the skill reuses whatever level was last typed interactively in the session (including expensive `high`/`max`/`ultra` tiers), which this sanity-check pass does not need. Surface whatever it returns verbatim, do not narrate the invocation mechanism, do not retry. The load-bearing reviewer is the three-perspective deep review in **B** below; `/code-review` here is a sanity-check pass. If the invocation itself fails (tool error, unreachable), surface the error and continue to B.
 
 ### B. Three-perspective deep review
 
@@ -255,7 +255,7 @@ For blockers the user declines to fix, confirm explicitly that you should procee
 After fix-ups:
 
 - Re-run the `validation.md` numbered checks whose covered area intersects the fix-up diff (don't re-run the whole Verify group unless every check is plausibly affected)
-- Re-invoke `/code-review` at most **once**, and only if any fix-up commit touched code (not docs/config-only paths). Do **not** re-spawn the deep-review subagent — it fires once per skill run.
+- Re-invoke `/code-review` at most **once**, at the same explicit `low` level as **A**, and only if any fix-up commit touched code (not docs/config-only paths). Do **not** re-spawn the deep-review subagent — it fires once per skill run.
 
 `TaskUpdate` the `Pre-push review` task → `completed`.
 
