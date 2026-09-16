@@ -14,7 +14,7 @@ The monorepo contains 4 packages under `packages/`, published under the `@useara
 
 1. **`parser`** (`@usearazzo/parser`) — parses Arazzo and OpenAPI documents from a file path, URL, string or object into ApiDOM. Entry points: `parseArazzo`, `parseOpenAPI`, plus `parseRuntimeExpression` and `parseCriterionCondition` (thin wrappers over `@swaggerexpert/arazzo-runtime-expression` / `@swaggerexpert/arazzo-criterion`). Throws `ParseError`. Ships an in-memory resolver so object/string input can still resolve relative source description URLs against `resolve.baseURI`.
 
-2. **`resolver`** (`@usearazzo/resolver`) — dereferences Arazzo and OpenAPI documents via `@speclynx/apidom-reference`. Entry points: `dereferenceArazzo`, `dereferenceOpenAPI` and their `*Element` variants. Throws `DereferenceError`.
+2. **`resolver`** (`@usearazzo/resolver`) — dereferences, resolves and bundles Arazzo and OpenAPI documents via `@speclynx/apidom-reference`. Entry points: `dereferenceArazzo`, `dereferenceOpenAPI`, `resolveArazzo`, `resolveOpenAPI` and their `*Element` variants, plus `bundleArazzo` and `bundleOpenAPI` (path/URL only). Throws `DereferenceError`, `ResolveError` or `BundleError`.
 
 3. **`validator`** (`@usearazzo/validator`) — validates and lints Arazzo documents via the `@speclynx/apidom-ls` language service. Entry points: `validate` (from a `TextDocument`) and `validateURI` (from a path/URL). Returns LSP `Diagnostic` objects.
 
@@ -27,7 +27,7 @@ The monorepo contains 4 packages under `packages/`, published under the `@useara
    - `expression/`, `criterion/`, `resolver/`, `state/` — runtime expression evaluation, criterion evaluators (simple, regex, JSONPath, XPath), parameter/request-body/output resolvers, and `WorkflowExecutionState`.
    - `vendor/swagger-client.mjs` — a webpack bundle of `swagger-client` built by `build:swagger-client` (runs as part of `build:es`); it is a build artifact, don't edit it.
 
-Only `@usearazzo/parser` is currently published; `resolver`, `validator` and `runner` are marked private and skipped by lerna on publish.
+`@usearazzo/parser` and `@usearazzo/resolver` are public packages released by lerna; `validator` and `runner` are marked private and skipped on publish.
 
 ### Key Concepts
 
