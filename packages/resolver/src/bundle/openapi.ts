@@ -9,21 +9,12 @@ import type { ApiDOMReferenceOptions } from '@speclynx/apidom-reference/configur
 import OpenAPI2BundleStrategy from '@speclynx/apidom-reference/bundle/strategies/openapi-2';
 import OpenAPI3_0BundleStrategy from '@speclynx/apidom-reference/bundle/strategies/openapi-3-0';
 import OpenAPI3_1BundleStrategy from '@speclynx/apidom-reference/bundle/strategies/openapi-3-1';
-import OpenAPI2DereferenceStrategy from '@speclynx/apidom-reference/dereference/strategies/openapi-2';
-import OpenAPI3_0DereferenceStrategy from '@speclynx/apidom-reference/dereference/strategies/openapi-3-0';
-import OpenAPI3_1DereferenceStrategy from '@speclynx/apidom-reference/dereference/strategies/openapi-3-1';
-import OpenAPI2ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/openapi-2';
-import OpenAPI3_0ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/openapi-3-0';
-import OpenAPI3_1ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/openapi-3-1';
-import JSONParser from '@speclynx/apidom-reference/parse/parsers/json';
-import YAMLParser from '@speclynx/apidom-reference/parse/parsers/yaml-1-2';
-import BinaryParser from '@speclynx/apidom-reference/parse/parsers/binary';
 import { isSwaggerElement } from '@speclynx/apidom-ns-openapi-2';
 import { isOpenApi3_0Element } from '@speclynx/apidom-ns-openapi-3-0';
 import { isOpenApi3_1Element } from '@speclynx/apidom-ns-openapi-3-1';
 import type { PartialDeep } from 'type-fest';
-import { defaultParseOpenAPIOptions as parserDefaultOptions } from '@usearazzo/parser';
 
+import { defaultOptions as dereferenceDefaultOptions } from '../dereference/openapi.ts';
 import BundleError from '../errors/BundleError.ts';
 
 /**
@@ -34,33 +25,18 @@ export type Options = PartialDeep<ApiDOMReferenceOptions>;
 
 /**
  * Default reference options for bundling OpenAPI Documents.
+ *
+ * Bundling reads only the bundle strategies plus the resolvers and parsers that fetch
+ * external documents, so no resolve or dereference strategies are configured.
  * @public
  */
 export const defaultOptions: Options = {
   resolve: {
-    resolvers: [...parserDefaultOptions.resolve!.resolvers!],
-    strategies: [
-      new OpenAPI2ResolveStrategy(),
-      new OpenAPI3_0ResolveStrategy(),
-      new OpenAPI3_1ResolveStrategy(),
-    ],
+    resolvers: [...dereferenceDefaultOptions.resolve!.resolvers!],
   },
   parse: {
-    parsers: [
-      ...parserDefaultOptions.parse!.parsers!,
-      new JSONParser({ allowEmpty: false }),
-      new YAMLParser({ allowEmpty: false }),
-      new BinaryParser({ allowEmpty: false }),
-    ],
-    parserOpts: { ...parserDefaultOptions.parse!.parserOpts },
-  },
-  dereference: {
-    strategies: [
-      new OpenAPI2DereferenceStrategy(),
-      new OpenAPI3_0DereferenceStrategy(),
-      new OpenAPI3_1DereferenceStrategy(),
-    ],
-    strategyOpts: {},
+    parsers: [...dereferenceDefaultOptions.parse!.parsers!],
+    parserOpts: { ...dereferenceDefaultOptions.parse!.parserOpts },
   },
   bundle: {
     strategies: [

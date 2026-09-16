@@ -10,21 +10,10 @@ import Arazzo1BundleStrategy from '@speclynx/apidom-reference/bundle/strategies/
 import OpenAPI2BundleStrategy from '@speclynx/apidom-reference/bundle/strategies/openapi-2';
 import OpenAPI30BundleStrategy from '@speclynx/apidom-reference/bundle/strategies/openapi-3-0';
 import OpenAPI31BundleStrategy from '@speclynx/apidom-reference/bundle/strategies/openapi-3-1';
-import Arazzo1DereferenceStrategy from '@speclynx/apidom-reference/dereference/strategies/arazzo-1';
-import OpenAPI2DereferenceStrategy from '@speclynx/apidom-reference/dereference/strategies/openapi-2';
-import OpenAPI30DereferenceStrategy from '@speclynx/apidom-reference/dereference/strategies/openapi-3-0';
-import OpenAPI31DereferenceStrategy from '@speclynx/apidom-reference/dereference/strategies/openapi-3-1';
-import Arazzo1ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/arazzo-1';
-import OpenAPI2ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/openapi-2';
-import OpenAPI30ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/openapi-3-0';
-import OpenAPI31ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/openapi-3-1';
-import JSONParser from '@speclynx/apidom-reference/parse/parsers/json';
-import YAMLParser from '@speclynx/apidom-reference/parse/parsers/yaml-1-2';
-import BinaryParser from '@speclynx/apidom-reference/parse/parsers/binary';
 import { isArazzoSpecification1Element } from '@speclynx/apidom-ns-arazzo-1';
 import type { PartialDeep } from 'type-fest';
-import { defaultParseArazzoOptions as parserDefaultOptions } from '@usearazzo/parser';
 
+import { defaultOptions as dereferenceDefaultOptions } from '../dereference/arazzo.ts';
 import BundleError from '../errors/BundleError.ts';
 
 /**
@@ -35,37 +24,18 @@ export type Options = PartialDeep<ApiDOMReferenceOptions>;
 
 /**
  * Default reference options for bundling Arazzo Documents.
+ *
+ * Bundling reads only the bundle strategies plus the resolvers and parsers that fetch
+ * external documents, so no resolve or dereference strategies are configured.
  * @public
  */
 export const defaultOptions: Options = {
   resolve: {
-    resolvers: [...parserDefaultOptions.resolve!.resolvers!],
-    strategies: [
-      new Arazzo1ResolveStrategy(),
-      new OpenAPI2ResolveStrategy(),
-      new OpenAPI30ResolveStrategy(),
-      new OpenAPI31ResolveStrategy(),
-    ],
+    resolvers: [...dereferenceDefaultOptions.resolve!.resolvers!],
   },
   parse: {
-    parsers: [
-      ...parserDefaultOptions.parse!.parsers!,
-      new JSONParser({ allowEmpty: false }),
-      new YAMLParser({ allowEmpty: false }),
-      new BinaryParser({ allowEmpty: false }),
-    ],
-    parserOpts: { ...parserDefaultOptions.parse!.parserOpts },
-  },
-  dereference: {
-    strategies: [
-      new Arazzo1DereferenceStrategy(),
-      new OpenAPI2DereferenceStrategy(),
-      new OpenAPI30DereferenceStrategy(),
-      new OpenAPI31DereferenceStrategy(),
-    ],
-    strategyOpts: {
-      sourceDescriptions: false,
-    },
+    parsers: [...dereferenceDefaultOptions.parse!.parsers!],
+    parserOpts: { ...dereferenceDefaultOptions.parse!.parserOpts },
   },
   bundle: {
     strategies: [
