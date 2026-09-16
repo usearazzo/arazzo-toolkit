@@ -1,7 +1,6 @@
 {
   "name": "@usearazzo/resolver",
-  "version": "1.0.1-alpha.0",
-  "private": true,
+  "version": "1.0.1-alpha.2",
   "description": "Resolver for Arazzo Documents.",
   "keywords": [
     "arazzo",
@@ -53,7 +52,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@babel/runtime-corejs3": "^8.0.0",
-    "@usearazzo/parser": "1.0.1-alpha.0",
+    "@usearazzo/parser": "1.0.1-alpha.2",
     "@speclynx/apidom-datamodel": "^5.2.2",
     "@speclynx/apidom-error": "^5.2.2",
     "@speclynx/apidom-ns-arazzo-1": "^5.2.2",

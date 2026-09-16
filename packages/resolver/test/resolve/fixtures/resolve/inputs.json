@@ -1,0 +1,10 @@
+{
+  "$id": "https://example.com/schemas/inputs.json",
+  "type": "object",
+  "properties": {
+    "resourceId": {
+      "type": "string",
+      "description": "The resource identifier"
+    }
+  }
+}
