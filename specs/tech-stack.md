@@ -16,7 +16,7 @@ Arazzo Toolkit uses the following technology choices based on the current reposi
 - **Primary language(s):** TypeScript (sources), emitted as JavaScript by Babel.
 - **Rendering model:** N/A (library).
 - **Deployment/runtime shape:** ISOMORPHIC — Node.js 20.10+ and evergreen browsers. Every package ships ESM, CommonJS, and a UMD browser bundle. The isomorphic contract is load-bearing: the validator canonicalizes URIs with isomorphic utilities because it is bundled for the browser, and the parser resolves relative input against the page URL there.
-- **Current maturity:** EARLY_STAGE — `1.0.1-alpha.2` in Lerna fixed mode. `@usearazzo/parser` and `@usearazzo/resolver` are published; `validator` and `runner` carry `"private": true` as a publish guard (the source is public; `private` only stops `lerna publish`).
+- **Current maturity:** EARLY_STAGE — `1.0.1-alpha.2` in Lerna fixed mode. `@usearazzo/parser` is published and `@usearazzo/resolver` is publishable (its first release is cut by hand once Phase 1 merges); `validator` and `runner` carry `"private": true` as a publish guard (the source is public; `private` only stops `lerna publish`).
 
 ## Core Stack
 
