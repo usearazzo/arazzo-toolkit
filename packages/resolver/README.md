@@ -29,13 +29,13 @@ An Arazzo document and the OpenAPI descriptions it points at form a graph of fil
 | Function | Takes | Returns |
 |---|---|---|
 | `dereferenceArazzo` | Arazzo document: path or URL | `ParseResultElement` with every reference replaced inline |
-| `dereferenceArazzoElement` | `ParseResultElement`, or a child element such as a `WorkflowElement` | The same element kind, dereferenced |
+| `dereferenceArazzoElement` | `ParseResultElement`, or a child element such as a `WorkflowElement` with its document in `dereference.strategyOpts.parseResult` | The same element kind, dereferenced |
 | `dereferenceOpenAPI` | OpenAPI document: path or URL | `ParseResultElement` for OpenAPI 2.0, 3.0.x, or 3.1.x |
-| `dereferenceOpenAPIElement` | `ParseResultElement`, or a child element such as a `PathItemElement` | The same element kind, dereferenced |
+| `dereferenceOpenAPIElement` | `ParseResultElement`, or a child element such as a `PathItemElement` with its document in `dereference.strategyOpts.parseResult` | The same element kind, dereferenced |
 | `resolveArazzo` | Arazzo document: path or URL | `ReferenceSet`, entry document as the root reference |
-| `resolveArazzoElement` | `ParseResultElement` or child element | `ReferenceSet` |
-| `resolveOpenAPI` | OpenAPI document: path or URL | `ReferenceSet` |
-| `resolveOpenAPIElement` | `ParseResultElement` or child element | `ReferenceSet` |
+| `resolveArazzoElement` | `ParseResultElement`, or a child element with its document in `dereference.strategyOpts.parseResult` | `ReferenceSet`; for a child element the root reference wraps the child, not the entry document |
+| `resolveOpenAPI` | OpenAPI document: path or URL | `ReferenceSet`, entry document as the root reference |
+| `resolveOpenAPIElement` | `ParseResultElement`, or a child element with its document in `dereference.strategyOpts.parseResult` | `ReferenceSet`; for a child element the root reference wraps the child, not the entry document |
 | `bundleArazzo` | Arazzo document: path or URL | `ParseResultElement` holding one compound document |
 | `bundleOpenAPI` | OpenAPI document: path or URL | `ParseResultElement` holding one compound document |
 
