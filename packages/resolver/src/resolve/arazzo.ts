@@ -10,21 +10,14 @@ import type {
   ApiDOMReferenceOptions,
   ReferenceSet,
 } from '@speclynx/apidom-reference/configuration/empty';
-import Arazzo1DereferenceStrategy from '@speclynx/apidom-reference/dereference/strategies/arazzo-1';
-import OpenAPI2DereferenceStrategy from '@speclynx/apidom-reference/dereference/strategies/openapi-2';
-import OpenAPI30DereferenceStrategy from '@speclynx/apidom-reference/dereference/strategies/openapi-3-0';
-import OpenAPI31DereferenceStrategy from '@speclynx/apidom-reference/dereference/strategies/openapi-3-1';
 import Arazzo1ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/arazzo-1';
 import OpenAPI2ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/openapi-2';
 import OpenAPI30ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/openapi-3-0';
 import OpenAPI31ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/openapi-3-1';
-import JSONParser from '@speclynx/apidom-reference/parse/parsers/json';
-import YAMLParser from '@speclynx/apidom-reference/parse/parsers/yaml-1-2';
-import BinaryParser from '@speclynx/apidom-reference/parse/parsers/binary';
 import { isArazzoSpecification1Element, mediaTypes } from '@speclynx/apidom-ns-arazzo-1';
 import type { PartialDeep } from 'type-fest';
-import { defaultParseArazzoOptions as parserDefaultOptions } from '@usearazzo/parser';
 
+import { defaultOptions as dereferenceDefaultOptions } from '../dereference/arazzo.ts';
 import ResolveError from '../errors/ResolveError.ts';
 
 /**
@@ -35,11 +28,14 @@ export type Options = PartialDeep<ApiDOMReferenceOptions>;
 
 /**
  * Default reference options for resolving Arazzo Documents.
+ *
+ * The resolve strategies delegate to the dereference strategies of the same name,
+ * so the dereference defaults are carried over and only the resolve strategies are added.
  * @public
  */
 export const defaultOptions: Options = {
   resolve: {
-    resolvers: [...parserDefaultOptions.resolve!.resolvers!],
+    resolvers: [...dereferenceDefaultOptions.resolve!.resolvers!],
     strategies: [
       new Arazzo1ResolveStrategy(),
       new OpenAPI2ResolveStrategy(),
@@ -48,24 +44,12 @@ export const defaultOptions: Options = {
     ],
   },
   parse: {
-    parsers: [
-      ...parserDefaultOptions.parse!.parsers!,
-      new JSONParser({ allowEmpty: false }),
-      new YAMLParser({ allowEmpty: false }),
-      new BinaryParser({ allowEmpty: false }),
-    ],
-    parserOpts: { ...parserDefaultOptions.parse!.parserOpts },
+    parsers: [...dereferenceDefaultOptions.parse!.parsers!],
+    parserOpts: { ...dereferenceDefaultOptions.parse!.parserOpts },
   },
   dereference: {
-    strategies: [
-      new Arazzo1DereferenceStrategy(),
-      new OpenAPI2DereferenceStrategy(),
-      new OpenAPI30DereferenceStrategy(),
-      new OpenAPI31DereferenceStrategy(),
-    ],
-    strategyOpts: {
-      sourceDescriptions: false,
-    },
+    strategies: [...dereferenceDefaultOptions.dereference!.strategies!],
+    strategyOpts: { ...dereferenceDefaultOptions.dereference!.strategyOpts },
   },
 };
 
@@ -75,6 +59,8 @@ export const defaultOptions: Options = {
  * This function collects the Arazzo Document and every external document its
  * JSON References ($ref) reach into a ReferenceSet. Nothing is dereferenced;
  * the root reference of the set holds the parsed entry document.
+ *
+ * The `dereference.refSet` option is ignored: resolving always builds a fresh ReferenceSet.
  *
  * @param uri - A file system path or HTTP(S) URL to the Arazzo Document
  * @param options - Reference options (uses defaultOptions when not provided)
@@ -108,7 +94,7 @@ export async function resolve(uri: string, options: Options = {}): Promise<Refer
       : uri;
 
   try {
-    const refSet = await resolveURI(retrievalURI, mergedOptions);
+    const refSet = await resolveURI(retrievalURI, withoutSeededRefSet(mergedOptions));
     const parseResult = refSet.rootRef?.value;
 
     // validate that the resolved document is an Arazzo specification
@@ -131,7 +117,8 @@ export async function resolve(uri: string, options: Options = {}): Promise<Refer
  * Resolves an ApiDOM element representing an Arazzo Document.
  *
  * This function collects the element and every external document its
- * JSON References ($ref) reach into a ReferenceSet. Nothing is dereferenced.
+ * JSON References ($ref) reach into a ReferenceSet. Nothing is dereferenced
+ * and the element itself is left untouched.
  *
  * Supported scenarios:
  * - ParseResultElement with retrievalURI metadata: baseURI derived automatically
@@ -139,11 +126,19 @@ export async function resolve(uri: string, options: Options = {}): Promise<Refer
  * - Child element (e.g., WorkflowElement) with parseResult in strategyOpts:
  *   requires `options.dereference.strategyOpts.parseResult`,
  *   and `options.resolve.baseURI` if parseResult lacks retrievalURI metadata
+ * - Child element without parseResult: requires `options.resolve.baseURI` and
+ *   `options.parse.mediaType`, since the element alone cannot identify the document kind
+ *
+ * For a child element the root reference of the returned set is keyed by the root document
+ * URI but holds a ParseResultElement wrapping a copy of the child, not the root document.
+ * The set describes the references reachable from the child and is not a whole-document set.
+ *
+ * The `dereference.refSet` option is ignored: resolving always builds a fresh ReferenceSet.
  *
  * @param element - An ApiDOM element (ParseResultElement or child element like WorkflowElement)
  * @param options - Reference options (uses defaultOptions when not provided)
  * @returns A promise that resolves to the ReferenceSet of the element and its external references
- * @throws ResolveError - When baseURI is required but not provided, or when resolving fails
+ * @throws ResolveError - When baseURI is required but not provided, when the document is not an Arazzo specification, or when resolving fails
  *
  * @example
  * Resolve ParseResultElement with retrievalURI (from file parsing)
@@ -179,46 +174,60 @@ export async function resolveElement<T extends Element>(
   options: Options = {},
 ): Promise<ReferenceSet> {
   const mergedOptions = mergeOptions(defaultOptions as ApiDOMReferenceOptions, options);
+  const subject = isParseResultElement(element) ? 'a ParseResultElement' : 'a child element';
+  // a child element resolves against the URI of its root document
+  const root = isParseResultElement(element)
+    ? element
+    : mergedOptions.dereference?.strategyOpts?.parseResult;
   let baseURI = mergedOptions.resolve?.baseURI;
-  let mediaType: string = 'text/plain';
+  let mediaType = mergedOptions.parse?.mediaType ?? 'text/plain';
 
-  if (isParseResultElement(element)) {
-    mediaType = isArazzoSpecification1Element(element.api) ? mediaTypes.latest() : 'text/plain';
-    if (element.hasMetaProperty('retrievalURI')) {
-      baseURI = element.meta.get('retrievalURI') as string;
+  if (isParseResultElement(root)) {
+    if (!isArazzoSpecification1Element(root.api)) {
+      throw new ResolveError('Failed to resolve Arazzo Document', {
+        cause: new UnmatchedResolveStrategyError(
+          `Could not find a resolve strategy that can resolve ${subject} as an Arazzo specification`,
+        ),
+      });
+    }
+    mediaType = mergedOptions.parse?.mediaType ?? mediaTypes.latest();
+    if (root.hasMetaProperty('retrievalURI')) {
+      baseURI = root.meta.get('retrievalURI') as string;
     } else if (!baseURI) {
       throw new ResolveError(
-        'baseURI option is required when resolving a ParseResultElement without retrievalURI metadata',
+        `baseURI option is required when resolving ${subject} without retrievalURI metadata`,
       );
     }
-  } else if (isParseResultElement(mergedOptions.dereference?.strategyOpts?.parseResult)) {
-    // a child element resolves against the URI of its root document
-    const { parseResult } = mergedOptions.dereference.strategyOpts;
-
-    mediaType = isArazzoSpecification1Element(parseResult.api) ? mediaTypes.latest() : 'text/plain';
-    if (parseResult.hasMetaProperty('retrievalURI')) {
-      baseURI = parseResult.meta.get('retrievalURI') as string;
-    } else if (!baseURI) {
-      throw new ResolveError(
-        'baseURI option is required when resolving a child element without retrievalURI metadata',
-      );
-    }
+  } else if (!baseURI) {
+    throw new ResolveError(
+      'baseURI option is required when resolving a child element without parseResult in strategyOpts',
+    );
   }
 
-  // no ReferenceSet is seeded: resolve strategies always build their own
   try {
     return await resolveApiDOMElement(
       element,
-      mergeOptions(mergedOptions, {
-        resolve: {
-          baseURI,
-        },
-        parse: {
-          mediaType,
-        },
-      }),
+      withoutSeededRefSet(
+        mergeOptions(mergedOptions, {
+          resolve: {
+            baseURI,
+          },
+          parse: {
+            mediaType,
+          },
+        }),
+      ),
     );
   } catch (error: unknown) {
     throw new ResolveError('Failed to resolve Arazzo Document', { cause: error });
   }
+}
+
+/**
+ * Drops a seeded `dereference.refSet`. The resolve strategies always build their own
+ * ReferenceSet and deep-merge it over the option, which strips the prototype of a
+ * caller-supplied instance and crashes the resolution.
+ */
+function withoutSeededRefSet(options: ApiDOMReferenceOptions): ApiDOMReferenceOptions {
+  return mergeOptions(options, { dereference: { refSet: null } });
 }
