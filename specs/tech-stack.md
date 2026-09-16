@@ -44,7 +44,7 @@ Arazzo Toolkit uses the following technology choices based on the current reposi
 - **Primary storage:** NONE — documents are read from the filesystem or HTTP(S) at call time.
 - **Access pattern:** FILESYSTEM and HTTP via `@speclynx/apidom-reference` resolvers (`FileResolver` with a regex allow-list for `.json` / `.yaml` / `.yml`; `HTTPResolverAxios` with a 15 s timeout and 5 redirects). The parser adds a `MemoryResolver` for object and inline-string input, served under a synthetic `memory://` URI or the caller's `resolve.baseURI`.
 - **Caching / state:** the runner's `DocumentRegistry` is an LRU of parsed documents (capacity 4, entry document pinned); `WorkflowExecutionState` is fresh per workflow invocation. Nothing persists between calls.
-- **Notes:** `retrievalURI` metadata on the parse result is the load-bearing handoff between packages. In-memory input has none, so `resolve.baseURI` must be supplied downstream (see `packages/resolver/README.md` § Options).
+- **Notes:** `retrievalURI` metadata on the parse result is the load-bearing handoff between packages. In-memory input has none, so `resolve.baseURI` must be supplied downstream (see the resolver reference at `https://usearazzo.com/docs/resolver/`).
 
 ## Testing
 
