@@ -1,4 +1,9 @@
-import { Element, isParseResultElement, ParseResultElement } from '@speclynx/apidom-datamodel';
+import {
+  Element,
+  isParseResultElement,
+  ParseResultElement,
+  cloneShallow,
+} from '@speclynx/apidom-datamodel';
 import {
   url,
   dereference as dereferenceURI,
@@ -205,9 +210,14 @@ export async function dereferenceElement<T extends Element>(
         );
       }
 
+      // the fragment wrapper must expose the element as its result, the same way
+      // dereferenceApiDOM wraps a bare element: dereference strategies read the
+      // traversed root's `result` to index the `$id`s of the fragment
+      const elementClone = cloneShallow(element);
+      elementClone.classes.push('result');
       const elementReference = new Reference({
         uri: `${rootURI}#fragment`,
-        value: new ParseResultElement([element]),
+        value: new ParseResultElement([elementClone]),
       });
       const rootReference = new Reference({ uri: rootURI, value: parseResult });
 
