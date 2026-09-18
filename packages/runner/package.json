@@ -85,6 +85,6 @@
     "CHANGELOG.md"
   ],
   "devDependencies": {
-    "swagger-client": "^3.37.7"
+    "swagger-client": "^3.38.1"
   }
 }
