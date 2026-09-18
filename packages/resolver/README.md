@@ -2,7 +2,7 @@
 
 <p align="center">
   Reference resolver for <a href="https://spec.openapis.org/arazzo/latest.html">Arazzo</a> and <a href="https://spec.openapis.org/oas/latest.html">OpenAPI</a> documents:
-  dereference, resolve, and bundle.
+  bundle, dereference, and resolve.
 </p>
 
 <p align="center">
@@ -18,30 +18,23 @@
 
 ## What it does
 
-An Arazzo document and the OpenAPI descriptions it points at form a graph of files joined by references. This package walks that graph three ways, all on [SpecLynx ApiDOM](https://github.com/speclynx/apidom):
+Arazzo and OpenAPI documents contain references, to other parts of the same document and to other documents. This package handles those references in three ways, all on [SpecLynx ApiDOM](https://github.com/speclynx/apidom):
 
-- **Dereference.** `dereferenceArazzo` and `dereferenceOpenAPI` replace every reference with the content it points at: JSON References (`$ref`) and Reusable Object references (`$components.*`) in Arazzo; Reference Objects, Path Item references, and schema references in OpenAPI. The result is one self-contained tree. Arazzo source descriptions can be dereferenced along with the entry document.
+- **Bundle.** `bundleArazzo` and `bundleOpenAPI` pull external documents into the entry document's components, producing a single *compound document* that still reads like the original: external JSON Schema resources land in `components.inputs` in Arazzo; Reference Object targets land in the matching `components` field and external Path Items in `components.pathItems` in OpenAPI. References are repointed to the hoisted components.
+- **Dereference.** `dereferenceArazzo` and `dereferenceOpenAPI` replace every reference with the content it points at: JSON Schema References and Reusable Object references (`$components.*`) in Arazzo; Reference Objects, Path Item references, and schema references in OpenAPI. The result is one self-contained directed graph: a Directed Acyclic Graph (DAG), or a Directed Cyclic Graph (DCG) when references form cycles. Arazzo source descriptions can be dereferenced along with the entry document.
 - **Resolve.** `resolveArazzo` and `resolveOpenAPI` fetch the document and every external document its references reach, and return the `ReferenceSet` listing them all, parsed. Nothing is replaced; this is the reference graph itself.
-- **Bundle.** `bundleArazzo` and `bundleOpenAPI` pull external documents into the entry document's components, producing a single compound document that still reads like the original. OpenAPI references are repointed to the hoisted component. External JSON Schema resources are embedded whole with their `$id`, under `components.inputs` in Arazzo and `components.schemas` in OpenAPI 3.1; when a resource declares its own `$id`, the referencing `$ref` is rewritten to that `$id` so it still resolves inside the bundle, and a resource without one gets an `$id` relative to the entry document with the `$ref` left as written.
 
 ## At a glance
 
 | Function | Takes | Returns |
 |---|---|---|
-| `dereferenceArazzo` | Arazzo document: path or URL | `ParseResultElement` with every reference replaced inline |
-| `dereferenceArazzoElement` | `ParseResultElement`, or a child element such as a `WorkflowElement` with its document in `dereference.strategyOpts.parseResult` | The same element kind, dereferenced |
-| `dereferenceOpenAPI` | OpenAPI document: path or URL | `ParseResultElement` for OpenAPI 2.0, 3.0.x, or 3.1.x |
-| `dereferenceOpenAPIElement` | `ParseResultElement`, or a child element such as a `PathItemElement` with its document in `dereference.strategyOpts.parseResult` | The same element kind, dereferenced |
-| `resolveArazzo` | Arazzo document: path or URL | `ReferenceSet`, entry document as the root reference |
-| `resolveArazzoElement` | `ParseResultElement`, or a child element with its document in `dereference.strategyOpts.parseResult` | `ReferenceSet`; for a child element the root reference wraps the child, not the entry document |
-| `resolveOpenAPI` | OpenAPI document: path or URL | `ReferenceSet`, entry document as the root reference |
-| `resolveOpenAPIElement` | `ParseResultElement`, or a child element with its document in `dereference.strategyOpts.parseResult` | `ReferenceSet`; for a child element the root reference wraps the child, not the entry document |
-| `bundleArazzo` | Arazzo document: path or URL | `ParseResultElement` holding one compound document |
-| `bundleOpenAPI` | OpenAPI document: path or URL | `ParseResultElement` holding one compound document |
+| `bundleArazzo`, `bundleOpenAPI` | path or URL | `ParseResultElement` holding one compound document |
+| `dereferenceArazzo`, `dereferenceOpenAPI` | path or URL | `ParseResultElement` with every reference replaced inline |
+| `dereferenceArazzoElement`, `dereferenceOpenAPIElement` | a parsed document (`ParseResultElement`), or a single element inside it, such as a workflow or a path item | the same element, dereferenced |
+| `resolveArazzo`, `resolveOpenAPI` | path or URL | `ReferenceSet` of every document reached |
+| `resolveArazzoElement`, `resolveOpenAPIElement` | a parsed document (`ParseResultElement`), or a single element inside it, such as a workflow or a path item | `ReferenceSet` of every document reached |
 
-The plain functions take paths and URLs only. To work with a document you parsed from a string or an object, parse it first with [@usearazzo/parser](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/parser#readme) and call the `*Element` variant with `resolve.baseURI`, so relative references have a base to resolve against. Bundling starts from a path or URL only, since only a whole document can be bundled.
-
-A relative file system path resolves against the current working directory. Each operation fails through its own typed error, `DereferenceError`, `ResolveError`, or `BundleError`, with the underlying error on `cause`.
+Each operation fails through its own typed error, `BundleError`, `DereferenceError`, or `ResolveError`, with the underlying error on `cause`.
 
 ## Installation
 
@@ -53,42 +46,25 @@ Ships ESM and CommonJS builds with TypeScript declarations. Requires Node.js 20.
 
 ## Usage
 
-Dereference, and the `$components.parameters` reference in the first step is gone:
-
 ```js
-import { dereferenceArazzo } from '@usearazzo/resolver';
-import { toValue } from '@speclynx/apidom-core';
+import { bundleArazzo, dereferenceArazzo, resolveArazzo } from '@usearazzo/resolver';
 
-const parseResult = await dereferenceArazzo('./adopt-a-pet.arazzo.yaml');
-
-toValue(parseResult.api.workflows.get(0).steps.get(0).parameters.get(0));
-// { name: 'petId', in: 'path', value: '$inputs.petId' }
+const bundled = await bundleArazzo('./adopt-a-pet.arazzo.yaml'); // ParseResultElement
+const dereferenced = await dereferenceArazzo('./adopt-a-pet.arazzo.yaml'); // ParseResultElement
+const refSet = await resolveArazzo('./adopt-a-pet.arazzo.yaml'); // ReferenceSet
 ```
 
-Resolve, and get the reference graph without touching the documents:
+The OpenAPI source descriptions have their own counterparts:
 
 ```js
-import { resolveOpenAPI } from '@usearazzo/resolver';
+import { bundleOpenAPI, dereferenceOpenAPI, resolveOpenAPI } from '@usearazzo/resolver';
 
-const refSet = await resolveOpenAPI('https://example.com/openapi.yaml');
-
-refSet.rootRef.uri; // 'https://example.com/openapi.yaml'
-[...refSet.values()].map((ref) => ref.uri); // entry document first, then every document it reaches
+const bundled = await bundleOpenAPI('./petstore.openapi.yaml'); // ParseResultElement
+const dereferenced = await dereferenceOpenAPI('./petstore.openapi.yaml'); // ParseResultElement
+const refSet = await resolveOpenAPI('./petstore.openapi.yaml'); // ReferenceSet
 ```
 
-Bundle, and an external Parameter Object now lives in `components`:
-
-```js
-import { bundleOpenAPI } from '@usearazzo/resolver';
-import { toValue } from '@speclynx/apidom-core';
-
-const parseResult = await bundleOpenAPI('./openapi.yaml');
-
-toValue(parseResult.api.paths.get('/users').get.parameters.get(0));
-// { $ref: '#/components/parameters/limit' }
-```
-
-Documents parsed in memory go through the `*Element` variant with a base URI:
+`dereferenceArazzoElement`, `resolveArazzoElement` and their OpenAPI counterparts take a document you already parsed. When that document came from a string or an object, it has no URL of its own, so pass `resolve.baseURI` explicitly:
 
 ```js
 import { parseArazzo } from '@usearazzo/parser';
