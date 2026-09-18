@@ -22,7 +22,7 @@ An Arazzo document and the OpenAPI descriptions it points at form a graph of fil
 
 - **Dereference.** `dereferenceArazzo` and `dereferenceOpenAPI` replace every reference with the content it points at: JSON References (`$ref`) and Reusable Object references (`$components.*`) in Arazzo; Reference Objects, Path Item references, and schema references in OpenAPI. The result is one self-contained tree. Arazzo source descriptions can be dereferenced along with the entry document.
 - **Resolve.** `resolveArazzo` and `resolveOpenAPI` fetch the document and every external document its references reach, and return the `ReferenceSet` listing them all, parsed. Nothing is replaced; this is the reference graph itself.
-- **Bundle.** `bundleArazzo` and `bundleOpenAPI` pull external documents into the entry document's components, producing a single compound document that still reads like the original. OpenAPI references are repointed to the hoisted component; Arazzo embeds each external JSON Schema resource under `components.inputs` with its `$id` and leaves the `$ref` as written.
+- **Bundle.** `bundleArazzo` and `bundleOpenAPI` pull external documents into the entry document's components, producing a single compound document that still reads like the original. OpenAPI references are repointed to the hoisted component. External JSON Schema resources are embedded whole with their `$id`, under `components.inputs` in Arazzo and `components.schemas` in OpenAPI 3.1; when a resource declares its own `$id`, the referencing `$ref` is rewritten to that `$id` so it still resolves inside the bundle, and a resource without one gets an `$id` relative to the entry document with the `$ref` left as written.
 
 ## At a glance
 

@@ -16,7 +16,7 @@
       {
         "workflowId": "fixture-workflow",
         "inputs": {
-          "$ref": "./inputs.json"
+          "$ref": "https://example.com/schemas/inputs.json"
         },
         "steps": [
           {
