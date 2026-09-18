@@ -142,6 +142,19 @@ describe('bundleOpenAPI', function () {
     });
   });
 
+  context('given external schema declaring its own $id', function () {
+    const rootFilePath = path.join(__dirname, 'fixtures', 'bundle-openapi-schema-id', 'root.json');
+
+    specify('should rebase $ref onto the embedded schema $id', async function () {
+      const actual = await bundleOpenAPI(rootFilePath);
+      const expected = loadJsonFile(
+        path.join(__dirname, 'fixtures', 'bundle-openapi-schema-id', 'bundled.json'),
+      );
+
+      assert.deepEqual(toValue(actual), expected);
+    });
+  });
+
   context('given non-OpenAPI document', function () {
     const arazzoFilePath = path.join(__dirname, 'fixtures', 'bundle', 'root.json');
 

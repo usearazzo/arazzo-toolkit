@@ -1,0 +1,12 @@
+{
+  "$id": "https://example.com/schemas/user.json",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "integer"
+    },
+    "name": {
+      "type": "string"
+    }
+  }
+}
