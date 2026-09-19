@@ -49,6 +49,7 @@
     "type": "git",
     "url": "git+https://github.com/usearazzo/arazzo-toolkit.git"
   },
+  "homepage": "https://usearazzo.com/docs/parser/",
   "author": "Vladimir Gorej <vladimir.gorej@gmail.com>",
   "license": "Apache-2.0",
   "dependencies": {
