@@ -72,7 +72,7 @@
     "fontoxpath": "^3.34.0",
     "ramda": "^0.32.0",
     "ramda-adjunct": "^6.1.0",
-    "type-fest": "^5.4.4"
+    "type-fest": "^5.10.0"
   },
   "files": [
     "src/**/*.mjs",
