@@ -76,9 +76,12 @@ const dereferenced = await dereferenceArazzoElement(parseResult, {
 });
 ```
 
-Everything else, from options and source descriptions to result shapes and error handling, is in the API reference:
+## Documentation
 
-**[API reference](https://usearazzo.com/docs/resolver/)**
+The examples above are the happy path. Everything else is in the docs at [usearazzo.com/docs](https://usearazzo.com/docs/):
+
+- **[Resolver API Reference](https://usearazzo.com/docs/resolver/)** covers every exported function: its options, from base URIs to source descriptions, the shape of what it returns, and the errors it can throw. Start here when you know what you want to call.
+- **[Resolving Arazzo Documents](https://usearazzo.com/docs/guides/arazzo-document-resolving/)** explains why an Arazzo document is never one file, what bundling, dereferencing and resolving each mean, and what makes references hard to get right. Start here when you want to understand why the package is shaped the way it is.
 
 ## Supported versions
 
