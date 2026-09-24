@@ -51,7 +51,7 @@
   "author": "Vladimir Gorej <vladimir.gorej@gmail.com>",
   "license": "Apache-2.0",
   "dependencies": {
-    "@babel/runtime-corejs3": "^8.0.5",
+    "@babel/runtime-corejs3": "^8.0.6",
     "@speclynx/apidom-core": "^5.2.6",
     "@speclynx/apidom-datamodel": "^5.2.6",
     "@speclynx/apidom-error": "^5.2.6",
@@ -72,7 +72,7 @@
     "fontoxpath": "^3.34.0",
     "ramda": "^0.32.0",
     "ramda-adjunct": "^6.1.0",
-    "type-fest": "^5.4.4"
+    "type-fest": "^5.10.0"
   },
   "files": [
     "src/**/*.mjs",
