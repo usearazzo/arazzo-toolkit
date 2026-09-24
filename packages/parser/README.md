@@ -73,9 +73,12 @@ parseCriterionCondition('$statusCode == 200').result.success; // true
 parseCriterionCondition('$statusCode ===').result.success; // false, and nothing thrown
 ```
 
-Everything else, from parse options and source maps to parsing source descriptions and error handling, is in the API reference:
+## Documentation
 
-**[API reference](https://usearazzo.com/docs/parser/)** &middot; **[Parsing Arazzo Documents guide](https://usearazzo.com/docs/guides/arazzo-document-parsing/)**
+The examples above are the happy path. Everything else is in the docs at [usearazzo.com/docs](https://usearazzo.com/docs/):
+
+- **[Parser API Reference](https://usearazzo.com/docs/parser/)** covers every exported function: its options, from source maps to parsing source descriptions, the shape of what it returns, and the errors it can throw. Start here when you know what you want to call.
+- **[Parsing Arazzo Documents](https://usearazzo.com/docs/guides/arazzo-document-parsing/)** explains what makes an Arazzo document hard to parse, what a parsed document should look like, and what a good parser gives you. Start here when you want to understand why the package is shaped the way it is.
 
 ## Supported versions
 
