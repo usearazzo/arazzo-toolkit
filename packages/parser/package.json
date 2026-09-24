@@ -1,6 +1,6 @@
 {
   "name": "@usearazzo/parser",
-  "version": "1.0.1-alpha.4",
+  "version": "1.0.1-alpha.5",
   "description": "Parser for the Arazzo Specification language: documents, runtime expressions, and criterion conditions.",
   "keywords": [
     "arazzo",
