@@ -61,7 +61,7 @@
     "ramda": "^0.32.0",
     "type-fest": "^5.10.0",
     "vscode-languageserver-textdocument": "^1.0.15",
-    "vscode-languageserver-types": "=3.17.6-next.6"
+    "vscode-languageserver-types": "=3.18.4"
   },
   "files": [
     "src/**/*.mjs",
