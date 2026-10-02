@@ -16,7 +16,7 @@ The monorepo contains 4 packages under `packages/`, published under the `@useara
 
 2. **`resolver`** (`@usearazzo/resolver`) — dereferences, resolves and bundles Arazzo and OpenAPI documents via `@speclynx/apidom-reference`. Entry points: `dereferenceArazzo`, `dereferenceOpenAPI`, `resolveArazzo`, `resolveOpenAPI` and their `*Element` variants, plus `bundleArazzo` and `bundleOpenAPI` (path/URL only). Throws `DereferenceError`, `ResolveError` or `BundleError`.
 
-3. **`validator`** (`@usearazzo/validator`) — validates and lints Arazzo documents via the `@speclynx/apidom-ls` language service. Entry points: `validate` (from a `TextDocument`) and `validateURI` (from a path/URL). Returns LSP `Diagnostic` objects.
+3. **`validator`** (`@usearazzo/validator`) — validates and lints Arazzo documents via the `@speclynx/api-languageservice` language service. Entry points: `validate` (from a `TextDocument`) and `validateURI` (from a path/URL). Returns LSP `Diagnostic` objects.
 
 4. **`runner`** (`@usearazzo/runner`) — executes Arazzo workflows against real HTTP APIs. A pipeline of single-responsibility building blocks:
    - `registry/` — `DocumentRegistry` loads and caches the entry document and its source descriptions through `DocumentRegistryProvider`s (Arazzo, OpenAPI). Providers build the indexes; documents are containers.
