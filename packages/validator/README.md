@@ -98,7 +98,7 @@ const diagnostics = await validateURI('/path/to/arazzo.yaml', {
     betterAjvErrors: true,        // Use improved error messages (default: true)
   },
   parseContext: {
-    fileAllowList: ['*'],         // Glob patterns for allowed files (default: ['*'])
+    fileAllowList: [/\.json$/i, /\.ya?ml$/i], // Files source descriptions may read (default: JSON and YAML)
     arazzo: {
       sourceDescriptionsResolution: true, // Resolve source descriptions (default: true)
     },
@@ -130,7 +130,7 @@ const diagnostics = await validateURI('https://example.com/arazzo.yaml', {}, {
 
 ### Security considerations
 
-By default, `validateURI`'s file resolver (from `@usearazzo/parser`) allows reading local `.json`/`.yaml`/`.yml` files, matched via regex rather than glob patterns so dotfile basenames (e.g. `.arazzo.yaml`) are matched correctly too. Separately, `parseContext.fileAllowList` is set to `['*']` by default, which allows the validator to access any file on the filesystem when resolving source descriptions during semantic linting. Additionally, `sourceDescriptionsResolution` is enabled by default, which means the validator will fetch and parse external documents referenced in the Arazzo document.
+By default, `validateURI`'s file resolver (from `@usearazzo/parser`) allows reading local `.json`/`.yaml`/`.yml` files, matched via regex rather than glob patterns so dotfile basenames (e.g. `.arazzo.yaml`) are matched correctly too. `parseContext.fileAllowList` applies the same `.json`/`.yaml`/`.yml` regex patterns to the local files source descriptions point at; any other file is never read. Additionally, `sourceDescriptionsResolution` is enabled by default, which means the validator will fetch and parse external documents referenced in the Arazzo document.
 
 When validating untrusted documents, consider restricting file access:
 
