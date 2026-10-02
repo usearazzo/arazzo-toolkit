@@ -2,7 +2,7 @@
   "name": "@usearazzo/validator",
   "version": "1.0.1-alpha.0",
   "private": true,
-  "description": "Validator & Linter for Arazzo Documents.",
+  "description": "Validator and linter for Arazzo documents: semantic validation, semantic linting, and opt-in JSON Schema validation.",
   "keywords": [
     "arazzo",
     "arazzo-specification",
@@ -58,7 +58,7 @@
     "@speclynx/apidom-error": "^5.2.6",
     "@speclynx/apidom-ns-arazzo-1": "^5.2.6",
     "@speclynx/apidom-reference": "^5.2.6",
-    "@usearazzo/parser": "1.0.1-alpha.2",
+    "@usearazzo/parser": "1.0.1-alpha.5",
     "ramda": "^0.32.0",
     "type-fest": "^5.10.0",
     "vscode-languageserver-textdocument": "^1.0.15",
