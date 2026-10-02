@@ -1,7 +1,7 @@
 import { assert } from 'chai';
 import dedent from 'dedent';
 
-import { ApilintCodes } from '@speclynx/apidom-ls';
+import { ApilintCodes } from '@speclynx/api-languageservice';
 
 import {
   validate,
@@ -318,7 +318,9 @@ describe('validate', function () {
         withRef('#/components/inputs/missing'),
       );
       const diagnostics = await validate(textDocument);
-      const unresolved = diagnostics.filter((d) => /reference/i.test(d.message));
+      const unresolved = diagnostics.filter((d) =>
+        /reference/i.test(typeof d.message === 'string' ? d.message : d.message.value),
+      );
       assert.lengthOf(unresolved, 1);
       assert.equal(unresolved[0].severity, DiagnosticSeverity.Error);
     });

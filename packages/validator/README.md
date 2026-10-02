@@ -1,7 +1,7 @@
 # @usearazzo/validator
 
 `@usearazzo/validator` is a validator and linter for [Arazzo Specification](https://spec.openapis.org/arazzo/latest.html) documents.
-It performs semantic validation and semantic linting — with JSON Schema validation available opt-in — using [SpecLynx ApiDOM Language Service](https://www.npmjs.com/package/@speclynx/apidom-ls).
+It performs semantic validation and semantic linting — with JSON Schema validation available opt-in — using [SpecLynx ApiDOM Language Service](https://www.npmjs.com/package/@speclynx/api-languageservice).
 
 **Supported Arazzo versions:**
 - [Arazzo 1.0.0](https://spec.openapis.org/arazzo/v1.0.0)
@@ -108,7 +108,7 @@ const diagnostics = await validateURI('/path/to/arazzo.yaml', {
 
 JSON Schema (AJV) validation is opt-in. Enabling `jsonSchemaValidation` adds structural checks derived from the Arazzo JSON Schema — most notably `oneOf` discrimination for Reusable Objects — at the cost of a second diagnostic for many problems the linting rules already report.
 
-`referenceValidation` checks that local `$ref` pointers inside JSON Schema objects — `workflow.inputs`, `components.inputs` — resolve to an existing target. It requires `@speclynx/apidom-ls` 2.11.7 or later; earlier versions report every `#`-prefixed `$ref` as unresolved regardless of whether the target exists.
+`referenceValidation` checks that local `$ref` pointers inside JSON Schema objects — `workflow.inputs`, `components.inputs` — resolve to an existing target. It requires `@speclynx/apidom-ls` 2.11.7 or later (now `@speclynx/api-languageservice`); earlier versions report every `#`-prefixed `$ref` as unresolved regardless of whether the target exists.
 
 Resolution of relative `sourceDescriptions[].url` entries is separate, and driven by `parseContext.arazzo.sourceDescriptionsResolution` together with a `baseURI`. `validateURI` sets `baseURI` automatically from the document's resolved location. The lower-level `validate` function works from an in-memory `TextDocument` that may not have a resolvable `uri` at all, so pass `baseURI` yourself via the context parameter when relative source descriptions need to resolve.
 

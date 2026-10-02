@@ -8,7 +8,7 @@ import {
   ApilintCodes,
   LogLevel,
   type LanguageServiceContext,
-} from '@speclynx/apidom-ls';
+} from '@speclynx/api-languageservice';
 import type { PartialDeep } from 'type-fest';
 import { mergeDeepRight } from 'ramda';
 
