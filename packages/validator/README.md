@@ -159,6 +159,10 @@ import {
 - `defaultArazzoResolveOptions` - file and HTTP resolvers configuration used by `validateURI`
 - `defaultLanguageServiceContext` - validation settings (semantic validation, linting, opt-in JSON Schema)
 
+## Errors
+
+Problems in the document are reported as diagnostics, never thrown. `validateURI` throws `ValidateError` only when it cannot fetch the document (a missing file, an HTTP error, a disallowed location); the underlying error is on `cause`.
+
 ## Working with diagnostics
 
 Both validation functions return an array of [Diagnostic](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#diagnostic) objects compatible with VS Code and the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/).
