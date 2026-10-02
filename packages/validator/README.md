@@ -171,7 +171,3 @@ const errors = diagnostics.filter((d) => d.severity === DiagnosticSeverity.Error
 const warnings = diagnostics.filter((d) => d.severity === DiagnosticSeverity.Warning);
 const isValid = errors.length === 0;
 ```
-
-## Validation rules
-
-For a complete reference of all semantic validation and linting rules with their numeric diagnostic codes, see [docs/rules.md](https://github.com/usearazzo/arazzo-toolkit/blob/main/packages/validator/docs/rules.md).
