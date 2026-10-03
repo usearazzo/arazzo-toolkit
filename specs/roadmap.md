@@ -45,7 +45,7 @@ Phases are intentionally small — each one is a shippable, independently review
 **Priority:** High
 
 - Write `_reference/validator.md` in `usearazzo/website` listing each semantic validation and linting rule with its diagnostic code and severity; point `packages/validator/README.md` at it and remove the dead `docs/rules.md` link (closes #27).
-- State the permissive defaults (`fileAllowList: ['*']`, source description resolution on) as a decision in the README security section, with the opt-down recipe for untrusted input.
+- State the defaults (the parser's JSON/YAML `fileAllowList`, source description resolution on) in the reference, with the opt-down and directory-confinement recipes for untrusted input (usearazzo/website#28).
 - Add tests for the `ARAZZO_NOT_DETECTED` path and for `validateURI` base URI injection.
 
 ## Phase 4 — Publish @usearazzo/validator

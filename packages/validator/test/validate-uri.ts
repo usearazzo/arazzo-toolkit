@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { validateURI, DiagnosticSeverity } from '../src/index.ts';
+import { validateURI, DiagnosticSeverity, ValidateError } from '../src/index.ts';
 import { createHTTPServer } from './helpers.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -94,6 +94,22 @@ describe('validateURI', function () {
       });
     },
   );
+
+  context('given a path to a missing document', function () {
+    specify('should throw ValidateError quoting the given path', async function () {
+      try {
+        await validateURI('does-not-exist.arazzo.yaml');
+        assert.fail('should throw ValidateError');
+      } catch (error: unknown) {
+        assert.instanceOf(error, ValidateError);
+        assert.strictEqual(
+          (error as ValidateError).message,
+          'Failed to read Arazzo Document at "does-not-exist.arazzo.yaml"',
+        );
+        assert.isDefined((error as ValidateError).cause);
+      }
+    });
+  });
 
   context('given a file: URI to a valid Arazzo document', function () {
     specify('should return no errors', async function () {

@@ -12,6 +12,7 @@ import type { PartialDeep } from 'type-fest';
 import { mergeDeepRight } from 'ramda';
 
 import { createTextDocument } from '../document.ts';
+import ValidateError from '../errors/ValidateError.ts';
 import { validate } from './validate.ts';
 
 /**
@@ -61,6 +62,7 @@ function canonicalizeDocumentURI(source: string): string {
  * @param context - Optional language service context override (deep merged with defaults)
  * @param resolveOptions - Optional resolve options for fetching the URI
  * @returns Promise resolving to an array of Diagnostic objects
+ * @throws ValidateError - When the document cannot be fetched. The original error is available via the `cause` property.
  *
  * @example
  * Validate from file
@@ -103,8 +105,16 @@ export async function validateURI(
   const mergedOptions = mergeOptions(defaultParseArazzoOptions as ApiDOMReferenceOptions, {
     resolve: resolveOptions,
   });
-  const buffer = await readFile(canonicalURI, mergedOptions);
-  const content = new TextDecoder().decode(buffer);
+  let content: string;
+
+  try {
+    const buffer = await readFile(canonicalURI, mergedOptions);
+    content = new TextDecoder().decode(buffer);
+  } catch (error: unknown) {
+    // quote `uri` rather than `canonicalURI` so the message names what the caller passed in
+    throw new ValidateError(`Failed to read Arazzo Document at "${uri}"`, { cause: error });
+  }
+
   const textDocument = createTextDocument(canonicalURI, content);
 
   // validateURI always has a real, resolvable document location, so it anchors

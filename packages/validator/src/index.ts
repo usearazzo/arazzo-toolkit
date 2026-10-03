@@ -10,5 +10,6 @@ export {
   DEFAULT_DOCUMENT_VERSION,
   createTextDocument,
 } from './document.ts';
+export { default as ValidateError } from './errors/ValidateError.ts';
 export { validate, defaultLanguageServiceContext } from './validators/validate.ts';
 export { validateURI, defaultArazzoResolveOptions } from './validators/validate-uri.ts';

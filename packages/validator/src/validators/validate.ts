@@ -41,7 +41,11 @@ export const defaultLanguageServiceContext: Partial<LanguageServiceContext> = {
     betterAjvErrors: true,
   },
   parseContext: {
-    fileAllowList: ['*'],
+    // regex patterns, not glob strings - picomatch's glob matching never matches a dotfile
+    // basename (e.g. .petstore.yaml) without `dot: true`, which FileResolver does not set,
+    // and `*` would admit any file at all. FileResolver accepts RegExp at runtime even though
+    // api-languageservice types the option as string[].
+    fileAllowList: [/\.json$/i, /\.ya?ml$/i] as unknown as string[],
     arazzo: {
       sourceDescriptionsResolution: true,
     },

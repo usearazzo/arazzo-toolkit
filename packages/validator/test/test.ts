@@ -337,4 +337,16 @@ describe('defaultLanguageServiceContext', function () {
       betterAjvErrors: true,
     });
   });
+
+  specify('should allow only JSON and YAML files, dotfiles included', function () {
+    const fileAllowList = defaultLanguageServiceContext.parseContext!
+      .fileAllowList as unknown as RegExp[];
+    const isAllowed = (file: string) => fileAllowList.some((pattern) => pattern.test(file));
+
+    assert.isTrue(isAllowed('/specs/petstore.openapi.json'));
+    assert.isTrue(isAllowed('/specs/petstore.openapi.YAML'));
+    assert.isTrue(isAllowed('/specs/.petstore.yml'));
+    assert.isFalse(isAllowed('/etc/passwd'));
+    assert.isFalse(isAllowed('/home/user/.ssh/id_rsa'));
+  });
 });
