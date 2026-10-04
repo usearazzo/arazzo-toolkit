@@ -32,6 +32,8 @@ This package checks an Arazzo document and reports every problem it finds as an 
 | `validate` | a [`TextDocument`](https://www.npmjs.com/package/vscode-languageserver-textdocument) already in memory | `Diagnostic[]` |
 | `createTextDocument` | URI and content | a `TextDocument` ready for `validate` |
 
+The types these work with are re-exported too: `TextDocument`, `Diagnostic`, `DiagnosticSeverity`, and `LanguageServiceContext`, plus the `ARAZZO_LANGUAGE_ID` and `DEFAULT_DOCUMENT_VERSION` constants `createTextDocument` fills in.
+
 Problems in the document come back as diagnostics, never as thrown errors. `validateURI` throws `ValidateError` only when it cannot fetch the document (a missing file, an HTTP error, a disallowed location), with the underlying error on `cause`.
 
 A relative path is read from the current working directory, just like with any Node.js file API.
