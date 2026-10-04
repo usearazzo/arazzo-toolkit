@@ -60,14 +60,13 @@ A URL works the same way, and relative source descriptions resolve against it:
 const diagnostics = await validateURI('https://example.com/adopt-a-pet.arazzo.yaml');
 ```
 
-When the content is already in memory, wrap it in a `TextDocument` and call `validate`. Relative `sourceDescriptions[].url` entries resolve against the `TextDocument`'s URI, so give it the document's real, absolute location. Relative external `$ref`s in JSON Schema objects resolve against `validationContext.baseURI`, which `validateURI` sets for you and `validate` leaves to you:
+When the content is already in memory, wrap it in a `TextDocument` and call `validate`. Relative `sourceDescriptions[].url` entries resolve against the `TextDocument`'s URI, so give it the document's real, absolute location:
 
 ```js
 import { validate, createTextDocument } from '@usearazzo/validator';
 
-const uri = 'file:///home/me/specs/adopt-a-pet.arazzo.yaml';
-const textDocument = createTextDocument(uri, yamlText);
-const diagnostics = await validate(textDocument, { validationContext: { baseURI: uri } });
+const textDocument = createTextDocument('file:///home/me/specs/adopt-a-pet.arazzo.yaml', yamlText);
+const diagnostics = await validate(textDocument);
 ```
 
 ## Options
