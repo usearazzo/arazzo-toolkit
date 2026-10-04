@@ -27,7 +27,7 @@ The monorepo contains 4 packages under `packages/`, published under the `@useara
    - `expression/`, `criterion/`, `resolver/`, `state/` — runtime expression evaluation, criterion evaluators (simple, regex, JSONPath, XPath), parameter/request-body/output resolvers, and `WorkflowExecutionState`.
    - `vendor/swagger-client.mjs` — a webpack bundle of `swagger-client` built by `build:swagger-client` (runs as part of `build:es`); it is a build artifact, don't edit it.
 
-`@usearazzo/parser` and `@usearazzo/resolver` are public packages released by lerna; `validator` and `runner` are marked private and skipped on publish.
+`@usearazzo/parser`, `@usearazzo/resolver` and `@usearazzo/validator` are public packages released by lerna; `runner` is marked private and skipped on publish.
 
 ### Key Concepts
 
