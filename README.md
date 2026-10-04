@@ -25,7 +25,7 @@ This monorepo contains the following packages:
 |---------|-------------|
 | [@usearazzo/parser](./packages/parser) | Parser for Arazzo Documents producing [SpecLynx ApiDOM](https://github.com/speclynx/apidom) data model |
 | [@usearazzo/resolver](./packages/resolver) | Resolver for Arazzo Documents |
-| [@usearazzo/validator](./packages/validator) | Validator & Linter for Arazzo Documents |
+| [@usearazzo/validator](./packages/validator) | Validator and linter for Arazzo documents, reporting LSP diagnostics |
 | [@usearazzo/runner](./packages/runner) | Runner for Arazzo Workflows |
 
 ---
@@ -40,9 +40,20 @@ For complete documentation, see the [@usearazzo/CLI README](./packages/cli/READM
 
 ## Validator
 
--- Placeholder --
+`@usearazzo/validator` checks an Arazzo document and reports every problem it finds as a [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) diagnostic, with its location, severity, and rule code.
 
-For complete documentation, see the [@usearazzo/validator README](./packages/validator/README.md).
+```sh
+npm install @usearazzo/validator
+```
+
+```js
+import { validateURI, DiagnosticSeverity } from '@usearazzo/validator';
+
+const diagnostics = await validateURI('./adopt-a-pet.arazzo.yaml');
+const errors = diagnostics.filter((d) => d.severity === DiagnosticSeverity.Error);
+```
+
+See the [@usearazzo/validator README](./packages/validator/README.md) for an overview, and the [API reference](https://usearazzo.com/docs/validator/) for every option, diagnostic code, and rule.
 
 ---
 
