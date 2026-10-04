@@ -53,7 +53,7 @@ const diagnostics = await validateURI('./adopt-a-pet.arazzo.yaml');
 const errors = diagnostics.filter((d) => d.severity === DiagnosticSeverity.Error);
 ```
 
-See the [@usearazzo/validator README](./packages/validator/README.md) for an overview, and the [API reference](https://usearazzo.com/docs/validator/) for every option, diagnostic code, and rule.
+See the [product page](https://usearazzo.com/validator/) for what it checks, the [@usearazzo/validator README](./packages/validator/README.md) for an overview, and the [API reference](https://usearazzo.com/docs/validator/) for every option, diagnostic code, and rule.
 
 ---
 
