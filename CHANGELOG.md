@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.6](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.5...v1.0.1-alpha.6) (2026-10-04)
+
+### Bug Fixes
+
+- **validator:** check Arazzo 1.1.0 documents against JSON Schema ([#202](https://github.com/usearazzo/arazzo-toolkit/issues/202)) ([eb86d9c](https://github.com/usearazzo/arazzo-toolkit/commit/eb86d9c4fb6cd5369c333c2a3ae9a84057b18477))
+- **validator:** install the workspace parser, not alpha.2 ([#203](https://github.com/usearazzo/arazzo-toolkit/issues/203)) ([11f205a](https://github.com/usearazzo/arazzo-toolkit/commit/11f205a1d9a7150a7511e07caf7fdabc910a68e2)), closes [#201](https://github.com/usearazzo/arazzo-toolkit/issues/201)
+
+### Features
+
+- release @userazzo/validator using trusted publishing ([ac614d0](https://github.com/usearazzo/arazzo-toolkit/commit/ac614d04c6c6d0c7a3824d5b70ff8d1540713ee9))
+- **validator:** align validator with parser and resolver ([#201](https://github.com/usearazzo/arazzo-toolkit/issues/201)) ([2f44d9a](https://github.com/usearazzo/arazzo-toolkit/commit/2f44d9a04ab2ca55dbe5bc3177733151e46e38ea)), closes [#197](https://github.com/usearazzo/arazzo-toolkit/issues/197) [usearazzo/website#28](https://github.com/usearazzo/website/issues/28)
+
 ## [1.0.1-alpha.5](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.4...v1.0.1-alpha.5) (2026-09-24)
 
 ### Bug Fixes
