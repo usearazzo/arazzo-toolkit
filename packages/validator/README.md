@@ -112,6 +112,12 @@ const diagnostics = await validateURI('./untrusted.arazzo.yaml', {
 });
 ```
 
+## Documentation
+
+The examples above are the happy path. Everything else is in the docs at [usearazzo.com/docs](https://usearazzo.com/docs/):
+
+- **[Validator API Reference](https://usearazzo.com/docs/validator/)** covers every exported function: its options, the shape of a diagnostic and its codes, the errors it can throw, and every rule the validator runs, with its code and severity. Start here when you know what you want to call, or when you want to know what a diagnostic means.
+
 ## Supported versions
 
 - [Arazzo 1.0.0](https://spec.openapis.org/arazzo/v1.0.0)
