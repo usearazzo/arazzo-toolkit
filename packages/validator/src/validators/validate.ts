@@ -12,7 +12,10 @@ import {
 import type { PartialDeep } from 'type-fest';
 import { mergeDeepRight } from 'ramda';
 
-import { Arazzo1JsonSchemaValidationProvider } from './json-schema-provider.ts';
+import {
+  Arazzo1JsonSchemaValidationProvider,
+  Arazzo11JsonSchemaValidationProvider,
+} from './json-schema-provider.ts';
 
 /**
  * Default language service context for validation.
@@ -29,7 +32,12 @@ export const defaultLanguageServiceContext: Partial<LanguageServiceContext> = {
     version: '1.0.1',
     mediaType: mediaTypes.findBy('1.0.1'),
   },
-  validatorProviders: [new Arazzo1JsonSchemaValidationProvider()],
+  // the language service registers no providers of its own, so each Arazzo version whose JSON
+  // Schema should be checked needs one here; a version without one is silently skipped
+  validatorProviders: [
+    new Arazzo1JsonSchemaValidationProvider(),
+    new Arazzo11JsonSchemaValidationProvider(),
+  ],
   // semantic validation, reference validation and semantic linting are always
   // on, while JSON Schema (AJV) validation is opt-in. `betterAjvErrors` is kept
   // on so opting in also gets the friendlier AJV messages.

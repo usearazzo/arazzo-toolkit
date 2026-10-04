@@ -325,6 +325,43 @@ describe('validate', function () {
       assert.equal(unresolved[0].severity, DiagnosticSeverity.Error);
     });
   });
+
+  context('given JSON Schema validation is enabled', function () {
+    // info.version is required by both the Arazzo 1.0 and 1.1 JSON Schemas
+    const withoutInfoVersion = (version: string) => dedent`
+      arazzo: '${version}'
+      info:
+        title: My Workflow
+      sourceDescriptions:
+        - name: myApi
+          type: openapi
+          url: https://example.com/openapi.json
+      workflows:
+        - workflowId: myWorkflow
+          steps:
+            - stepId: step1
+              operationId: myApi.getUsers
+    `;
+    const jsonSchemaDiagnostics = async (version: string) => {
+      const textDocument = createTextDocument('memory://arazzo.yaml', withoutInfoVersion(version));
+      const diagnostics = await validate(textDocument, {
+        validationContext: { jsonSchemaValidation: true },
+      });
+      return diagnostics.filter((d) => d.code === 'json-schema');
+    };
+
+    specify('should check an Arazzo 1.0.x document against the 1.0 schema', async function () {
+      const diagnostics = await jsonSchemaDiagnostics('1.0.1');
+      assert.isAbove(diagnostics.length, 0);
+      assert.isTrue(diagnostics.every((d) => d.source === 'Arazzo 1.0 Schema'));
+    });
+
+    specify('should check an Arazzo 1.1.0 document against the 1.1 schema', async function () {
+      const diagnostics = await jsonSchemaDiagnostics('1.1.0');
+      assert.isAbove(diagnostics.length, 0);
+      assert.isTrue(diagnostics.every((d) => d.source === 'Arazzo 1.1 Schema'));
+    });
+  });
 });
 
 describe('defaultLanguageServiceContext', function () {
