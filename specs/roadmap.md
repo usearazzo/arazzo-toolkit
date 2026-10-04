@@ -16,7 +16,7 @@ Phases are intentionally small — each one is a shippable, independently review
 
 **Lifecycle:** when a phase ships, append ` ✅` (a single space followed by the U+2705 checkmark) to its `## Phase N — Title` heading and leave the rest of the block in place — do not delete or renumber. The leading space is load-bearing — completion-verify steps `grep -F` for the exact ` ✅` suffix. Phase numbers are stable identifiers; completed phases stay in the file as history. New work takes the next number after the largest existing phase.
 
-## Phase 1 — Publish @usearazzo/resolver
+## Phase 1 — Publish @usearazzo/resolver ✅
 
 **Goal:** `@usearazzo/resolver` is on npm with a surface that covers dereferencing, resolving, and bundling for Arazzo and OpenAPI; the first release is cut by hand, every release after it goes through `release.yml` trusted publishing.  
 **Depends on:** none  
@@ -38,7 +38,7 @@ Phases are intentionally small — each one is a shippable, independently review
 - In the runner, tag the already-implemented 1.1.0 rules (null criterion context fails, `retryAfter` semantics) with version-specific cases; 1.1.0 constructs not yet implemented stay with #119.
 - Record any behavior that differs by version in the package README so consumers know what changes with the `arazzo` field.
 
-## Phase 3 — Validator rules reference on the website
+## Phase 3 — Validator rules reference on the website ✅
 
 **Goal:** every rule the validator enforces is documented where the parser reference already lives.  
 **Depends on:** none  
@@ -46,7 +46,7 @@ Phases are intentionally small — each one is a shippable, independently review
 
 - Write `_reference/validator.md` in `usearazzo/website` listing each semantic validation and linting rule with its diagnostic code and severity; point `packages/validator/README.md` at it and remove the dead `docs/rules.md` link (closes #27).
 - State the defaults (the parser's JSON/YAML `fileAllowList`, source description resolution on) in the reference, with the opt-down and directory-confinement recipes for untrusted input (usearazzo/website#28).
-- Add tests for the `ARAZZO_NOT_DETECTED` path and for `validateURI` base URI injection.
+- Add tests for the `ARAZZO_NOT_DETECTED` path. (A test for `validateURI` base URI injection was planned and dropped: `validationContext.baseURI` only anchors reference validation, which checks local `#/` pointers only, so the injected value has no observable effect.)
 
 ## Phase 4 — Publish @usearazzo/validator
 
