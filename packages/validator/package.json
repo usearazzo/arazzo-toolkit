@@ -1,7 +1,6 @@
 {
   "name": "@usearazzo/validator",
-  "version": "1.0.1-alpha.0",
-  "private": true,
+  "version": "1.0.1-alpha.5",
   "description": "Validator and linter for Arazzo documents: semantic validation, semantic linting, and opt-in JSON Schema validation.",
   "keywords": [
     "arazzo",
