@@ -48,7 +48,7 @@ Phases are intentionally small — each one is a shippable, independently review
 - State the defaults (the parser's JSON/YAML `fileAllowList`, source description resolution on) in the reference, with the opt-down and directory-confinement recipes for untrusted input (usearazzo/website#28).
 - Add tests for the `ARAZZO_NOT_DETECTED` path. (A test for `validateURI` base URI injection was planned and dropped: `validationContext.baseURI` only anchors reference validation, which checks local `#/` pointers only, so the injected value has no observable effect.)
 
-## Phase 4 — Publish @usearazzo/validator
+## Phase 4 — Publish @usearazzo/validator ✅
 
 **Goal:** the validator is installable from npm.  
 **Depends on:** Phase 3  
