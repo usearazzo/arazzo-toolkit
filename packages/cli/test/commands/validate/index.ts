@@ -20,9 +20,13 @@ const invalidJSON = path.join(fixtures, 'arazzo-invalid.json');
 const warningsYAML = path.join(fixtures, 'arazzo-warnings.yaml');
 const schemaInvalidYAML = path.join(fixtures, 'arazzo-schema-invalid.yaml');
 
-// force NO_COLOR so the stylish formatter's chalk output is deterministic
-// regardless of the runner's TTY/FORCE_COLOR environment
-const env = { ...process.env, NO_COLOR: '1' };
+// force NO_COLOR so the stylish formatter's chalk output is deterministic. CI
+// sets FORCE_COLOR, which overrides NO_COLOR (and makes Node warn on stderr), so
+// both inherited color variables are dropped first.
+const baseEnv = { ...process.env };
+delete baseEnv.FORCE_COLOR;
+delete baseEnv.NO_COLOR;
+const env = { ...baseEnv, NO_COLOR: '1' };
 
 // every run gets an empty working directory by default, so a configuration file
 // lying around in the package directory can never leak into a test
@@ -217,7 +221,7 @@ describe('usearazzo validate', function () {
         const outFile = path.join(dir, 'report.txt');
         // non-zero exit expected: the document has errors
         await execFileAsync('node', [bin, 'validate', invalidYAML, '-o', outFile], {
-          env: { ...process.env, FORCE_COLOR: '1', NO_COLOR: undefined },
+          env: { ...baseEnv, FORCE_COLOR: '1' },
           cwd: emptyCwd,
         }).catch((error: unknown) => error);
         const content = fs.readFileSync(outFile, 'utf-8');
