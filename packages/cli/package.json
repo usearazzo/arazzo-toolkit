@@ -53,7 +53,7 @@
     "commander": "^14.0.3",
     "ramda-adjunct": "^6.1.0",
     "vscode-languageserver-types": "=3.18.3",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.1"
   },
   "files": [
     "bin/",
