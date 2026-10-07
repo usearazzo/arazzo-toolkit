@@ -21,14 +21,14 @@ This package puts the toolkit behind a single `usearazzo` binary. Its one comman
 
 ## Installation
 
-`@usearazzo/cli` is not on npm yet. Until it is, run it from a clone of the monorepo:
+```sh
+npm install --global @usearazzo/cli
+```
+
+Or run it without installing:
 
 ```sh
-git clone https://github.com/usearazzo/arazzo-toolkit.git
-cd arazzo-toolkit
-npm install
-npm run build:es
-npx usearazzo validate adopt-a-pet.arazzo.yaml
+npx @usearazzo/cli validate adopt-a-pet.arazzo.yaml
 ```
 
 Requires Node.js 20.10 or newer.

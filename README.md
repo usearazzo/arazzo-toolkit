@@ -33,10 +33,10 @@ This monorepo contains the following packages:
 
 ## CLI
 
-`@usearazzo/cli` puts the toolkit behind a single `usearazzo` binary for your terminal or CI/CD pipeline. Its one command today is `validate`, which wraps `@usearazzo/validator` and exits non-zero when the document has errors. It is not on npm yet; from a clone of this repository, after `npm install` and `npm run build:es`:
+`@usearazzo/cli` puts the toolkit behind a single `usearazzo` binary for your terminal or CI/CD pipeline. Its one command today is `validate`, which wraps `@usearazzo/validator` and exits non-zero when the document has errors.
 
 ```sh
-npx usearazzo validate ./adopt-a-pet.arazzo.yaml
+npx @usearazzo/cli validate ./adopt-a-pet.arazzo.yaml
 ```
 
 Settings for the validator can live in a YAML or JSON configuration file (`.usearazzo.yaml`, `.usearazzo.json`, and a few variants) in the working directory. See the [@usearazzo/cli README](./packages/cli/README.md) for every option, the exit codes, and the configuration file.
