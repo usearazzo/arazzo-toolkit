@@ -11,7 +11,7 @@ Format: `type(scope): description` — max 69 characters in the header.
   types (`refactor`, `test`, `docs`, `perf`, `build`, `ci`, `style`,
   `revert`) take precedence over `chore` when they fit.
 - Scope: always include a scope. Use the primary subject of the change:
-  - For code: the package short name without the `@usearazzo/` prefix — `parser`, `resolver`, `validator`, `runner` (e.g. `fix(parser)`, `feat(runner)`)
+  - For code: the package short name without the `@usearazzo/` prefix — `parser`, `resolver`, `validator`, `runner`, `cli` (e.g. `fix(parser)`, `feat(runner)`)
   - For `docs`: the doc file name without extension (e.g. `docs(README)`, `docs(CONTRIBUTING)`); a change that touches every package README may go scope-less
   - For `ci`: the workflow file name without extension (e.g. `ci(build)`, `ci(release)`, `ci(nightly-build)`). When the change IS the CI config, use type `ci` — not `chore(ci)`.
   - For `chore`: `chore(deps)` / `chore(deps-dev)` for dependency bumps (matches Dependabot), `chore(release)` for release cuts, and `chore(harness)` for anything under `.claude/`

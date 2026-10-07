@@ -10,7 +10,7 @@ Arazzo Toolkit is a TypeScript monorepo of packages for **parsing**, **resolving
 
 ### Packages
 
-The monorepo contains 4 packages under `packages/`, published under the `@usearazzo` npm scope:
+The monorepo contains 5 packages under `packages/`, published under the `@usearazzo` npm scope:
 
 1. **`parser`** (`@usearazzo/parser`) — parses Arazzo and OpenAPI documents from a file path, URL, string or object into ApiDOM. Entry points: `parseArazzo`, `parseOpenAPI`, plus `parseRuntimeExpression` and `parseCriterionCondition` (thin wrappers over `@swaggerexpert/arazzo-runtime-expression` / `@swaggerexpert/arazzo-criterion`). Throws `ParseError`. Ships an in-memory resolver so object/string input can still resolve relative source description URLs against `resolve.baseURI`.
 
@@ -27,7 +27,9 @@ The monorepo contains 4 packages under `packages/`, published under the `@useara
    - `expression/`, `criterion/`, `resolver/`, `state/` — runtime expression evaluation, criterion evaluators (simple, regex, JSONPath, XPath), parameter/request-body/output resolvers, and `WorkflowExecutionState`.
    - `vendor/swagger-client.mjs` — a webpack bundle of `swagger-client` built by `build:swagger-client` (runs as part of `build:es`); it is a build artifact, don't edit it.
 
-`@usearazzo/parser`, `@usearazzo/resolver` and `@usearazzo/validator` are public packages released by lerna; `runner` is marked private and skipped on publish.
+5. **`cli`** (`@usearazzo/cli`) — the `usearazzo` binary (commander). One command so far, `validate`, a thin wrapper over `@usearazzo/validator`'s `validateURI` with stylish/JSON formatters, `--fail-severity` exit codes, and a `.usearazzo.yaml`/`.usearazzo.json` configuration file (discovered in the cwd, Spectral-style) whose `languageService` key is deep-merged over the validator's defaults. Node-only: ES build, no CJS/UMD bundle, no `src/index.ts` public API.
+
+`@usearazzo/parser`, `@usearazzo/resolver` and `@usearazzo/validator` are public packages released by lerna; `runner` and `cli` are marked private and skipped on publish.
 
 ### Key Concepts
 
