@@ -1,0 +1,6 @@
+/src/**/*.mjs
+/src/**/*.cjs
+/test/**/*.mjs
+/NOTICE
+/LICENSE
+/usearazzo-cli-*.tgz

@@ -1,0 +1,65 @@
+{
+  "name": "@usearazzo/cli",
+  "version": "1.0.1-alpha.6",
+  "private": true,
+  "description": "Command-line interface for Arazzo documents: validate and lint from your terminal or CI/CD pipeline.",
+  "keywords": [
+    "arazzo",
+    "arazzo-specification",
+    "cli",
+    "validator",
+    "validation",
+    "linter",
+    "linting",
+    "workflow",
+    "workflows"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org",
+    "provenance": true,
+    "tag": "latest"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "bin": {
+    "usearazzo": "./bin/usearazzo.mjs"
+  },
+  "engines": {
+    "node": ">=20.10.0"
+  },
+  "scripts": {
+    "build": "npm run clean && npm run build:es",
+    "build:es": "cross-env BABEL_ENV=es babel src --out-dir src --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward'",
+    "lint": "eslint ./",
+    "lint:fix": "eslint ./ --fix",
+    "clean": "rimraf --glob 'src/**/*.mjs' 'src/**/*.cjs' 'test/**/*.mjs'",
+    "typescript:check-types": "tsc --noEmit",
+    "test": "npm run build:es && cross-env BABEL_ENV=es babel test --out-dir test --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward' && cross-env NODE_ENV=test mocha",
+    "prepack": "copyfiles -u 2 ../../LICENSE . && copyfiles -u 2 ../../NOTICE .",
+    "postpack": "rimraf NOTICE LICENSE"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/usearazzo/arazzo-toolkit.git"
+  },
+  "homepage": "https://usearazzo.com/cli/",
+  "author": "Vladimir Gorej <vladimir.gorej@gmail.com>",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@babel/runtime-corejs3": "^8.0.6",
+    "@usearazzo/validator": "1.0.1-alpha.6",
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3",
+    "ramda-adjunct": "^6.1.0",
+    "vscode-languageserver-types": "=3.18.3",
+    "yaml": "^2.9.0"
+  },
+  "files": [
+    "bin/",
+    "src/**/*.mjs",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ]
+}
