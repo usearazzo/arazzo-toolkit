@@ -12,11 +12,11 @@ Arazzo Toolkit uses the following technology choices based on the current reposi
 
 ## Architecture Summary
 
-- **Application style:** LIBRARY — a monorepo of four npm packages, no CLI binary, no service.
+- **Application style:** LIBRARY — a monorepo of five npm packages: four libraries plus `@usearazzo/cli`, a thin Node-only command-line wrapper (`usearazzo` binary). No service.
 - **Primary language(s):** TypeScript (sources), emitted as JavaScript by Babel.
 - **Rendering model:** N/A (library).
 - **Deployment/runtime shape:** ISOMORPHIC — Node.js 20.10+ and evergreen browsers. Every package ships ESM, CommonJS, and a UMD browser bundle. The isomorphic contract is load-bearing: the validator canonicalizes URIs with isomorphic utilities because it is bundled for the browser, and the parser resolves relative input against the page URL there.
-- **Current maturity:** EARLY_STAGE — `1.0.1-alpha.6` in Lerna fixed mode. `@usearazzo/parser`, `@usearazzo/resolver`, and `@usearazzo/validator` are published, each released through `release.yml` trusted publishing after a manual first release. `runner` carries `"private": true` as a publish guard (the source is public; `private` only stops `lerna publish`).
+- **Current maturity:** EARLY_STAGE — `1.0.1-alpha.6` in Lerna fixed mode. `@usearazzo/parser`, `@usearazzo/resolver`, and `@usearazzo/validator` are published, each released through `release.yml` trusted publishing after a manual first release. `runner` and `cli` carry `"private": true` as a publish guard (the source is public; `private` only stops `lerna publish`).
 
 ## Core Stack
 
@@ -87,7 +87,6 @@ Arazzo Toolkit uses the following technology choices based on the current reposi
 
 ## What We Are Not Using
 
-- No **CLI binary** — the `arazzo-validator` binary was removed as a breaking change; no package declares `bin`. The root README's CLI section is a placeholder for the package proposed in #84.
 - No **`ts-node` or test-time loaders** — tests run as real ESM against Babel output.
 - No **mocking library in practice** — `sinon`, `jsdom`, `jsdom-global`, and `microtime` are root devDependencies with no usage in any package (*inferred*: inherited scaffolding).
 - No **semantic-release** — versioning is Lerna with conventional commits, triggered by hand.
@@ -99,5 +98,4 @@ Arazzo Toolkit uses the following technology choices based on the current reposi
 - The UMD bundles are built but never executed in a browser by CI (roadmap Phase 10).
 - Runner modules without a dedicated spec: `abort.ts`, `HTTPClientFetch`, `ParameterDelivery`, `ArazzoValueResolver`, `StepParameterResolver`, `ArazzoWorkflowLocatorNormalizer`, and the index classes (roadmap Phase 6).
 - The runner's `src/index.ts` barrel (~40 exports) has not had a deliberate public-vs-internal pass (#78; roadmap Phase 7).
-- The root `README.md` links `packages/cli/README.md`, which does not exist; the placeholder is accepted until #84 lands.
 - Issue #119's body still says the toolkit targets 1.0.0 / 1.0.1 in the parser and validator; the maintainer confirms 1.1.0 support there, so the issue text is stale.

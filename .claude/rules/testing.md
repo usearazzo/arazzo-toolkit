@@ -14,7 +14,7 @@
 Run tests when your change could affect behavior covered by a suite. Skip them for pure docs or harness configs (`.claude/`).
 
 - Changed anything in `packages/<pkg>/src/` or `packages/<pkg>/test/` → run that package's tests (`cd packages/<pkg> && npm test`).
-- Changed `parser` → also run `resolver`, `validator` and `runner`; they consume `@usearazzo/parser` through the workspace symlink, so a parser change is exercised by their suites too. Same for `resolver` → `runner`.
+- Changed `parser` → also run `resolver`, `validator` and `runner`; they consume `@usearazzo/parser` through the workspace symlink, so a parser change is exercised by their suites too. Same for `resolver` → `runner`, and `validator` → `cli`.
 - Changed `scripts/` (Babel import-extension plugin, Jest serializers), `babel.config.cjs`, `tsconfig.json`, or `eslint.config.js` → run the full suite (`npm test` at the root) and `npm run lint`.
 - Changed `packages/*/src/index.ts` exports → also run `npm run typescript:declaration` in that package so `api-extractor` validates the public surface.
 - Changed only `README.md`, `CONTRIBUTING.md`, `.claude/`, or `.github/` → no test suites required.

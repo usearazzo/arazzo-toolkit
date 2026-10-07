@@ -1,0 +1,23 @@
+arazzo: 1.0.1
+info:
+  title: Pet adoption
+  version: 1.0.0
+  description: Finds a pet
+sourceDescriptions:
+  - name: petstoreAPI
+    url: ./petstore.openapi.json
+    type: openapi
+workflows:
+  - workflowId: findPet
+    description: Finds a pet
+    unknownField: true
+    steps:
+      - stepId: getPet
+        description: Gets a pet
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: 1
+        successCriteria:
+          - condition: $statusCode == 200
