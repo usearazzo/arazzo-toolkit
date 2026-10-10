@@ -201,6 +201,35 @@ describe('StepExecutor', function () {
       );
     });
 
+    specify('should send a request body with its payload expressions evaluated', async function () {
+      const step = refractStep({
+        stepId: 'order',
+        operationId: 'placeOrder',
+        requestBody: {
+          contentType: 'application/json',
+          payload: {
+            petId: '$inputs.petId',
+            quantity: '$inputs.quantity',
+            couponCode: '$inputs.couponCode',
+            status: 'placed',
+          },
+        },
+      }) as StepElement;
+      const { executor, requests } = makeExecutor();
+
+      // `couponCode` is not provided, so its member is omitted from the body.
+      await executor.execute(
+        step,
+        new WorkflowExecutionState({ inputs: { petId: 10, quantity: 1 } }),
+      );
+
+      assert.deepEqual(JSON.parse(requests[0].body as string), {
+        petId: 10,
+        quantity: 1,
+        status: 'placed',
+      });
+    });
+
     specify('should be successful when successCriteria pass', async function () {
       const step = refractStep({
         stepId: 'findPets',

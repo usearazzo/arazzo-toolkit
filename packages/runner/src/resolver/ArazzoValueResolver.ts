@@ -16,13 +16,14 @@ export type RuntimeExpressionResolver = (expression: string) => unknown;
  * literal-vs-expression rule they all share.
  *
  * Per Arazzo 1.0.1, an authored value (a parameter's `value`, an `outputs`
- * entry, a `requestBody` payload or replacement value) is either a literal or
- * a whole runtime expression — there is no embedded/interpolated expression.
- * So a value that is a string is resolved as an expression only when the
- * entire string is a valid runtime expression; every other value (a
- * non-expression string such as `"{$inputs.x}"`, a number, boolean, object,
- * array, or null) is a literal and is used as-is. This is deliberately not
- * template interpolation.
+ * entry, a `requestBody` replacement value) is either a literal or a whole
+ * runtime expression — there is no embedded/interpolated expression. So a
+ * value that is a string is resolved as an expression only when the entire
+ * string is a valid runtime expression; every other value (a non-expression
+ * string such as `"{$inputs.x}"`, a number, boolean, object, array, or null)
+ * is a literal and is used as-is. This is deliberately not template
+ * interpolation. The one exception is a `requestBody` payload, which "can
+ * contain" runtime expressions — {@link RequestBodyResolver} walks it instead.
  * @public
  */
 abstract class ArazzoValueResolver {

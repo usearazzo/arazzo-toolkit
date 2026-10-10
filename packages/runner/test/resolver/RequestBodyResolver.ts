@@ -189,4 +189,162 @@ describe('RequestBodyResolver', function () {
       assert.strictEqual(error.stepId, scope.stepId);
     });
   });
+
+  context('payload expressions', function () {
+    const inputs = {
+      petId: 7,
+      name: 'Rex',
+      nothing: null,
+      note: { text: '{$inputs.name}', ref: '$inputs.petId' },
+    };
+    const payloadRuntime = new RuntimeExpressionEvaluator({ inputs }, { strict: false });
+    const payloadResolve: RuntimeExpressionResolver = (expression) =>
+      payloadRuntime.evaluate(expression);
+
+    const payloadOf = (payload: unknown, replacements?: unknown[]): unknown => {
+      const requestBody = refractRequestBody(
+        replacements === undefined ? { payload } : { payload, replacements },
+      );
+      return resolver.resolve(requestBody, payloadResolve, scope)?.payload;
+    };
+
+    const resolverError = (payload: unknown): ResolverError =>
+      assert.throws(() => payloadOf(payload), ResolverError) as unknown as ResolverError;
+
+    specify('should resolve bare-expression object members to their typed values', function () {
+      assert.deepEqual(payloadOf({ petId: '$inputs.petId', status: 'placed' }), {
+        petId: 7,
+        status: 'placed',
+      });
+    });
+
+    specify('should resolve expressions in nested objects and arrays', function () {
+      assert.deepEqual(
+        payloadOf({ order: { petId: '$inputs.petId' }, tags: ['$inputs.name', 'literal'] }),
+        { order: { petId: 7 }, tags: ['Rex', 'literal'] },
+      );
+    });
+
+    specify('should render a braced expression member as a string', function () {
+      // only the bare form preserves the type; `{$...}` is embedded and always
+      // interpolates to a string.
+      assert.deepEqual(payloadOf({ petId: '{$inputs.petId}' }), { petId: '7' });
+    });
+
+    specify('should interpolate expressions embedded in a string member', function () {
+      assert.deepEqual(payloadOf({ note: 'Order for {$inputs.name} (#{$inputs.petId})' }), {
+        note: 'Order for Rex (#7)',
+      });
+    });
+
+    specify('should interpolate a JSON templated string payload, keeping its braces', function () {
+      const template = '{\n  "petOrder": { "petId": "{$inputs.petId}", "status": "placed" }\n}';
+
+      assert.strictEqual(
+        payloadOf(template),
+        '{\n  "petOrder": { "petId": "7", "status": "placed" }\n}',
+      );
+    });
+
+    specify('should interpolate an XML templated string payload', function () {
+      assert.strictEqual(
+        payloadOf('<order><petId>{$inputs.petId}</petId></order>'),
+        '<order><petId>7</petId></order>',
+      );
+    });
+
+    specify('should keep strings without expression attempts unchanged', function () {
+      assert.deepEqual(payloadOf({ a: '{hello}', b: '$ not an expression', c: '{"x": 1}' }), {
+        a: '{hello}',
+        b: '$ not an expression',
+        c: '{"x": 1}',
+      });
+    });
+
+    specify('should keep an authored __proto__ key as a plain member', function () {
+      const payload = payloadOf(
+        JSON.parse('{"__proto__": {"polluted": "$inputs.name"}}'),
+      ) as object;
+
+      assert.deepEqual(Object.getOwnPropertyDescriptor(payload, '__proto__')?.value, {
+        polluted: 'Rex',
+      });
+      assert.strictEqual(Object.getPrototypeOf(payload), Object.prototype);
+      assert.isUndefined(({} as Record<string, unknown>).polluted);
+    });
+
+    specify('should not evaluate object keys', function () {
+      assert.deepEqual(payloadOf({ '$inputs.petId': 1 }), { '$inputs.petId': 1 });
+    });
+
+    specify('should not evaluate expressions inside resolved values', function () {
+      // a resolved value is data, never a template — even when it looks like one.
+      assert.deepEqual(payloadOf('$inputs.note'), inputs.note);
+      assert.deepEqual(payloadOf({ note: '$inputs.note' }), { note: inputs.note });
+    });
+
+    specify('should omit an object member whose expression does not resolve', function () {
+      // an optional input that was not passed reads as "not provided".
+      assert.deepEqual(payloadOf({ petId: '$inputs.petId', quantity: '$inputs.quantity' }), {
+        petId: 7,
+      });
+    });
+
+    specify('should keep a member whose expression resolves to null', function () {
+      assert.deepEqual(payloadOf({ value: '$inputs.nothing' }), { value: null });
+    });
+
+    specify('should skip a replacement whose value does not resolve', function () {
+      assert.deepEqual(
+        payloadOf({ petId: 0, qty: 1 }, [
+          { target: '/petId', value: '$inputs.missing' },
+          { target: '/qty', value: '$inputs.petId' },
+        ]),
+        { petId: 0, qty: 7 },
+      );
+    });
+
+    specify(
+      'should throw ResolverError when a whole-expression payload does not resolve',
+      function () {
+        const error = resolverError('$inputs.missing');
+
+        assert.strictEqual(error.reason, 'unresolved-expression');
+        assert.strictEqual(error.target, 'requestBody.payload');
+        assert.strictEqual(error.stepId, scope.stepId);
+        assert.match(error.message, /\$inputs\.missing/);
+      },
+    );
+
+    specify('should throw ResolverError when an array element does not resolve', function () {
+      // dropping the element would shift the indices the author wrote.
+      const error = resolverError({ tags: ['first', '$inputs.missing'] });
+
+      assert.strictEqual(error.reason, 'unresolved-expression');
+      assert.strictEqual(error.target, 'requestBody.payload#/tags/1');
+    });
+
+    specify('should throw ResolverError when an embedded expression does not resolve', function () {
+      // an embedded miss cannot be omitted — it would render as an empty string.
+      const error = resolverError({ order: { note: 'Order for {$inputs.missing}' } });
+
+      assert.strictEqual(error.reason, 'unresolved-expression');
+      assert.strictEqual(error.target, 'requestBody.payload#/order/note');
+      assert.match(error.message, /\$inputs\.missing/);
+    });
+
+    specify('should throw ResolverError for an invalid embedded expression', function () {
+      const error = resolverError({ query: 'a={$inputs.petId}&b={$inputs.}' });
+
+      assert.strictEqual(error.reason, 'invalid-expression');
+      assert.strictEqual(error.target, 'requestBody.payload#/query');
+      assert.match(error.message, /\{\$inputs\.\}/);
+    });
+
+    specify('should escape member names in the reported JSON Pointer', function () {
+      const error = resolverError({ 'a/b': { '~c': '{$inputs.missing}' } });
+
+      assert.strictEqual(error.target, 'requestBody.payload#/a~1b/~0c');
+    });
+  });
 });
