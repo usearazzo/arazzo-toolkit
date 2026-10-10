@@ -47,6 +47,16 @@ export interface RuntimeExpressionWorkflowContext {
 }
 
 /**
+ * Identifies a step that calls a workflow, for the context its criteria,
+ * outputs and actions are evaluated against.
+ * @public
+ */
+export interface RuntimeExpressionCalledWorkflowContext {
+  readonly stepId: string;
+  readonly workflowId: string;
+}
+
+/**
  * The runtime state an Arazzo runtime expression is evaluated against.
  *
  * Each field maps to an AST node produced by the runtime expression parser:
@@ -58,6 +68,10 @@ export interface RuntimeExpressionWorkflowContext {
  * - `outputs` backs `$outputs.{name}`
  * - `steps` backs `$steps.{stepId}.outputs.{name}`
  * - `workflows` backs `$workflows.{workflowId}.{inputs|outputs}.{name}`
+ * - `calledWorkflow` marks a step that calls a workflow: such a step made no
+ *   HTTP call, so `$url`, `$method`, `$statusCode`, `$request.{source}` and
+ *   `$response.{source}` are authoring errors there rather than unresolved
+ *   references, and `outputs` holds the called workflow's outputs
  *
  * The context holds only genuinely runtime state. Static, document-sourced
  * expressions — `$components.{field}.{name}` and
@@ -76,4 +90,5 @@ export interface RuntimeExpressionContext {
   readonly outputs?: unknown;
   readonly steps?: Record<string, RuntimeExpressionStepContext>;
   readonly workflows?: Record<string, RuntimeExpressionWorkflowContext>;
+  readonly calledWorkflow?: RuntimeExpressionCalledWorkflowContext;
 }

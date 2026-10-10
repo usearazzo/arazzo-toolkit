@@ -1173,9 +1173,17 @@ class WorkflowExecutor {
       state.setWorkflow(subWorkflowId, { inputs, outputs: result.outputs });
 
       // resolved after the sub-run is recorded, so the step's outputs can map
-      // out of `$workflows.{subWorkflowId}.outputs`. There is no `$response` for
-      // such a step — the context is purely the accumulated run state.
-      const context = state.toContext();
+      // out of `$workflows.{subWorkflowId}.outputs`. The called workflow is the
+      // step's result: `$outputs` names its outputs — the enclosing workflow's
+      // own outputs do not exist until it ends, so that reading could never
+      // resolve here — and, the step having made no HTTP call, `calledWorkflow`
+      // makes `$statusCode`, `$response` and the other HTTP-exchange roots
+      // authoring errors rather than silent misses.
+      const context: RuntimeExpressionContext = {
+        ...state.toContext(),
+        outputs: result.outputs,
+        calledWorkflow: { stepId, workflowId: subWorkflowId },
+      };
       const outputs = this.#outputResolver.resolve(
         step.outputs,
         (expression) => this.#evaluate(context, expression, document),
@@ -1188,8 +1196,8 @@ class WorkflowExecutor {
       // `'transferred'` status itself. The step's own `successCriteria` still
       // apply on top — they are the author's assertion about this step, and
       // dropping them because the step happens to target a workflow would
-      // silently discard it. They see no `$response`, but do see the sub-run's
-      // own outputs (`{}` when it transferred) through `$workflows`.
+      // silently discard it. They see the sub-run's own outputs (`{}` when it
+      // transferred) through `$outputs` and `$workflows`.
       // the criteria and actions are the *calling* step's, so they are
       // evaluated by the parent document's step executor — only the sub-run
       // itself switched documents.

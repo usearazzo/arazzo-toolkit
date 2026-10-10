@@ -75,6 +75,7 @@ export type {
   RuntimeExpressionResponseContext,
   RuntimeExpressionStepContext,
   RuntimeExpressionWorkflowContext,
+  RuntimeExpressionCalledWorkflowContext,
 } from './expression/RuntimeExpressionContext.ts';
 
 /* Criteria */

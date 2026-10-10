@@ -694,3 +694,74 @@ workflows:
     steps:
       - stepId: only
         operationId: getInventory
+
+  # $outputs in a step that calls a workflow names the called workflow's
+  # outputs — in the step's successCriteria, its outputs, and its action
+  # criteria. The workflow's own outputs still read $outputs as its own.
+  - workflowId: readsCalledOutputs
+    steps:
+      - stepId: child
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "7"
+        successCriteria:
+          - condition: $outputs.name == 'Rex'
+        outputs:
+          petName: $outputs.name
+        onSuccess:
+          - name: stopOnRex
+            type: end
+            criteria:
+              - condition: $outputs.name == 'Rex'
+      - stepId: unreached
+        operationId: getInventory
+    outputs:
+      petName: $steps.child.outputs.petName
+
+  # the HTTP-only expressions describe one HTTP exchange; a step that calls a
+  # workflow made none, so each is an authoring error there.
+  - workflowId: calledStatusCodeCriterion
+    steps:
+      - stepId: child
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "7"
+        successCriteria:
+          - condition: $statusCode == 200
+
+  - workflowId: calledResponseOutput
+    steps:
+      - stepId: child
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "7"
+        outputs:
+          body: $response.body
+
+  - workflowId: calledMethodActionCriterion
+    steps:
+      - stepId: child
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "7"
+        onSuccess:
+          - name: onGet
+            type: end
+            criteria:
+              - condition: $method == 'GET'
+
+  - workflowId: calledUrlCriterionContext
+    steps:
+      - stepId: child
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "7"
+        successCriteria:
+          - context: $url
+            condition: ^https
+            type: regex

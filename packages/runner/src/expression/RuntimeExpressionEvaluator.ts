@@ -75,6 +75,18 @@ type MessageContext = {
 const pointerRealm = composeRealms(new ApiDOMEvaluationRealm(), new JSONEvaluationRealm());
 
 /**
+ * The expression roots that describe one HTTP exchange — unavailable in a step
+ * that calls a workflow, which makes none.
+ */
+const HTTP_EXCHANGE_NODES: ReadonlySet<ASTNode['type']> = new Set([
+  'UrlExpression',
+  'MethodExpression',
+  'StatusCodeExpression',
+  'RequestExpression',
+  'ResponseExpression',
+]);
+
+/**
  * Evaluates Arazzo runtime expressions against a context.
  *
  * A single evaluator is bound to one context and can evaluate many expressions
@@ -124,7 +136,9 @@ class RuntimeExpressionEvaluator {
    * unresolvable reference throws; otherwise it returns `undefined`.
    */
   evaluate(expression: string): unknown {
-    const value = this.#evaluateNode(this.#parse(expression), expression);
+    const node = this.#parse(expression);
+    this.#assertAvailable(node, expression);
+    const value = this.#evaluateNode(node, expression);
     if (value === undefined && this.#strict) {
       throw new RuntimeExpressionError(
         `Runtime expression "${expression}" could not be resolved against the context`,
@@ -186,6 +200,21 @@ class RuntimeExpressionEvaluator {
     }
 
     return result.tree;
+  }
+
+  /**
+   * Rejects an HTTP-exchange expression in a step that calls a workflow. Such a
+   * step made no HTTP call, so the expression is an authoring error there — not
+   * a reference that merely did not resolve — and throws regardless of `strict`.
+   */
+  #assertAvailable(node: ASTNode, expression: string): void {
+    const { calledWorkflow } = this.#context;
+    if (calledWorkflow === undefined || !HTTP_EXCHANGE_NODES.has(node.type)) return;
+
+    throw new RuntimeExpressionError(
+      `Runtime expression "${expression}" is not available: step "${calledWorkflow.stepId}" calls workflow "${calledWorkflow.workflowId}", not an operation, so it has no HTTP request or response`,
+      { expression, reason: 'unavailable-expression' },
+    );
   }
 
   /**
