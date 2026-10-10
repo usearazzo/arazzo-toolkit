@@ -1,6 +1,6 @@
 ---
 name: sdd-new-spec
-description: Scaffold a feature spec for a roadmap phase and open it as a PR for human review. Reads specs/roadmap.md, lets the user pick a phase (or accepts one as argument), runs preflight checks, cuts a feature branch, writes specs/YYYY-MM-DD-<slug>/ (requirements.md, plan.md, validation.md — grounded in specs/mission.md and specs/tech-stack.md), commits, pushes, and opens a PR. Makes zero code changes — the PR is for review of the spec itself; implementation follows in a separate PR once the spec is approved. Groups clarifying questions (one per output file) via AskUserQuestion before any disk write.
+description: Scaffold a feature spec for a roadmap phase and open it as a PR for human review. Reads specs/roadmap.md, lets the user pick a phase (or accepts one as argument), runs preflight checks, cuts a feature branch, writes specs/YYYY-MM-DD-<slug>/ (requirements.md, plan.md, validation.md — grounded in specs/mission.md and specs/tech-stack.md), runs the adversarial review (adversarial-workflow skill, lean profile) on the spec, commits, pushes, and opens a PR. Makes zero code changes — the PR is for review of the spec itself; implementation follows in a separate PR once the spec is approved. Groups clarifying questions (one per output file) via AskUserQuestion before any disk write.
 argument-hint: "[phase-number | \"phase title fragment\"] (optional)"
 metadata:
   internal: true
@@ -78,7 +78,7 @@ If the user wants to change the phase's scope at this step, route them to update
 
 ## Phase 2 — Research (MANDATORY)
 
-Do the research yourself, in this session — read files directly with `Read` / `Grep` / `Bash` (`git log`), and do **not** spawn subagents. Work through the three passes below, one per output file, and keep written notes for each; the notes feed Phase 4 (AskUserQuestion options) and Phase 6 (file content). Do not proceed to Phase 3 until all three passes are complete.
+Do the research yourself, in this session — read files directly with `Read` / `Grep` / `Bash` (`git log`), and do **not** spawn subagents (the Phase 6.5 review is the only fan-out). Work through the three passes below, one per output file, and keep written notes for each; the notes feed Phase 4 (AskUserQuestion options) and Phase 6 (file content). Do not proceed to Phase 3 until all three passes are complete.
 
 - **Thoroughness:** feature specs are load-bearing; shallow grounding produces shallow specs. Read the actual source, not just file names.
 - **Scope:** the phase number, title, and the full roadmap-phase body from `specs/roadmap.md` frame every pass.
@@ -200,6 +200,18 @@ Structure:
 - Numbered subsections `### <N>. <Check Title>` — each contains either a fenced code-block command and an exact expectation (HTTP status, exit code, output substring, file contents), or a short description of a non-command check (e.g. `tsconfig.json` must contain `"strict": true`). Be concrete: "`parseArazzo('./fixture.yaml')` resolves to a `ParseResultElement` whose `api` is an `ArazzoSpecification1Element`" — not "parser works".
 - **Not Required** — final section. Explicit list of what this phase does **not** need (no automated tests for this phase, no CI pipeline required, no browser check, etc.) — matches what the user flagged in Question 3. Prevents scope creep and reviewer confusion.
 
+## Phase 6.5 — Review the spec
+
+Before committing, run the adversarial review per `.claude/rules/adversarial-review.md`. A spec is a plan — a durable decision no test suite can refute — which is exactly the claim class the review exists for.
+
+- **Scope:** the three files under `specs/<date>-<slug>/`.
+- **Dimensions** (D=3):
+  1. `grounding` — every requirement, constraint and decision traces to `specs/mission.md`, `specs/tech-stack.md`, the roadmap phase, or `specs/lessons.md`; every file path, symbol and command the plan cites exists as written (quote re-check).
+  2. `approach` — the plan's architecture and boundaries: does it fit the existing package structure and the conventions in `.claude/CLAUDE.md`, what failure modes it ignores, and what it forecloses.
+  3. `validation` — every requirement has a concrete check in `validation.md`, each check has an exact expectation, and `plan.md` carries the roadmap-completion task with its ` ✅` Verify assertion.
+- Surface the mapped findings. If there are Blockers, use a single `AskUserQuestion` (multi-select) to choose which to fix; apply accepted fixes to the three files before Phase 7. Suggestions and Nits: list them and ask once whether to apply any (default: skip).
+- If the run fails, follow the rule's failure clause and continue to Phase 7; carry the `review skipped` line into Phase 9.
+
 ## Phase 7 — Commit the spec files
 
 Atomic commit per `.claude/rules/git-workflow.md`.
@@ -258,4 +270,5 @@ Return to the user in a few lines:
 - Phase chosen (number + title)
 - Branch, commit SHA, PR URL
 - Files created (full paths)
+- **Review outcome:** Blockers fixed / declined, Suggestions applied / skipped, and the survived / refuted / no-quorum / unrefuted counts from Phase 6.5
 - Next step: human review on the PR. Once merged, the implementation work described in `plan.md` happens in a separate branch/PR — this skill does not execute it.

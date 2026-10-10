@@ -1,6 +1,6 @@
 ---
 name: sdd-distill-lessons
-description: Distil per-spec retrospectives into specs/lessons.md so future spec authoring absorbs the learning. Reads specs/*/retrospective.md, groups recurring patterns, surfaces candidate lessons and tech-stack.md promotion candidates via AskUserQuestion, writes confirmed additions to specs/lessons.md, then invokes /code-review against the pending change before stopping.
+description: Distil per-spec retrospectives into specs/lessons.md so future spec authoring absorbs the learning. Reads specs/*/retrospective.md, groups recurring patterns, surfaces candidate lessons and tech-stack.md promotion candidates via AskUserQuestion, writes confirmed additions to specs/lessons.md, then runs the adversarial review (adversarial-workflow skill, lean profile) against the pending change before stopping.
 argument-hint: "(no arguments)"
 metadata:
   internal: true
@@ -97,14 +97,16 @@ If no candidates qualify, omit this section.
 
 ## Phase 6 — Review the edit
 
-Immediately after the `specs/lessons.md` edit lands, invoke the built-in `review` skill via the `Skill` tool with argument `low local changes`. The `review` skill handles a working-tree diff when given that argument — treat it as a normal capability of the skill.
+Immediately after the `specs/lessons.md` edit lands, run the adversarial review per `.claude/rules/adversarial-review.md`.
 
-- Invoke the `Skill` tool with `skill: "code-review"` and `args: "low local changes"`. The explicit `low` level is load-bearing — omitting it makes the skill reuse whatever level was last typed interactively in the session (including expensive `high`/`max`/`ultra` tiers), which this automated sanity-check pass does not need.
+- **Scope:** the working-tree diff of `specs/lessons.md` (`git diff specs/lessons.md`).
+- **Dimensions** (D=2):
+  1. `source-fidelity` — every added lesson traces to the retrospectives it cites, and its wording does not overreach what those retrospectives say (quote re-check against each `specs/*/retrospective.md`).
+  2. `consistency` — added lessons neither duplicate nor contradict existing `specs/lessons.md` entries or `specs/tech-stack.md`, follow the file's bullet format, and leave no template placeholders behind.
 - Do not skip or defer this step; it is part of the skill's contract.
-- Do **not** narrate the invocation mechanism, describe the skill as PR-oriented, explain arguments, or frame the call as a workaround. Just run it and report its findings.
-- Surface the reviewer's findings verbatim; do not summarise them away.
-- If the reviewer flags an in-scope issue (e.g. a malformed bullet, a wrong source reference, a stale placeholder left behind), offer to apply a fix and ask the user to confirm before re-editing. Do not auto-apply fixes.
-- If the `Skill` invocation itself fails (tool error, unrecognised arg, unreachable), surface the error and proceed to Phase 7; do not silently drop the step, and do not retry more than once.
+- Surface the mapped findings; do not summarise them away.
+- If the review flags an in-scope issue (e.g. a malformed bullet, a wrong source reference, a stale placeholder left behind), offer to apply a fix and ask the user to confirm before re-editing. Do not auto-apply fixes.
+- If the run fails, follow the rule's failure clause and proceed to Phase 7.
 
 ## Phase 7 — Report back
 
@@ -114,7 +116,7 @@ Return to the user in a few lines:
 - Lessons added to `specs/lessons.md` (count + one bullet per accepted lesson)
 - Lessons skipped (count + one-line reason: already captured / user declined / queued for follow-up run)
 - Promotion candidates surfaced for manual `specs/tech-stack.md` addition (count + one bullet per, with source retros)
-- **Review outcome:** one-line verdict from Phase 6 — `clean`, `suggestions available`, `blocker`, or `review skipped — <one-line error>`
+- **Review outcome:** one-line verdict from Phase 6 — `clean`, `suggestions available`, `blocker`, or `review skipped — <one-line error>`, plus the survived / refuted / no-quorum / unrefuted counts
 - Next steps (user-driven — this skill does not do them):
   1. Review the diff (`git diff specs/lessons.md`).
   2. Hand-promote any flagged candidates into `specs/tech-stack.md` if appropriate.

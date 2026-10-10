@@ -24,6 +24,6 @@ Supporting infrastructure:
 - `.claude/templates/sdd/feature-spec/*.example.md` — structural templates for each feature-spec file
 - `.claude/skills/sdd-new-phase/SKILL.md` — `/sdd-new-phase` skill that appends a new active phase to `specs/roadmap.md`
 - `.claude/skills/sdd-new-spec/SKILL.md` — `/sdd-new-spec` skill that scaffolds a feature spec from a roadmap phase
-- `.claude/skills/sdd-implement-spec/SKILL.md` — `/sdd-implement-spec` skill that implements an existing feature spec end-to-end (branch, commits per `plan.md` group, verification per `validation.md`, pre-push review pairing built-in `/code-review` with one three-perspective deep-review subagent, PR)
+- `.claude/skills/sdd-implement-spec/SKILL.md` — `/sdd-implement-spec` skill that implements an existing feature spec end-to-end (branch, commits per `plan.md` group, verification per `validation.md`, pre-push adversarial review over three dimensions per `adversarial-review.md`, PR)
 - `.claude/templates/sdd/feature-spec/retrospective.example.md` — structural template for per-spec retrospectives
 - `.claude/skills/sdd-distill-lessons/SKILL.md` — `/sdd-distill-lessons` skill that distils retrospectives into `specs/lessons.md`
