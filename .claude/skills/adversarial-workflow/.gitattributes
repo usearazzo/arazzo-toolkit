@@ -1,0 +1,4 @@
+# Keep line endings fixed when this skill is vendored into a git repo:
+# cmd misparses labels in LF batch files, bash chokes on CRLF.
+*.bat text eol=crlf
+*.sh  text eol=lf
