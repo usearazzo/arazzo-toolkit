@@ -518,6 +518,43 @@ console.log(outcome.action); // the selected onSuccess / onFailure action, or un
 state.setStepOutputs(outcome.stepId, outcome.outputs);
 ```
 
+### Request body payloads
+
+A parameter `value` or an `outputs` entry is either a literal or one whole runtime expression. A
+`requestBody` payload is different: it "can contain" runtime expressions, so it is walked. Every
+string in it — the payload itself, or any value nested in its objects and arrays — resolves by one
+rule:
+
+- a whole runtime expression (`$inputs.petId`) resolves to its **typed** value;
+- any other string has its embedded `{expression}` occurrences interpolated into a **string**
+  (`"Order for {$inputs.name}"`, `"{$inputs.petId}"` → `"7"`). Interpolation is tolerant, so
+  literal braces stay as written — a JSON or XML template string works as-is.
+
+Object keys are never evaluated, and neither are resolved values: a value read from `$inputs` that
+happens to contain `{$...}` is data, not a template. Interpolated values are inserted raw — escaping
+them for the payload's content type is up to the author — with `null` rendered as an empty string
+and objects and arrays as JSON text. A `replacements` entry's `value` is not part of the walk: like a
+parameter value, it is a literal or one whole expression, so `'{$inputs.petId}'` there stays literal.
+
+```yaml
+requestBody:
+  contentType: application/json
+  payload:
+    petId: $inputs.pet_id # typed: 10
+    couponCode: $inputs.coupon_code # omitted when coupon_code is not provided
+    note: 'Order for {$inputs.name}' # string
+```
+
+An expression that does not resolve reads as **not provided**. Where leaving it out is possible it
+is left out: an object member is omitted, and a `replacements` entry whose `value` does not resolve
+is skipped. Where it is not — a whole-expression payload, an array element (dropping it would shift
+the indices), or an embedded expression (it would render as an empty string) — resolution throws a
+`ResolverError` with `reason: 'unresolved-expression'` and the location as `target`
+(`requestBody.payload#/order/note`). A `{$` always starts an expression attempt, so one that does
+not parse — `{$inputs.}`, `{$foo.bar}`, an unterminated `{$url` — throws with
+`reason: 'invalid-expression'` rather than being sent as text. A value that resolves to `null` is
+provided and is kept.
+
 ### Authoring errors vs. failed steps
 
 The two are deliberately distinct:
