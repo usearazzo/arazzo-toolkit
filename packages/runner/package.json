@@ -63,7 +63,7 @@
     "@speclynx/apidom-reference": "^5.2.6",
     "@speclynx/apidom-traverse": "^5.2.6",
     "@swaggerexpert/arazzo-criterion": "^1.0.1",
-    "@swaggerexpert/arazzo-runtime-expression": "^3.2.0",
+    "@swaggerexpert/arazzo-runtime-expression": "^3.3.0",
     "@swaggerexpert/json-pointer": "^3.0.2",
     "@swaggerexpert/jsonpath": "^4.0.5",
     "@usearazzo/parser": "1.0.1-alpha.7",
