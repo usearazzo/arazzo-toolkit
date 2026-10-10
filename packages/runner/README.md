@@ -273,8 +273,8 @@ recorded under
 updated state. A sub-run that ends `failed` puts the step on its failure path, so `onFailure` —
 including `retry`, which re-runs the whole sub-workflow — applies exactly as for an operation step.
 
-The called workflow is the step's result. The specification leaves two expressions undefined in such
-a step, and the runner reads them as follows:
+The called workflow is the step's result. The specification does not say what `$outputs` or the
+HTTP-exchange expressions mean in such a step, and the runner reads them as follows:
 
 - **`$outputs.<name>` names the called workflow's outputs** in the step's `successCriteria`, `outputs`
   and action `criteria` — the reading every specification example that uses it relies on. The
@@ -282,8 +282,13 @@ a step, and the runner reads them as follows:
   inside a step. Elsewhere `$outputs` keeps its usual meaning, and `$workflows.<id>.outputs.<name>`
   works everywhere.
 - **`$statusCode`, `$url`, `$method`, `$request.*` and `$response.*` throw** a
-  `RuntimeExpressionError` (`reason: 'unavailable-expression'`) naming the expression and the step:
-  they describe one HTTP exchange, and a step that calls a workflow made none.
+  `RuntimeExpressionError` (`reason: 'unavailable-expression'`) naming the expression and the step
+  when used in its `successCriteria` or `outputs`: they describe one HTTP exchange, and a step that
+  calls a workflow made none. In an `onSuccess` / `onFailure` action's `criteria` they make the
+  action **not match** instead — actions are shared (inherited from the workflow's
+  `successActions` / `failureActions`, reused from `components`), so a default written for the
+  operation steps must not abort the run at a step that calls a workflow. The step's `parameters`
+  are resolved before the call, so there these expressions stay ordinary unresolved references.
 
 ```yaml
 - stepId: place-order
