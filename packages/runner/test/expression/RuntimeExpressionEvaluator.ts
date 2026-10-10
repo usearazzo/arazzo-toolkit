@@ -147,6 +147,61 @@ describe('RuntimeExpressionEvaluator', function () {
     });
   });
 
+  context('a step that calls a workflow', function () {
+    const calledContext: RuntimeExpressionContext = {
+      inputs: { username: 'alice' },
+      outputs: { name: 'Rex' },
+      calledWorkflow: { stepId: 'child', workflowId: 'fetchPet' },
+    };
+
+    for (const expression of [
+      '$statusCode',
+      '$url',
+      '$method',
+      '$request.header.accept',
+      '$request.body#/name',
+      '$response.body',
+      '$response.header.Server',
+    ]) {
+      specify(`should reject ${expression} even when not strict`, function () {
+        const evaluator = new RuntimeExpressionEvaluator(calledContext, { strict: false });
+
+        const error = assert.throws(
+          () => evaluator.evaluate(expression),
+          RuntimeExpressionError,
+          /step "child" calls workflow "fetchPet"/,
+        ) as unknown as RuntimeExpressionError;
+
+        assert.strictEqual(error.reason, 'unavailable-expression');
+        assert.strictEqual(error.expression, expression);
+      });
+    }
+
+    specify('should reject an embedded HTTP-only expression when interpolating', function () {
+      const evaluator = new RuntimeExpressionEvaluator(calledContext, { strict: false });
+
+      assert.throws(() => evaluator.interpolate('code={$statusCode}'), RuntimeExpressionError);
+    });
+
+    specify('should keep resolving every other root', function () {
+      const evaluator = new RuntimeExpressionEvaluator(calledContext, { strict: false });
+
+      assert.strictEqual(evaluator.evaluate('$outputs.name'), 'Rex');
+      assert.strictEqual(evaluator.evaluate('$inputs.username'), 'alice');
+    });
+
+    specify('should leave HTTP-only expressions lenient without calledWorkflow', function () {
+      // before an operation step's request (resolving parameters) there is no
+      // exchange yet either; that miss stays an ordinary unresolved reference.
+      const evaluator = new RuntimeExpressionEvaluator(
+        { inputs: calledContext.inputs, outputs: calledContext.outputs },
+        { strict: false },
+      );
+
+      assert.isUndefined(evaluator.evaluate('$statusCode'));
+    });
+  });
+
   context('interpolate', function () {
     let evaluator: RuntimeExpressionEvaluator;
 
