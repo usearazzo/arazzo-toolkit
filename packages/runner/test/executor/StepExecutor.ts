@@ -12,6 +12,7 @@ import {
   WorkflowExecutionState,
   ExecutionError,
   ClientError,
+  ResolverError,
   type HTTPClient,
   type OpenAPIOperationRequest,
 } from '../../src/index.ts';
@@ -228,6 +229,59 @@ describe('StepExecutor', function () {
         quantity: 1,
         status: 'placed',
       });
+    });
+
+    specify('should evaluate step output references in the payload', async function () {
+      const step = refractStep({
+        stepId: 'order',
+        operationId: 'placeOrder',
+        requestBody: {
+          contentType: 'application/json',
+          payload: { petId: '$steps.findPet.outputs.petId', status: 'placed' },
+        },
+      }) as StepElement;
+      const { executor, requests } = makeExecutor();
+      const runState = state();
+      runState.setStepOutputs('findPet', { petId: 12 });
+
+      await executor.execute(step, runState);
+
+      assert.deepEqual(JSON.parse(requests[0].body as string), { petId: 12, status: 'placed' });
+    });
+
+    specify('should send an interpolated JSON template payload as-is', async function () {
+      const step = refractStep({
+        stepId: 'order',
+        operationId: 'placeOrder',
+        requestBody: {
+          contentType: 'application/json',
+          payload: '{"petId": {$inputs.petId}, "status": "placed"}',
+        },
+      }) as StepElement;
+      const { executor, requests } = makeExecutor();
+
+      await executor.execute(step, new WorkflowExecutionState({ inputs: { petId: 10 } }));
+
+      assert.deepEqual(JSON.parse(requests[0].body as string), { petId: 10, status: 'placed' });
+      assert.match(
+        requests[0].headers['Content-Type'] ?? requests[0].headers['content-type'],
+        /application\/json/,
+      );
+    });
+
+    specify('should throw a payload ResolverError before sending any request', async function () {
+      const step = refractStep({
+        stepId: 'order',
+        operationId: 'placeOrder',
+        requestBody: {
+          contentType: 'application/json',
+          payload: { note: 'Order for {$inputs.name}' },
+        },
+      }) as StepElement;
+      const { executor, requests } = makeExecutor();
+
+      await rejects(executor.execute(step, state()), ResolverError, /\$inputs\.name/);
+      assert.lengthOf(requests, 0);
     });
 
     specify('should be successful when successCriteria pass', async function () {

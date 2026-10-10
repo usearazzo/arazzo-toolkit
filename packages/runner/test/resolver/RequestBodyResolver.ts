@@ -294,6 +294,50 @@ describe('RequestBodyResolver', function () {
       assert.deepEqual(payloadOf({ value: '$inputs.nothing' }), { value: null });
     });
 
+    specify('should embed null as an empty string and objects as JSON text', function () {
+      assert.deepEqual(payloadOf({ a: 'v={$inputs.nothing}', b: 'note={$inputs.note}' }), {
+        a: 'v=',
+        b: 'note={"text":"{$inputs.name}","ref":"$inputs.petId"}',
+      });
+    });
+
+    specify('should resolve a top-level array payload', function () {
+      assert.deepEqual(payloadOf(['$inputs.petId', 'literal']), [7, 'literal']);
+    });
+
+    specify('should omit an unresolved member of an object inside an array', function () {
+      // the member belongs to an object, so it is omitted rather than thrown.
+      assert.deepEqual(payloadOf([{ petId: '$inputs.petId', qty: '$inputs.missing' }]), [
+        { petId: 7 },
+      ]);
+    });
+
+    specify('should leave an empty object when every member is unresolved', function () {
+      assert.deepEqual(payloadOf({ order: { a: '$inputs.missing', b: '$inputs.gone' } }), {
+        order: {},
+      });
+    });
+
+    specify('should apply a replacement whose value resolves to null', function () {
+      assert.deepEqual(payloadOf({ petId: 0 }, [{ target: '/petId', value: '$inputs.nothing' }]), {
+        petId: null,
+      });
+    });
+
+    specify('should apply a replacement over a member that was an expression', function () {
+      // payload expressions resolve first; replacements then apply to the result.
+      assert.deepEqual(payloadOf({ petId: '$inputs.petId' }, [{ target: '/petId', value: 1 }]), {
+        petId: 1,
+      });
+    });
+
+    specify('should not interpolate a replacement value', function () {
+      // a replacement value is a literal or one whole expression — never a template.
+      assert.deepEqual(payloadOf({ petId: 0 }, [{ target: '/petId', value: '{$inputs.petId}' }]), {
+        petId: '{$inputs.petId}',
+      });
+    });
+
     specify('should skip a replacement whose value does not resolve', function () {
       assert.deepEqual(
         payloadOf({ petId: 0, qty: 1 }, [
@@ -333,12 +377,32 @@ describe('RequestBodyResolver', function () {
       assert.match(error.message, /\$inputs\.missing/);
     });
 
+    specify(
+      'should report an embedded miss in a string payload at the payload itself',
+      function () {
+        const error = resolverError('{"petId": "{$inputs.missing}"}');
+
+        assert.strictEqual(error.reason, 'unresolved-expression');
+        assert.strictEqual(error.target, 'requestBody.payload');
+      },
+    );
+
     specify('should throw ResolverError for an invalid embedded expression', function () {
       const error = resolverError({ query: 'a={$inputs.petId}&b={$inputs.}' });
 
       assert.strictEqual(error.reason, 'invalid-expression');
       assert.strictEqual(error.target, 'requestBody.payload#/query');
       assert.match(error.message, /\{\$inputs\.\}/);
+    });
+
+    specify('should treat every {$ span that does not parse as an invalid expression', function () {
+      // `{$` always starts an expression attempt, including unterminated ones.
+      for (const text of ['{$}', '{$foo.bar}', 'tail {$url']) {
+        const error = resolverError({ value: text });
+
+        assert.strictEqual(error.reason, 'invalid-expression', text);
+        assert.strictEqual(error.target, 'requestBody.payload#/value', text);
+      }
     });
 
     specify('should escape member names in the reported JSON Pointer', function () {
