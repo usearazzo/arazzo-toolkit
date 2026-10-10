@@ -532,7 +532,9 @@ rule:
 
 Object keys are never evaluated, and neither are resolved values: a value read from `$inputs` that
 happens to contain `{$...}` is data, not a template. Interpolated values are inserted raw — escaping
-them for the payload's content type is up to the author.
+them for the payload's content type is up to the author — with `null` rendered as an empty string
+and objects and arrays as JSON text. A `replacements` entry's `value` is not part of the walk: like a
+parameter value, it is a literal or one whole expression, so `'{$inputs.petId}'` there stays literal.
 
 ```yaml
 requestBody:
@@ -548,8 +550,10 @@ is left out: an object member is omitted, and a `replacements` entry whose `valu
 is skipped. Where it is not — a whole-expression payload, an array element (dropping it would shift
 the indices), or an embedded expression (it would render as an empty string) — resolution throws a
 `ResolverError` with `reason: 'unresolved-expression'` and the location as `target`
-(`requestBody.payload#/order/note`). An invalid embedded expression such as `{$inputs.}` throws with
-`reason: 'invalid-expression'`. A value that resolves to `null` is provided and is kept.
+(`requestBody.payload#/order/note`). A `{$` always starts an expression attempt, so one that does
+not parse — `{$inputs.}`, `{$foo.bar}`, an unterminated `{$url` — throws with
+`reason: 'invalid-expression'` rather than being sent as text. A value that resolves to `null` is
+provided and is kept.
 
 ### Authoring errors vs. failed steps
 
