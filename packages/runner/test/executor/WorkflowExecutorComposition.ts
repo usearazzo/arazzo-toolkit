@@ -834,10 +834,68 @@ describe('WorkflowExecutor composition', function () {
       assert.deepEqual(result.outputs, { petName: 'Rex' });
     });
 
+    specify("should read the called workflow's outputs in onFailure criteria", async function () {
+      const { executor } = makeExecutor();
+
+      const result = await executor.execute('readsCalledOutputsOnFailure');
+
+      assert.isFalse(result.steps[0].successful);
+      assert.strictEqual(result.status, 'ended');
+    });
+
+    specify('should fail the step without aborting when the called run fails', async function () {
+      const { executor } = makeExecutor(serverErrorResponse);
+
+      const result = await executor.execute('readsCalledOutputs');
+
+      assert.strictEqual(result.status, 'failed');
+      assert.isFalse(result.steps[0].successful);
+    });
+
+    specify('should see empty $outputs when the called run transferred', async function () {
+      const { executor } = makeExecutor();
+
+      const result = await executor.execute('readsOutputsOfTransferredCall');
+
+      assert.strictEqual(subWorkflowsOf(result.steps[0])[0].status, 'transferred');
+      // the transferring workflow declares `name: Rex`, but never reaches its
+      // end to resolve it — so neither reading of its outputs sees it.
+      assert.isUndefined(result.outputs.seen);
+      assert.isUndefined(result.outputs.viaWorkflows);
+    });
+
+    specify('should keep HTTP-exchange roots lenient in the step parameters', async function () {
+      const { executor } = makeExecutor();
+
+      const result = await executor.execute('calledParameterReadsStatusCode');
+
+      assert.strictEqual(result.status, 'completed');
+    });
+
+    specify('should not match actions whose criteria need an HTTP exchange', async function () {
+      // own onSuccess criteria on $method: no match, so the run advances
+      // normally instead of taking the `end` action or aborting.
+      const own = await makeExecutor().executor.execute('calledMethodActionCriterion');
+      assert.strictEqual(own.status, 'completed');
+      assert.isUndefined(own.steps[0].action);
+
+      // inherited workflow-level defaults on $statusCode / $response: neither
+      // the success default (`end`) nor the failure default (`retry`) matches.
+      const { executor, calls } = makeExecutor();
+      const inherited = await executor.execute('inheritsHttpDefaults');
+
+      assert.strictEqual(inherited.status, 'failed');
+      assert.lengthOf(inherited.steps, 2);
+      assert.isTrue(inherited.steps[0].successful);
+      assert.isFalse(inherited.steps[1].successful);
+      assert.strictEqual(inherited.steps[1].attempts, 1);
+      assert.strictEqual(calls.length, 2);
+    });
+
     for (const [workflowId, expression] of [
       ['calledStatusCodeCriterion', '$statusCode'],
       ['calledResponseOutput', '$response.body'],
-      ['calledMethodActionCriterion', '$method'],
+      ['calledRequestCriterion', '$request.header.accept'],
       ['calledUrlCriterionContext', '$url'],
     ]) {
       specify(

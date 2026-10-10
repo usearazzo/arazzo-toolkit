@@ -52,7 +52,13 @@ export interface RuntimeExpressionWorkflowContext {
  * @public
  */
 export interface RuntimeExpressionCalledWorkflowContext {
+  /**
+   * The id of the calling step, the one whose expressions are evaluated.
+   */
   readonly stepId: string;
+  /**
+   * The id of the workflow that step called.
+   */
   readonly workflowId: string;
 }
 

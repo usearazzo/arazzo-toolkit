@@ -25,6 +25,7 @@ import OpenAPIOperationLocatorNormalizer, {
   type OpenAPIOperationLocator,
 } from './OpenAPIOperationLocatorNormalizer.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
+import RuntimeExpressionError from '../errors/RuntimeExpressionError.ts';
 import { readAbortSignal, throwIfAborted } from './abort.ts';
 
 /**
@@ -351,10 +352,23 @@ class StepExecutor {
     successful: boolean,
     context: RuntimeExpressionContext,
   ): SelectedAction[] {
-    const isCriterionMet: CriterionPredicate = (criterion) =>
-      this.#criterionEvaluator.evaluate(criterion, (expression) =>
-        this.#evaluate(context, expression),
-      );
+    const isCriterionMet: CriterionPredicate = (criterion) => {
+      try {
+        return this.#criterionEvaluator.evaluate(criterion, (expression) =>
+          this.#evaluate(context, expression),
+        );
+      } catch (error: unknown) {
+        // an action's criteria decide whether it applies to this outcome, and
+        // actions are shared — inherited from the workflow, reused from
+        // components. A condition on an HTTP exchange cannot apply to a step
+        // that calls a workflow, so the action does not match; the run does not
+        // abort over a default written for the operation steps.
+        if (error instanceof RuntimeExpressionError && error.reason === 'unavailable-expression') {
+          return false;
+        }
+        throw error;
+      }
+    };
     const scope = { stepId: toValue(step.stepId) as string };
 
     return successful
