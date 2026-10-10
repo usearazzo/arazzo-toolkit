@@ -1,7 +1,6 @@
 {
   "name": "@usearazzo/cli",
   "version": "1.0.1-alpha.6",
-  "private": true,
   "description": "Command-line interface for Arazzo documents: validate and lint from your terminal or CI/CD pipeline.",
   "keywords": [
     "arazzo",

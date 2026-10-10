@@ -29,7 +29,7 @@ The monorepo contains 5 packages under `packages/`, published under the `@useara
 
 5. **`cli`** (`@usearazzo/cli`) — the `usearazzo` binary (commander). One command so far, `validate`, a thin wrapper over `@usearazzo/validator`'s `validateURI` with stylish/JSON formatters, `--fail-severity` exit codes, and a `.usearazzo.yaml`/`.usearazzo.json` configuration file (discovered in the cwd, Spectral-style) whose `languageService` key is deep-merged over the validator's defaults. Node-only: ES build, no CJS/UMD bundle, no `src/index.ts` public API.
 
-`@usearazzo/parser`, `@usearazzo/resolver` and `@usearazzo/validator` are public packages released by lerna; `runner` and `cli` are marked private and skipped on publish.
+`@usearazzo/parser`, `@usearazzo/resolver`, `@usearazzo/validator` and `@usearazzo/cli` are public packages released by lerna (`cli` awaits its manual first publish); `runner` is marked private and skipped on publish.
 
 ### Key Concepts
 
