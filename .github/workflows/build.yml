@@ -96,6 +96,7 @@ jobs:
 
     services:
       petstore:
+        # keep the image in sync with release.yml and packages/runner/test/e2e/container.ts
         image: swaggerapi/petstore3:1.0.28
         ports:
           - 8080:8080
