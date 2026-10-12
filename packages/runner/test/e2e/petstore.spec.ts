@@ -44,7 +44,10 @@ describe('petstore workflows against a live petstore', function () {
     );
 
     assert.strictEqual(result.status, 'completed');
-    assert.isNotEmpty(result.outputs);
+    assert.isNumber(result.outputs?.orderId);
+    assert.strictEqual(result.outputs?.orderStatus, 'placed');
+    assert.strictEqual(result.outputs?.orderQuantity, 1);
+    assert.isString(result.outputs?.petName);
   });
 
   specify('loginUserRetrievePet', async function () {
@@ -55,6 +58,6 @@ describe('petstore workflows against a live petstore', function () {
     );
 
     assert.strictEqual(result.status, 'completed');
-    assert.isNotEmpty(result.outputs);
+    assert.isArray(result.outputs?.available);
   });
 });

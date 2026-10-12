@@ -3,11 +3,14 @@ import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
 
+// keep in sync with the `petstore` service image in .github/workflows/build.yml and release.yml
 const IMAGE = 'swaggerapi/petstore3:1.0.28';
 const READY_TIMEOUT_MS = 120_000;
 const READY_POLL_MS = 1_000;
+const READY_REQUEST_TIMEOUT_MS = 5_000;
 
-let containerId: string | undefined;
+// named up front so a container started just before an interruption can still be stopped
+let containerName: string | undefined;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -17,11 +20,11 @@ const docker = async (...args: string[]): Promise<string> => {
 };
 
 const stopContainer = async (): Promise<void> => {
-  const id = containerId;
-  containerId = undefined;
-  if (id === undefined) return;
+  const name = containerName;
+  containerName = undefined;
+  if (name === undefined) return;
   try {
-    await docker('stop', id);
+    await docker('stop', name);
   } catch {
     // `--rm` removes it once stopped; a container that is already gone is fine.
   }
@@ -37,9 +40,10 @@ const startContainer = async (): Promise<string> => {
     );
   }
 
-  containerId = await docker('run', '--rm', '-d', '-p', '127.0.0.1:0:8080', IMAGE);
+  containerName = `usearazzo-runner-e2e-petstore-${process.pid}`;
+  await docker('run', '--rm', '-d', '--name', containerName, '-p', '127.0.0.1:0:8080', IMAGE);
   // `docker port` prints one `<address>:<port>` line per binding.
-  const [binding] = (await docker('port', containerId, '8080')).split('\n');
+  const [binding] = (await docker('port', containerName, '8080')).split('\n');
   const port = binding.slice(binding.lastIndexOf(':') + 1);
 
   return `http://127.0.0.1:${port}/api/v3`;
@@ -51,7 +55,9 @@ const waitUntilReady = async (baseURL: string): Promise<void> => {
 
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`${baseURL}/openapi.json`);
+      const response = await fetch(`${baseURL}/openapi.json`, {
+        signal: AbortSignal.timeout(READY_REQUEST_TIMEOUT_MS),
+      });
       if (response.status === 200) return;
       lastError = new Error(`GET ${baseURL}/openapi.json answered ${response.status}`);
     } catch (error) {
