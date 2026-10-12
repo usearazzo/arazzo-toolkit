@@ -50,7 +50,7 @@ Arazzo Toolkit uses the following technology choices based on the current reposi
 
 - **Test framework(s):** Mocha 12 + Chai 6, snapshots via `mocha-chai-jest-snapshot` with ApiDOM and string serializers from `scripts/`.
 - **Test types visible:** UNIT and package-level INTEGRATION against fixture documents and real parsing. Runner tests inject a stub `HTTPClient`; nothing mocks the toolkit's own layers. No browser test runner. An opt-in end-to-end suite (`npm run test:e2e` in the runner, run by the `e2e` job in `build.yml`) drives the petstore workflows over real HTTP against a pinned `swaggerapi/petstore3` container, outside `npm test`.
-- **Current testing pattern:** `npm test` per package builds `src` to `.mjs`, transpiles `test/**/*.ts` to `.mjs`, then runs Mocha over the emitted files. Coverage today: parser 74 cases, resolver 58, validator 22, runner 563 across 40 files. `UPDATE_SNAPSHOT=1 npm test` refreshes snapshots.
+- **Current testing pattern:** `npm test` per package builds `src` to `.mjs`, transpiles `test/**/*.ts` to `.mjs`, then runs Mocha over the emitted files. Coverage today: parser 74 cases, resolver 58, validator 22, runner 625 across 40 files (plus a 2-case e2e suite run by `npm run test:e2e`). `UPDATE_SNAPSHOT=1 npm test` refreshes snapshots.
 
 ## Tooling and Developer Experience
 
