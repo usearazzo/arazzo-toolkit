@@ -1,0 +1,7 @@
+{
+  "recursive": true,
+  "spec": "test/e2e/**/*.spec.mjs",
+  "file": ["test/mocha-bootstrap.mjs"],
+  "require": ["test/e2e/container.mjs"],
+  "timeout": 180000
+}

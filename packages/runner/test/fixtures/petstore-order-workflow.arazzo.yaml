@@ -42,6 +42,10 @@ workflows:
           type: integer
           description: Number of pets to order
           default: 1
+        shipDate:
+          type: string
+          format: date-time
+          description: Requested shipping date
       required:
         - username
         - password
@@ -72,7 +76,7 @@ workflows:
         successCriteria:
           - condition: $statusCode == 200
           - condition: $response.body && $response.body.length > 0
-            context: response
+            context: $response.body
             type: simple
         outputs:
           availablePets: $response.body
@@ -89,13 +93,13 @@ workflows:
           payload:
             petId: $steps.findAvailablePets.outputs.bestMatchPetId
             quantity: $inputs.orderQuantity
-            shipDate: $datetime.iso8601
+            shipDate: $inputs.shipDate
             status: placed
             complete: false
         successCriteria:
           - condition: $statusCode == 200
           - condition: $response.body.id != null
-            context: response
+            context: $response.body
             type: simple
         outputs:
           orderId: $response.body#/id

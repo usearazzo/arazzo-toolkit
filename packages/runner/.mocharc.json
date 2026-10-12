@@ -1,6 +1,6 @@
 {
   "recursive": true,
   "spec": "test/**/*.mjs",
-  "ignore": ["test/helpers.mjs"],
+  "ignore": ["test/helpers.mjs", "test/e2e/**"],
   "file": ["test/mocha-bootstrap.mjs"]
 }
