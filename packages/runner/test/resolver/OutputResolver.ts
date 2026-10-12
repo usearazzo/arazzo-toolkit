@@ -66,16 +66,43 @@ describe('OutputResolver', function () {
       assert.deepEqual(resolver.resolve(outputs, resolve, stepScope), { missing: undefined });
     });
 
-    specify(
-      'should not interpolate a non-expression string (no embedded expressions in 1.0.1)',
-      function () {
-        const outputs = new StepOutputsElement({ raw: '{$response.body#/token}' });
+    specify('should throw for an output that is not a valid runtime expression', function () {
+      // `$response.body.id` is not Arazzo syntax (`$response.body#/id` is)
+      const outputs = new StepOutputsElement({ orderId: '$response.body.id' });
 
-        assert.deepEqual(resolver.resolve(outputs, resolve, stepScope), {
-          raw: '{$response.body#/token}',
-        });
-      },
-    );
+      const error = assert.throws(
+        () => resolver.resolve(outputs, resolve, stepScope),
+        ResolverError,
+        /Output "orderId" is not a valid runtime expression/,
+      ) as unknown as ResolverError;
+
+      assert.strictEqual(error.reason, 'invalid-expression');
+      assert.strictEqual(error.target, 'outputs');
+      assert.strictEqual(error.stepId, stepScope.stepId);
+    });
+
+    specify('should throw for a literal string output', function () {
+      const outputs = new StepOutputsElement({ raw: '{$response.body#/token}' });
+
+      const error = assert.throws(
+        () => resolver.resolve(outputs, resolve, stepScope),
+        ResolverError,
+      ) as unknown as ResolverError;
+
+      assert.strictEqual(error.reason, 'invalid-expression');
+    });
+
+    specify('should throw for a non-string output', function () {
+      const outputs = new StepOutputsElement({ count: 3 });
+
+      const error = assert.throws(
+        () => resolver.resolve(outputs, resolve, stepScope),
+        ResolverError,
+        /Output "count"/,
+      ) as unknown as ResolverError;
+
+      assert.strictEqual(error.reason, 'invalid-expression');
+    });
 
     specify('should throw ResolverError for a present but non-map outputs', function () {
       // the map-shaped counterpart: the walk is a `forEach`, so this would

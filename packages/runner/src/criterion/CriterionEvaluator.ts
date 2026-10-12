@@ -5,6 +5,7 @@ import {
   isCriterionExpressionTypeElement,
   type CriterionElement,
 } from '@speclynx/apidom-ns-arazzo-1';
+import { test as isRuntimeExpression } from '@swaggerexpert/arazzo-runtime-expression';
 
 import CriterionError from '../errors/CriterionError.ts';
 import RegexCriterionEvaluator from './RegexCriterionEvaluator.ts';
@@ -110,6 +111,7 @@ class CriterionEvaluator {
     }
 
     const type = this.#resolveType(criterion);
+    this.#requireValidContext(criterion, type);
 
     switch (type) {
       case 'simple':
@@ -189,6 +191,22 @@ class CriterionEvaluator {
         condition,
         type,
         reason: 'unsupported-version',
+      });
+    }
+  }
+
+  /**
+   * Enforces that a present `context` is a valid runtime expression, for every
+   * criterion type: the spec types it `{expression}`, and `simple` ignores it,
+   * so a malformed one would otherwise go unnoticed there.
+   */
+  #requireValidContext(criterion: CriterionElement, type: string): void {
+    const { context } = criterion;
+    if (context === undefined) return;
+    if (!isStringElement(context) || !isRuntimeExpression(toValue(context) as string)) {
+      throw new CriterionError('Criterion has a "context" that is not a valid runtime expression', {
+        type,
+        reason: 'invalid-context',
       });
     }
   }

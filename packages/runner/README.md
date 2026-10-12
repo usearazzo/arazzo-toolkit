@@ -588,6 +588,12 @@ The two are deliberately distinct:
 - A **received response with unmet criteria** is a normal outcome: `successful: false`, no throw.
 - **Malformed input** throws an `ExecutionError` (a step with no operation target, more than one
   mutually-exclusive target, a `workflowId` step, or an operation that cannot be located).
+- A **field the specification types as `{expression}`** must hold a valid runtime expression, or the
+  step throws instead of carrying the text into later requests: a step or workflow `outputs` value
+  that is not one (`$response.body.id` is not Arazzo syntax; `$response.body#/id` is) raises a
+  `ResolverError` with `reason: 'invalid-expression'`, and a criterion's `context` that is not one,
+  whatever the criterion `type`, raises a `CriterionError` with `reason: 'invalid-context'`.
+  Literals stay valid where the specification types a field `Any` (parameter and payload values).
 - A **cancelled run** throws too (`reason: 'aborted'`): an `AbortSignal` passed as `signal` in the
   execute options is checked before the request is dispatched, so an already-aborted run does not
   issue a request nobody is waiting for — and a request the transport drops mid-flight is reported

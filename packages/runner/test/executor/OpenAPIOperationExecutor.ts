@@ -327,9 +327,9 @@ describe('OpenAPIOperationExecutor', function () {
       const { executor, requests } = makeExecutor();
       const badLocator = { document: locator.document, jsonPointer: 'pet/findByStatus' };
 
-      const thrown = await rejects(executor.execute(badLocator, {}), ClientError);
+      const thrown = await rejects(executor.execute(badLocator, {}), ExtractionError);
 
-      assert.match((thrown as ClientError).message, /Invalid operationPath/);
+      assert.match((thrown as ExtractionError).message, /Invalid JSON Pointer/);
       assert.strictEqual(requests.length, 0);
     });
 
@@ -342,11 +342,35 @@ describe('OpenAPIOperationExecutor', function () {
         jsonPointer: '/paths/~1pet~1findByStatus/get/responses/200',
       };
 
-      const thrown = await rejects(executor.execute(responseLocator, {}), ClientError);
+      const thrown = await rejects(executor.execute(responseLocator, {}), ExtractionError);
 
-      assert.match((thrown as ClientError).message, /must be of form/);
+      assert.match((thrown as ExtractionError).message, /expected \/paths\/\{path\}\/\{method\}/);
       assert.strictEqual(requests.length, 0);
     });
+
+    specify('should reject a Path Item pointer with ExtractionError', async function () {
+      const { executor, requests } = makeExecutor();
+      const pathItemLocator = {
+        document: locator.document,
+        jsonPointer: '/paths/~1pet~1findByStatus',
+      };
+
+      const thrown = await rejects(executor.execute(pathItemLocator, {}), ExtractionError);
+
+      assert.match((thrown as ExtractionError).message, /expected \/paths/);
+      assert.strictEqual(requests.length, 0);
+    });
+
+    specify(
+      'should reject a pointer to a nonexistent path with ExtractionError',
+      async function () {
+        const { executor, requests } = makeExecutor();
+        const missingLocator = { document: locator.document, jsonPointer: '/paths/~1nope/get' };
+
+        await rejects(executor.execute(missingLocator, {}), ExtractionError);
+        assert.strictEqual(requests.length, 0);
+      },
+    );
 
     specify('should throw ClientError when the request cannot be built', async function () {
       const { executor, requests } = makeExecutor();

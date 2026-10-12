@@ -200,14 +200,14 @@ workflows:
           - condition: $statusCode == 200
         outputs:
           echoed: $inputs.status
-          nextStatus: sold
+          nextStatus: $statusCode
     outputs:
       echoed: $steps.only.outputs.echoed
       nextStatus: $steps.only.outputs.nextStatus
 
   # the calling step's parameter reads the sub-workflow's own recorded outputs,
   # which the first attempt writes. Resolving inputs per attempt would therefore
-  # hand the retry a different status ("sold") than the first attempt got
+  # hand the retry a different status (500) than the first attempt got
   # (nothing recorded yet); a retry re-runs the step as it was entered, so both
   # attempts must see the inputs resolved before the first one.
   - workflowId: retriesChildStableInputs
