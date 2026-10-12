@@ -1,7 +1,6 @@
 {
   "name": "@usearazzo/runner",
-  "version": "1.0.1-alpha.0",
-  "private": true,
+  "version": "1.0.1-alpha.7",
   "description": "Runner for Arazzo Workflows.",
   "keywords": [
     "arazzo",

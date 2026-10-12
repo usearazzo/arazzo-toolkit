@@ -1,9 +1,7 @@
 # @usearazzo/runner
 
-> [!WARNING]
-> This package is under heavy development and is not yet published to npm. It is
-> developed within the [`arazzo-toolkit`](https://github.com/usearazzo/arazzo-toolkit) monorepo and
-> will be publicly installable once its API stabilizes; until then, APIs may change without notice.
+> [!NOTE]
+> This package is published under the `alpha` channel: APIs may still change before 1.0.0.
 
 `@usearazzo/runner` executes [Arazzo Specification](https://spec.openapis.org/arazzo/latest.html)
 workflows against live APIs described by
@@ -765,3 +763,15 @@ A non-2xx response is returned as data, not thrown; whether it counts as success
 up, by a step's `successCriteria`. Everything else throws with a named reason: malformed input (an
 unlocatable operation, an unsupported OpenAPI version), a request that cannot be built (e.g. a
 missing required parameter), and transport failures. The latter two arrive as `ClientError`.
+
+## End-to-end tests
+
+`npm run test:e2e` runs `authenticateAndOrderPet` (the toolkit's own petstore workflow) and
+`loginUserRetrievePet` (the Arazzo Specification's `LoginAndRetrievePets` example) over real HTTP
+against a live petstore. It is separate from `npm test`, which stays deterministic and makes no
+network calls.
+
+By default the suite starts a `swaggerapi/petstore3:1.0.28` container with Docker, on a free port,
+and stops it afterwards, so Docker must be available. To run against an existing petstore instead,
+set `PETSTORE_URL` to its API base, e.g. `PETSTORE_URL=http://localhost:8080/api/v3 npm run test:e2e`;
+the suite then starts no container of its own.
