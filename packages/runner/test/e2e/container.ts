@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
@@ -9,7 +10,9 @@ const READY_TIMEOUT_MS = 120_000;
 const READY_POLL_MS = 1_000;
 const READY_REQUEST_TIMEOUT_MS = 5_000;
 
-// named up front so a container started just before an interruption can still be stopped
+// Named up front so an interruption after `docker run` can still stop it by name. This narrows
+// the leak window, it does not close it: a signal that lands while `docker run` is in flight, or a
+// SIGKILL, can still leave the container running (`--rm` only acts once it is stopped).
 let containerName: string | undefined;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -40,7 +43,7 @@ const startContainer = async (): Promise<string> => {
     );
   }
 
-  containerName = `usearazzo-runner-e2e-petstore-${process.pid}`;
+  containerName = `usearazzo-runner-e2e-petstore-${randomUUID()}`;
   await docker('run', '--rm', '-d', '--name', containerName, '-p', '127.0.0.1:0:8080', IMAGE);
   // `docker port` prints one `<address>:<port>` line per binding.
   const [binding] = (await docker('port', containerName, '8080')).split('\n');
