@@ -1,0 +1,65 @@
+# Copied from OAI/Arazzo-Specification examples/1.0.0/LoginAndRetrievePets.arazzo.yaml.
+# Changes, and only these: the source description url points at the local copy
+# of the petstore3 OpenAPI description (../../fixtures/petstore.openapi.json),
+# and `/get` is appended to the getPetStep operationPath so it references an
+# Operation Object instead of a Path Item.
+arazzo: 1.0.0
+info:
+    title: A pet purchasing workflow
+    summary: This workflow showcases how to purchase a pet through a sequence of API calls
+    description: |
+        This workflow walks you through the steps of `searching` for, `selecting`, and `purchasing` an available pet.
+    version: 1.0.1
+sourceDescriptions:
+- name: petStoreDescription
+  url: ../../fixtures/petstore.openapi.json
+  type: openapi
+
+workflows:
+- workflowId: loginUserRetrievePet  
+  summary: Login User and then retrieve pets
+  description: This procedure lays out the steps to login a user and then retrieve pets
+  inputs: 
+      type: object
+      properties:
+          username:
+              type: string
+          password:
+              type: string
+  steps:
+  - stepId: loginStep
+    description: This step demonstrates the user login step
+    operationId: $sourceDescriptions.petStoreDescription.loginUser
+    parameters:
+      # parameters to inject into the loginUser operation (parameter name must be resolvable at the referenced operation and the value is determined using {expression} syntax)
+      - name: username
+        in: query
+        value: $inputs.username
+      - name: password
+        in: query
+        value: $inputs.password
+    successCriteria:
+      # assertions to determine step was successful
+      - condition: $statusCode == 200
+    outputs:
+      # outputs from this step
+      tokenExpires: $response.header.X-Expires-After
+      rateLimit: $response.header.X-Rate-Limit
+      sessionToken: $response.body
+  - stepId: getPetStep
+    description: retrieve a pet by status from the GET pets endpoint
+    operationPath: '{$sourceDescriptions.petStoreDescription.url}#/paths/~1pet~1findByStatus/get'
+    parameters:
+      - name: status
+        in: query
+        value: 'available'
+      - name: Authorization
+        in: header
+        value: $steps.loginStep.outputs.sessionToken
+    successCriteria:
+      - condition: $statusCode == 200
+    outputs:
+      # outputs from this step
+      availablePets: $response.body
+  outputs:
+      available: $steps.getPetStep.outputs.availablePets

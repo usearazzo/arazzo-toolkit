@@ -7,7 +7,7 @@
 - When output changes intentionally, update snapshots with `UPDATE_SNAPSHOT=1 npm test` (or `npm test -- --update`)
 - The runner's tests exercise real HTTP request building through the vendored `swagger-client` bundle, so `build:es` (which regenerates the bundle) must succeed first — `npm test` does this for you.
 - **No mocking of the toolkit's own layers.** Tests parse real fixture documents through the real parser and assert on ApiDOM output or snapshots. HTTP in runner tests goes through the `HTTPClient` seam — inject a stub client rather than patching `fetch`.
-- **CI**: `.github/workflows/build.yml` runs `lint-commit-messages`, `lint` (after `typescript:declaration` for `parser`), `check-typescript-types` (after `typescript:declaration` for all packages), `test` (after `build:es`), and `build` on every PR. `nightly-build.yml` runs the full `npm run build` + lint + type-check + test daily. No path filters.
+- **CI**: `.github/workflows/build.yml` runs `lint-commit-messages`, `lint` (after `typescript:declaration` for `parser`), `check-typescript-types` (after `typescript:declaration` for all packages), `test` (after `build:es`), `e2e` (after `build:es`, runs the runner's `npm run test:e2e` against a pinned petstore3 service container), and `build` on every PR. `nightly-build.yml` runs the full `npm run build` + lint + type-check + test daily. No path filters.
 
 ### When to run
 

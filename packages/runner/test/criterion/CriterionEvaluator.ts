@@ -242,4 +242,34 @@ describe('CriterionEvaluator', function () {
       },
     );
   });
+
+  context('context validation', function () {
+    for (const type of ['simple', 'regex']) {
+      specify(`should reject a context that is not a runtime expression (${type})`, function () {
+        const criterion = refractCriterion({
+          context: 'response',
+          condition: '$statusCode == 200',
+          type,
+        });
+
+        const error = assert.throws(
+          () => evaluator.evaluate(criterion, resolve),
+          CriterionError,
+          /not a valid runtime expression/,
+        ) as unknown as CriterionError;
+
+        assert.strictEqual(error.reason, 'invalid-context');
+      });
+    }
+
+    specify('should accept a simple criterion with a valid context', function () {
+      const criterion = refractCriterion({
+        context: '$response.body',
+        condition: '$statusCode == 200',
+        type: 'simple',
+      });
+
+      assert.isTrue(evaluator.evaluate(criterion, resolve));
+    });
+  });
 });

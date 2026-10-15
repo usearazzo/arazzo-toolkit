@@ -1,4 +1,3 @@
-import { parse, testJSONPointer } from '@speclynx/apidom-json-pointer';
 import { toValue } from '@speclynx/apidom-core';
 import { isArrayElement, isObjectElement } from '@speclynx/apidom-datamodel';
 import { url as urlUtils } from '@speclynx/apidom-reference/configuration/empty';
@@ -217,14 +216,18 @@ class OpenAPIOperationExecutor {
     locator: OpenAPIOperationLocator,
     executeOptions: OpenAPIOperationExecuteOptionsBag = {},
   ): Promise<OpenAPIOperationResponse> {
-    // validate the locator before the pipeline runs: a pointer naming anything
-    // but an operation would otherwise crash inside extraction or normalization
-    const operationId = this.#operationIdFor(locator.jsonPointer);
-
+    // extraction validates the locator first: a pointer naming anything but an
+    // operation would otherwise crash inside normalization
     const operation = this.#operationExtractor.extractByPointer(
       locator.document,
       locator.jsonPointer,
     );
+    // the legacy id (`{method}-{path}`) matches regardless of an explicit
+    // `operationId` in the assembled document
+    const operationId = idFromPathMethodLegacy(
+      toValue(operation.meta.get('path')) as string,
+      toValue(operation.meta.get('http-method')) as string,
+    ) as string;
     const normalizedOperation = await this.#operationNormalizer.normalize(
       operation,
       locator.document,
@@ -547,31 +550,6 @@ class OpenAPIOperationExecutor {
         `parameter under its "{in}.{name}" key, or drop the duplicate`,
       { operationPath: jsonPointer },
     );
-  }
-
-  /**
-   * Derives the operationId `buildRequest` resolves the operation by from the
-   * locator's `/paths/{path}/{method}` JSON Pointer. The legacy id
-   * (`{method}-{path}`) matches regardless of an explicit `operationId` in the
-   * assembled document.
-   */
-  #operationIdFor(jsonPointer: string): string {
-    if (!testJSONPointer(jsonPointer)) {
-      throw new ClientError(`Invalid operationPath: "${jsonPointer}"`, {
-        operationPath: jsonPointer,
-      });
-    }
-    const tokens = parse(jsonPointer).tree!;
-    if (tokens.length !== 3 || tokens[0] !== 'paths') {
-      throw new ClientError(
-        `operationPath "${jsonPointer}" must be of form /paths/{path}/{method}`,
-        {
-          operationPath: jsonPointer,
-        },
-      );
-    }
-    const [, pathName, method] = tokens;
-    return idFromPathMethodLegacy(pathName, method) as string;
   }
 
   /**

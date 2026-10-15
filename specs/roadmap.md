@@ -58,7 +58,7 @@ Phases are intentionally small — each one is a shippable, independently review
 - Fix the `@usearazzo/parser` dependency pin to the published parser version.
 - Remove `"private": true`; confirm the release workflow publishes it; replace the root README validator placeholder with a short section linking the package README.
 
-## Phase 5 — Runner runs the official petstore workflow, then publishes
+## Phase 5 — Runner runs the official petstore workflow, then publishes ✅
 
 **Goal:** the runner executes the official petstore workflow end to end against a live petstore, and `@usearazzo/runner` goes on npm the moment it does. This is the only publishing gate.  
 **Depends on:** none  

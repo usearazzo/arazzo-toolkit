@@ -34,13 +34,20 @@ class OpenAPIOperationExtractor {
    */
   extractByPointer(document: OpenAPIDocument, pointer: JSONPointer): OpenAPIOperationElement {
     let operation: OpenAPIOperationElement;
-    let tokens: string[];
+    let tokens: string[] | undefined;
 
     try {
-      tokens = parse(pointer).tree!;
+      tokens = parse(pointer).tree;
     } catch (error: unknown) {
       throw new ExtractionError(`Failed to parse pointer "${pointer}"`, {
         cause: error,
+        pointer,
+        uri: document.uri,
+      });
+    }
+    // an invalid pointer does not throw: the parse result just has no tree
+    if (tokens === undefined) {
+      throw new ExtractionError(`Invalid JSON Pointer "${pointer}"`, {
         pointer,
         uri: document.uri,
       });

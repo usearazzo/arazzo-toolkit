@@ -93,6 +93,16 @@ describe('OpenAPIOperationExtractor', function () {
       }
     });
 
+    specify('should throw ExtractionError for a string that is not a JSON Pointer', function () {
+      const extractor = new OpenAPIOperationExtractor();
+
+      assert.throws(
+        () => extractor.extractByPointer(openapiDoc, 'pet/findByStatus'),
+        ExtractionError,
+        /Invalid JSON Pointer/,
+      );
+    });
+
     specify('should throw for pointer not referencing an operation', function () {
       const extractor = new OpenAPIOperationExtractor();
 

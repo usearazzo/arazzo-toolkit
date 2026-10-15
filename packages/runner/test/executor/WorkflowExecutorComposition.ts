@@ -297,7 +297,7 @@ describe('WorkflowExecutor composition', function () {
       assert.strictEqual(result.steps[0].attempts, 2);
       assert.strictEqual(calls.length, 2);
       // each attempt echoes the input it ran with: both saw the inputs resolved
-      // before the first attempt, so the retry did not pick up "sold" from the
+      // before the first attempt, so the retry did not pick up 500 from the
       // outputs the first attempt recorded.
       assert.deepEqual(
         subWorkflowsOf(result.steps[0]).map((run) => run.outputs.echoed),

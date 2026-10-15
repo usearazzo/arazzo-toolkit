@@ -64,9 +64,33 @@ See the [product page](https://usearazzo.com/validator/) for what it checks, the
 
 ## Runner
 
--- Placeholder --
+`@usearazzo/runner` executes an Arazzo workflow against the live API its source descriptions point at, one step at a time, with control flow (`goto`, `retry`, `end`) and sub-workflows decided by the document.
 
-For complete documentation, see the [@usearazzo/runner README](./packages/runner/README.md).
+```sh
+npm install @usearazzo/runner
+```
+
+```js
+import {
+  DocumentRegistry,
+  OpenAPIOperationExecutor,
+  StepExecutor,
+  WorkflowExecutor,
+} from '@usearazzo/runner';
+
+const registry = new DocumentRegistry();
+const document = await registry.acquireEntryDocument('./adopt-a-pet.arazzo.yaml');
+const stepExecutor = new StepExecutor({
+  document,
+  registry,
+  operationExecutor: new OpenAPIOperationExecutor(),
+});
+
+const executor = new WorkflowExecutor({ document, registry, stepExecutor });
+const result = await executor.execute('adoptAPet', { inputs: { petId: 1 } });
+```
+
+The runner is published under the alpha channel, so its API may still change before 1.0.0. For complete documentation, see the [@usearazzo/runner README](./packages/runner/README.md).
 
 ---
 

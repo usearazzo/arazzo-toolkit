@@ -90,6 +90,40 @@ jobs:
       - name: Execute tests in monorepo
         run: npm run test
 
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      petstore:
+        # keep the image in sync with release.yml and packages/runner/test/e2e/container.ts
+        image: swaggerapi/petstore3:1.0.28
+        ports:
+          - 8080:8080
+        # the image ships wget but not curl
+        options: >-
+          --health-cmd "wget -q -O /dev/null http://localhost:8080/api/v3/openapi.json"
+          --health-interval 5s
+          --health-retries 24
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Use Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26.3.1
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build monorepo for testing
+        run: npm run build:es
+      - name: Execute end-to-end tests against the petstore
+        run: npm run test:e2e
+        working-directory: ./packages/runner
+        env:
+          PETSTORE_URL: http://localhost:8080/api/v3
+
   build:
     runs-on: ubuntu-latest
 
