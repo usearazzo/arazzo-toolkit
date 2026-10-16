@@ -61,7 +61,7 @@
     "@speclynx/apidom-ns-openapi-3-0": "^5.2.6",
     "@speclynx/apidom-ns-openapi-3-1": "^5.2.6",
     "@speclynx/apidom-reference": "^5.2.6",
-    "@speclynx/apidom-traverse": "^5.2.6",
+    "@speclynx/apidom-traverse": "^5.2.7",
     "@swaggerexpert/arazzo-criterion": "^1.0.1",
     "@swaggerexpert/arazzo-runtime-expression": "^3.3.0",
     "@swaggerexpert/json-pointer": "^3.0.2",
