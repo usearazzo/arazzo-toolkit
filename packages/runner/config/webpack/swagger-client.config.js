@@ -1,6 +1,25 @@
 import path from 'node:path';
 import { minimizeTrait } from './traits.config.js';
 
+// externalize SpecLynx ApiDOM — resolved at runtime by the consumer. Externals
+// match the request as written, before resolve.alias, so redirects happen here.
+const externalizeSpecLynx = (type) => {
+  // redirect swagger-api ApiDOM to SpecLynx ApiDOM at build time
+  const apidomRedirects = {
+    '@swagger-api/apidom-error': '@speclynx/apidom-error',
+    '@swagger-api/apidom-reference/configuration/empty':
+      '@speclynx/apidom-reference/configuration/empty',
+  };
+
+  return function ({ request }, callback) {
+    const target = apidomRedirects[request] ?? request;
+    if (target && target.startsWith('@speclynx/')) {
+      return callback(null, `${type} ${target}`);
+    }
+    callback();
+  };
+};
+
 const swaggerClientExecuteES = {
   mode: 'production',
   entry: ['./config/webpack/swagger-client-entry.js'],
@@ -21,27 +40,13 @@ const swaggerClientExecuteES = {
   },
   resolve: {
     extensions: ['.mjs', '.js'],
-    alias: {
-      // redirect swagger-api ApiDOM to SpecLynx ApiDOM at build time
-      '@swagger-api/apidom-error': '@speclynx/apidom-error',
-      '@swagger-api/apidom-reference/configuration/empty':
-        '@speclynx/apidom-reference/configuration/empty',
-    },
     fallback: {
       fs: false,
       path: false,
       module: false,
     },
   },
-  externals: [
-    // externalize SpecLynx ApiDOM — resolved at runtime by the consumer
-    function ({ request }, callback) {
-      if (request && request.startsWith('@speclynx/')) {
-        return callback(null, `module ${request}`);
-      }
-      callback();
-    },
-  ],
+  externals: [externalizeSpecLynx('module')],
   module: {
     rules: [
       {
@@ -78,15 +83,7 @@ const swaggerClientExecuteCJS = {
   externalsPresets: {
     node: true,
   },
-  externals: [
-    // externalize SpecLynx ApiDOM — resolved at runtime by the consumer
-    function ({ request }, callback) {
-      if (request && request.startsWith('@speclynx/')) {
-        return callback(null, `commonjs ${request}`);
-      }
-      callback();
-    },
-  ],
+  externals: [externalizeSpecLynx('commonjs')],
 };
 
 export default [swaggerClientExecuteES, swaggerClientExecuteCJS];
