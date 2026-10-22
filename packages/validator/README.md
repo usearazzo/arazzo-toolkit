@@ -6,6 +6,7 @@
 </p>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/@usearazzo/validator"><img src="https://img.shields.io/npm/v/@usearazzo/validator.svg" alt="npm version"></a>
   <a href="https://github.com/usearazzo/arazzo-toolkit/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache 2.0"></a>
 </p>
 
