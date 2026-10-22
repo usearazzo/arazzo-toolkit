@@ -610,7 +610,10 @@ it neither locates the operation nor resolves runtime expressions. Given a canon
 2. **send**: hands the built request to the pluggable `httpClient` transport (global fetch by
    default);
 3. **normalize**: deserializes the raw WHATWG `Response` by content type into the runner's
-   `OpenAPIOperationResponse`, the model runtime expressions and criteria see.
+   `OpenAPIOperationResponse`, the model runtime expressions and criteria see. Header values stay
+   strings as the server sent them (`$response.header.Date` is `Thu, 22 Oct 2026 11:45:22 GMT`),
+   and a repeated field, `Set-Cookie` included, is combined into one `", "`-joined string, as
+   `Headers.get` returns it.
 
 Because the executor builds the request explicitly and holds it, the response carries the request
 **as actually sent** (`response.request`): final URL, method, headers, and serialized body. That way

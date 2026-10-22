@@ -323,6 +323,30 @@ describe('StepExecutor', function () {
       assert.include(result.outputs.accept as string, 'application/json');
     });
 
+    specify('should evaluate comma-containing response headers as sent', async function () {
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        successCriteria: [{ condition: "$response.header.Cache-Control == 'no-cache, no-store'" }],
+        outputs: { date: '$response.header.Date' },
+      }) as StepElement;
+      const { executor } = makeExecutor(() =>
+        jsonResponse([], {
+          headers: {
+            'content-type': 'application/json',
+            'cache-control': 'no-cache, no-store',
+            date: 'Thu, 22 Oct 2026 11:45:22 GMT',
+          },
+        }),
+      );
+
+      const result = await executor.execute(step, state());
+
+      assert.isTrue(result.successful);
+      assert.strictEqual(result.outputs.date, 'Thu, 22 Oct 2026 11:45:22 GMT');
+    });
+
     specify('should not be successful when a successCriterion fails', async function () {
       const step = refractStep({
         stepId: 'findPets',
