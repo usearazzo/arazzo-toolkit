@@ -14,7 +14,8 @@ import OpenAPIOperationResponse, {
  * side of the {@link HTTPClient} seam, and stays identical across transports.
  * Headers are taken from the `Response` directly rather than from the
  * deserializer, which splits every value containing `", "` into an array:
- * values stay strings as sent, with repeated fields combined by `Headers.get`.
+ * values stay strings as sent, with repeated fields (`Set-Cookie` included)
+ * combined by `Headers.get`.
  * @public
  */
 class OpenAPIOperationResponseNormalizer {
