@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { minimizeTrait } from './traits.config.js';
 
-const swaggerClientExecute = {
+const swaggerClientExecuteES = {
   mode: 'production',
   entry: ['./config/webpack/swagger-client-entry.js'],
   target: 'browserslist:isomorphic-production',
@@ -60,4 +60,33 @@ const swaggerClientExecute = {
   ...minimizeTrait,
 };
 
-export default swaggerClientExecute;
+const swaggerClientExecuteCJS = {
+  ...swaggerClientExecuteES,
+  experiments: {
+    outputModule: false,
+  },
+  output: {
+    path: path.resolve('./src/vendor'),
+    filename: 'swagger-client.cjs',
+    module: false,
+    chunkFormat: 'commonjs',
+    library: {
+      type: 'commonjs2',
+    },
+  },
+  // keep node builtins (buffer) external, as the ES build does, instead of bundling polyfills
+  externalsPresets: {
+    node: true,
+  },
+  externals: [
+    // externalize SpecLynx ApiDOM — resolved at runtime by the consumer
+    function ({ request }, callback) {
+      if (request && request.startsWith('@speclynx/')) {
+        return callback(null, `commonjs ${request}`);
+      }
+      callback();
+    },
+  ],
+};
+
+export default [swaggerClientExecuteES, swaggerClientExecuteCJS];
