@@ -1,0 +1,29 @@
+%% Rendered to architecture.svg (README.md links it by URL; npm does not render Mermaid):
+%%   echo '{"flowchart":{"htmlLabels":false},"htmlLabels":false}' > /tmp/cfg.json
+%%   npx @mermaid-js/mermaid-cli -i architecture.mmd -o architecture.svg -c /tmp/cfg.json -b white
+%% then replace the root <svg> width="100%" and max-width style with fixed width/height
+%% from its viewBox, so the <img> keeps its natural size.
+flowchart TD
+    Registry[("DocumentRegistry<br/>load & cache documents")]
+
+    WF["WorkflowExecutor<br/>iterate steps · own state · control flow"]
+    Step["StepExecutor<br/>run one Arazzo step"]
+    Op["OpenAPIOperationExecutor<br/>build request · normalize response"]
+    HTTP["HTTPClient<br/>send the built request (fetch by default)"]
+
+    WF -->|"execute step"| Step
+    Step -->|"execute OpenAPI operation"| Op
+    Op -->|"send HTTP request"| HTTP
+
+    Registry -.->|documents| WF
+    Registry -.->|documents| Step
+    Registry -.->|documents| Op
+
+    %% brand colors: Arazzo green, OpenAPI green, neutral registry grey
+    classDef arazzo fill:#94C83D,stroke:#6BA543,stroke-width:1px,color:#231F20;
+    classDef openapi fill:#6BA543,stroke:#4D5A31,color:#fff;
+    classDef neutral fill:#424143,stroke:#231F20,color:#fff;
+
+    class WF,Step arazzo;
+    class Op,HTTP openapi;
+    class Registry neutral;

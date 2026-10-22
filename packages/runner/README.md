@@ -1,27 +1,37 @@
-# @usearazzo/runner
+<h1 align="center">@usearazzo/runner</h1>
 
-> [!NOTE]
-> This package is published under the `alpha` channel: APIs may still change before 1.0.0.
+<p align="center">
+  Runner for <a href="https://spec.openapis.org/arazzo/latest.html">Arazzo</a> workflows:
+  execute them step by step against the live APIs behind their <a href="https://spec.openapis.org/oas/latest.html">OpenAPI</a> source descriptions.
+</p>
 
-`@usearazzo/runner` executes [Arazzo Specification](https://spec.openapis.org/arazzo/latest.html)
-workflows against live APIs described by
-[OpenAPI Specification](https://spec.openapis.org/oas/latest.html) source descriptions. It builds on
-[SpecLynx ApiDOM](https://github.com/speclynx/apidom) data models and reuses the loading,
-resolution, and normalization primitives shared across
-[`@usearazzo/parser`](https://www.npmjs.com/package/@usearazzo/parser) and
-[`@usearazzo/resolver`](https://www.npmjs.com/package/@usearazzo/resolver).
+<p align="center">
+  <a href="https://www.npmjs.com/package/@usearazzo/runner"><img src="https://img.shields.io/npm/v/@usearazzo/runner.svg" alt="npm version"></a>
+  <a href="https://github.com/usearazzo/arazzo-toolkit/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache 2.0"></a>
+</p>
 
-**Supported Arazzo versions:**
+<p align="center">
+  <a href="https://usearazzo.com"><img alt="UseArazzo" width="96" src="https://usearazzo.com/assets/images/logos/usearazzo-logo.svg"></a>
+</p>
 
-- [Arazzo 1.0.0](https://spec.openapis.org/arazzo/v1.0.0)
-- [Arazzo 1.0.1](https://spec.openapis.org/arazzo/v1.0.1)
-- [Arazzo 1.1.0](https://spec.openapis.org/arazzo/v1.1.0)
+---
 
-**Supported OpenAPI versions (for source descriptions):**
+## What it does
 
-- [OpenAPI 2.0](https://spec.openapis.org/oas/v2.0)
-- [OpenAPI 3.0.x](https://spec.openapis.org/oas/v3.0.4)
-- [OpenAPI 3.1.x](https://spec.openapis.org/oas/v3.1.2)
+This package runs an Arazzo workflow step by step, sending real HTTP requests to the APIs its OpenAPI
+source descriptions point at, with the control flow (`goto`, `retry`, `end`) and sub-workflows the
+document decides. It builds on [SpecLynx ApiDOM](https://github.com/speclynx/apidom) data models and
+reuses the loading, resolution, and normalization primitives of
+[@usearazzo/parser](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/parser#readme) and
+[@usearazzo/resolver](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/resolver#readme).
+
+## Installation
+
+```sh
+npm install @usearazzo/runner
+```
+
+Ships ESM and CommonJS builds with TypeScript declarations. Requires Node.js 20.10 or newer.
 
 ## Architecture
 
@@ -40,32 +50,9 @@ into four main components:
   (parameter serialization, securities, server resolution), sends it through the pluggable
   `HTTPClient` transport, and normalizes the raw response into the runner's response model.
 
-```mermaid
-flowchart TD
-    Registry[("DocumentRegistry<br/><i>load & cache documents</i>")]
-
-    WF["WorkflowExecutor<br/>iterate steps · own state · control flow"]
-    Step["StepExecutor<br/>run one Arazzo step"]
-    Op["OpenAPIOperationExecutor<br/>build request · normalize response"]
-    HTTP["HTTPClient<br/>send the built request (fetch by default)"]
-
-    WF -->|"execute step"| Step
-    Step -->|"execute OpenAPI operation"| Op
-    Op -->|"send HTTP request"| HTTP
-
-    Registry -.->|documents| WF
-    Registry -.->|documents| Step
-    Registry -.->|documents| Op
-
-    %% brand colors: Arazzo green, OpenAPI green, neutral registry grey
-    classDef arazzo fill:#94C83D,stroke:#6BA543,stroke-width:1px,color:#231F20;
-    classDef openapi fill:#6BA543,stroke:#4D5A31,color:#fff;
-    classDef neutral fill:#424143,stroke:#231F20,color:#fff;
-
-    class WF,Step arazzo;
-    class Op,HTTP openapi;
-    class Registry neutral;
-```
+<p align="center">
+  <img alt="Runner architecture: WorkflowExecutor runs steps through StepExecutor, which runs OpenAPI operations through OpenAPIOperationExecutor and the HTTPClient; DocumentRegistry supplies documents to all three executors" src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/packages/runner/assets/architecture.svg">
+</p>
 
 Each layer reads run state but never mutates it. The `WorkflowExecutor` is the single writer that
 records outputs and interprets the returned control-flow action.
@@ -772,14 +759,20 @@ up, by a step's `successCriteria`. Everything else throws with a named reason: m
 unlocatable operation, an unsupported OpenAPI version), a request that cannot be built (e.g. a
 missing required parameter), and transport failures. The latter two arrive as `ClientError`.
 
-## End-to-end tests
+## Supported versions
 
-`npm run test:e2e` runs `authenticateAndOrderPet` (the toolkit's own petstore workflow) and
-`loginUserRetrievePet` (the Arazzo Specification's `LoginAndRetrievePets` example) over real HTTP
-against a live petstore. It is separate from `npm test`, which stays deterministic and makes no
-network calls.
+Arazzo documents:
 
-By default the suite starts a `swaggerapi/petstore3:1.0.28` container with Docker, on a free port,
-and stops it afterwards, so Docker must be available. To run against an existing petstore instead,
-set `PETSTORE_URL` to its API base, e.g. `PETSTORE_URL=http://localhost:8080/api/v3 npm run test:e2e`;
-the suite then starts no container of its own.
+- [Arazzo 1.0.0](https://spec.openapis.org/arazzo/v1.0.0)
+- [Arazzo 1.0.1](https://spec.openapis.org/arazzo/v1.0.1)
+- [Arazzo 1.1.0](https://spec.openapis.org/arazzo/v1.1.0)
+
+OpenAPI documents, as source descriptions:
+
+- [OpenAPI 2.0](https://spec.openapis.org/oas/v2.0)
+- [OpenAPI 3.0.x](https://spec.openapis.org/oas/v3.0.4)
+- [OpenAPI 3.1.x](https://spec.openapis.org/oas/v3.1.2)
+
+## Part of the Arazzo Toolkit
+
+`@usearazzo/runner` is the execution layer of the [arazzo-toolkit](https://github.com/usearazzo/arazzo-toolkit) monorepo, beside [@usearazzo/parser](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/parser#readme), [@usearazzo/resolver](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/resolver#readme), and [@usearazzo/validator](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/validator#readme). Questions and ideas go to [GitHub Discussions](https://github.com/orgs/usearazzo/discussions).

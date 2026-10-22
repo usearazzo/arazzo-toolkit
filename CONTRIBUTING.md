@@ -72,6 +72,12 @@ can be avoided by having an initial discussion.
 - After the forward slash, include a short kebab-case description of what you're doing. For example: `fix/fix-everything-that-was-broken`.
 - If there's an issue filed that you're addressing in your branch, include the issue number directly after the forward slash. For example: `fix/1234-fix-all-the-other-things`.
 
+#### Runner end-to-end tests
+
+In `packages/runner`, `npm run test:e2e` runs `authenticateAndOrderPet` (the toolkit's own petstore workflow) and `loginUserRetrievePet` (the Arazzo Specification's `LoginAndRetrievePets` example) over real HTTP against a live petstore. It is separate from `npm test`, which stays deterministic and makes no network calls.
+
+By default the suite starts a `swaggerapi/petstore3:1.0.28` container with Docker, on a free port, and stops it afterwards, so Docker must be available. To run against an existing petstore instead, set `PETSTORE_URL` to its API base, e.g. `PETSTORE_URL=http://localhost:8080/api/v3 npm run test:e2e`; the suite then starts no container of its own.
+
 #### Committing
 
 - Break your commits into logical atomic units. Well-segmented commits make it _much_ easier for others to step through your changes.
