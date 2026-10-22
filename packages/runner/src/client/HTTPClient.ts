@@ -13,7 +13,7 @@ import type OpenAPIOperationRequest from './OpenAPIOperationRequest.ts';
  *   error as a `ClientError`;
  * - honor `request.signal` when present.
  *
- * Response normalization (content-type dispatch, header folding) happens on
+ * Response normalization (content-type dispatch, header mapping) happens on
  * the executor side for every client, so `$response.body` semantics stay
  * identical no matter which transport is plugged in.
  * @public
