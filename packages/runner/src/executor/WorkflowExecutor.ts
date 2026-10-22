@@ -265,10 +265,10 @@ export interface WorkflowExecutionResult {
    * directly against `'failed'` — the natural thing to write — silently
    * misses a failure buried in the chain. `settledStatus` is that comparison,
    * already made, always present (even when `status` isn't `'transferred'`,
-   * where it simply repeats `status`): prefer `result.settledStatus ===
-   * 'failed'` over `result.status === 'failed'` for "did this run succeed",
-   * including on the top-level result {@link WorkflowExecutor.execute}
-   * itself returns.
+   * where it simply repeats `status`): prefer
+   * `result.settledStatus === 'failed'` over `result.status === 'failed'`
+   * for "did this run succeed", including on the top-level result
+   * {@link WorkflowExecutor.execute} itself returns.
    */
   readonly settledStatus: 'completed' | 'ended' | 'failed';
   /**
