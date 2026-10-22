@@ -60,4 +60,40 @@ describe('OpenAPIOperationResponseNormalizer', function () {
     assert.strictEqual(response.status, 204);
     assert.isUndefined(response.body);
   });
+
+  specify('should keep header values containing commas as sent', async function () {
+    const raw = new Response('{}', {
+      status: 200,
+      statusText: 'OK',
+      headers: {
+        'content-type': 'application/json',
+        'cache-control': 'no-cache, no-store',
+        date: 'Thu, 22 Oct 2026 11:45:22 GMT',
+      },
+    });
+
+    const response = await normalizer.normalize(raw);
+
+    assert.strictEqual(response.headers['cache-control'], 'no-cache, no-store');
+    assert.strictEqual(response.headers.date, 'Thu, 22 Oct 2026 11:45:22 GMT');
+  });
+
+  specify('should combine repeated header fields into one string', async function () {
+    const raw = new Response('{}', {
+      status: 200,
+      statusText: 'OK',
+      headers: [
+        ['content-type', 'application/json'],
+        ['vary', 'Accept'],
+        ['vary', 'Origin'],
+        ['set-cookie', 'a=1'],
+        ['set-cookie', 'b=2'],
+      ],
+    });
+
+    const response = await normalizer.normalize(raw);
+
+    assert.strictEqual(response.headers.vary, 'Accept, Origin');
+    assert.strictEqual(response.headers['set-cookie'], 'a=1, b=2');
+  });
 });
