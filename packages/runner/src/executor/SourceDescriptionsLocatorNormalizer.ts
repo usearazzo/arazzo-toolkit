@@ -8,7 +8,7 @@ import type DocumentRegistry from '../registry/DocumentRegistry.ts';
  * operation locator and the Arazzo workflow locator. Owns the registry handle
  * and the one grammar-facing parse, so the expression node's name and field
  * shape are encoded once rather than per subclass.
- * @internal
+ * @public
  */
 abstract class SourceDescriptionsLocatorNormalizer {
   protected readonly registry: DocumentRegistry;

@@ -130,6 +130,7 @@ export type {
   OpenAPIOperationExecuteOptionsBag,
   RequestInterceptor,
 } from './executor/OpenAPIOperationExecutor.ts';
+export { default as SourceDescriptionsLocatorNormalizer } from './executor/SourceDescriptionsLocatorNormalizer.ts';
 export { default as OpenAPIOperationLocatorNormalizer } from './executor/OpenAPIOperationLocatorNormalizer.ts';
 export type { OpenAPIOperationLocator } from './executor/OpenAPIOperationLocatorNormalizer.ts';
 export { default as ArazzoWorkflowLocatorNormalizer } from './executor/ArazzoWorkflowLocatorNormalizer.ts';

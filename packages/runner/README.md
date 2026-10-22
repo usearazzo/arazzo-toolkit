@@ -70,6 +70,11 @@ flowchart TD
 Each layer reads run state but never mutates it. The `WorkflowExecutor` is the single writer that
 records outputs and interprets the returned control-flow action.
 
+`$sourceDescriptions.{name}.{reference}` locators are resolved by two normalizers that extend the
+abstract `SourceDescriptionsLocatorNormalizer`: `OpenAPIOperationLocatorNormalizer` resolves a
+step's `operationId` / `operationPath` to an OpenAPI operation, and
+`ArazzoWorkflowLocatorNormalizer` resolves a step's `workflowId` to an Arazzo workflow.
+
 ## `DocumentRegistry`
 
 Loads and caches Arazzo and OpenAPI documents, so a source description referenced by many steps is
