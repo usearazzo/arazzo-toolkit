@@ -138,4 +138,10 @@ jobs:
     - name: Install dependencies
       run: npm ci
     - name: Build monorepo
-      run: npm run build:es
+      run: npm run build
+    - name: Load built entry points
+      run: |
+        for pkg in parser resolver validator runner; do
+          node -e "require('@usearazzo/$pkg')"
+          node --input-type=module -e "await import('@usearazzo/$pkg')"
+        done
