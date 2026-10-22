@@ -69,4 +69,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
       - name: Publish monorepo npm packages
-        run: npx lerna publish from-package --no-private --yes
+        # Provenance signing fails with TLOG_CREATE_ENTRY_ERROR (409) when Rekor answers after
+        # the sigstore client timeout: the client resends the entry Rekor already stored. npm
+        # passes its fetch timeout to sigstore, but lerna doesn't, so sigstore defaults to 5s.
+        # `publishConfig.timeout` in each package raises it; it must be a number, which env vars
+        # and .npmrc can't provide to lerna. Publishing one package at a time eases the load on Rekor.
+        # `from-package` only publishes versions missing from the registry, and a new attempt
+        # signs a fresh attestation, so retrying the whole step is safe.
+        run: |
+          for attempt in 1 2 3; do
+            npx lerna publish from-package --no-private --yes --concurrency 1 && exit 0
+            echo "::warning::lerna publish attempt ${attempt} failed"
+            # lerna leaves a temporary gitHead in package.json files when publishing aborts
+            git checkout -- package.json 'packages/*/package.json'
+            sleep 30
+          done
+          exit 1
