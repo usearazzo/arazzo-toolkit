@@ -14,7 +14,7 @@ import type { StepScope } from './ResolverScope.ts';
  *
  * Values follow the family-wide literal-vs-expression rule of
  * {@link ArazzoValueResolver}. Keys and their first-wins claiming are
- * {@link ParameterDelivery}'s: `'{in}.{name}'` for a location the client
+ * `ParameterDelivery`'s: `'{in}.{name}'` for a location the client
  * can address — a parameter is unique by `(name, in)`, so keying by name
  * alone would collapse two parameters that differ only in their location into
  * one entry and silently drop the other, where an operation legally declaring
@@ -30,7 +30,7 @@ import type { StepScope } from './ResolverScope.ts';
  * (the normalizer does not inherit input-shaped workflow parameters into such
  * steps, so this is the step's own authoring error), and delivering it bare
  * instead would let it capture *every* declared location of that name — see
- * {@link ParameterDelivery} for the lookup order that makes it so. A
+ * `ParameterDelivery` for the lookup order that makes it so. A
  * non-string location throws for the same reason it deduplicates with nothing
  * in the normalizer: it names no location. And two *different* parameters the
  * map reports as colliding cannot both be delivered, so a collision throws
@@ -45,7 +45,7 @@ import type { StepScope } from './ResolverScope.ts';
 class OpenAPIOperationParameterResolver extends StepParameterResolver {
   /**
    * Resolves each parameter's `value`, returning a
-   * {@link ParameterDelivery}-keyed record. Returns an empty object when
+   * `ParameterDelivery`-keyed record. Returns an empty object when
    * there are no parameters.
    *
    * `scope` names the step in a thrown {@link ResolverError}.
