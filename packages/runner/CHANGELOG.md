@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.10](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.9...v1.0.1-alpha.10) (2026-10-23)
+
+### Bug Fixes
+
+- **runner:** match declared media types carrying parameters ([#265](https://github.com/usearazzo/arazzo-toolkit/issues/265)) ([54c597f](https://github.com/usearazzo/arazzo-toolkit/commit/54c597f41736a583a08a4844afd1ca58a62e3895)), closes [#260](https://github.com/usearazzo/arazzo-toolkit/issues/260)
+
 ## [1.0.1-alpha.9](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.8...v1.0.1-alpha.9) (2026-10-22)
 
 ### Bug Fixes
