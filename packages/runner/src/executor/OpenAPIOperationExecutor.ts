@@ -6,6 +6,7 @@ import {
   isParameterElement,
   type ParameterElement as ParameterElement2,
 } from '@speclynx/apidom-ns-openapi-2';
+import { identify, matches, selectBestMatch } from '@swaggerexpert/media-types';
 import { isPlainObject } from 'ramda-adjunct';
 
 // @ts-expect-error vendored swagger-client bundle has no type declarations
@@ -402,33 +403,29 @@ class OpenAPIOperationExecutor {
     const declared = content.keys() as string[];
     if (declared.includes(requested)) return buildOptions;
 
-    // media type names are case-insensitive and their parameters are not part of
-    // the name, so both are normalized away before matching
-    const baseType = requested.split(';')[0].trim().toLowerCase();
-    const [type] = baseType.split('/');
-    const covers = (mediaType: string, by: 'exact' | 'subtype' | 'any'): boolean => {
-      const candidate = mediaType.toLowerCase();
-      if (by === 'exact') return candidate === baseType;
-      if (by === 'subtype') return candidate === `${type}/*`;
-      return candidate === '*/*';
-    };
+    // a range or a malformed value names no concrete media type to send
+    if (identify(requested) !== 'media-type') {
+      throw new ClientError(`Request body media type "${requested}" is not a valid media type`, {
+        operationPath: jsonPointer,
+      });
+    }
 
     // a form media type decides how the body is encoded, and buildRequest applies
     // that encoding only for an exactly declared type. matching one against a
     // range would put a JSON body behind a form Content-Type
     const isFormEncoded =
-      baseType === 'application/x-www-form-urlencoded' || baseType === 'multipart/form-data';
+      matches('application/x-www-form-urlencoded', requested) ||
+      matches('multipart/form-data', requested);
 
     // otherwise a declared range covers a concrete type, so `*/*` (what several
-    // generators emit by default) accepts anything; the most specific wins
-    const exact = declared.find((mediaType) => covers(mediaType, 'exact'));
-    const match =
-      exact ??
-      (isFormEncoded
-        ? undefined
-        : (declared.find((mediaType) => covers(mediaType, 'subtype')) ??
-          declared.find((mediaType) => covers(mediaType, 'any'))));
-    if (match === undefined) {
+    // generators emit by default) accepts anything; the most specific wins.
+    // parameters on one side only (a declared `charset=utf-8`) describe the
+    // content rather than constrain it, while conflicting ones never match
+    const candidates = isFormEncoded
+      ? declared.filter((mediaType) => identify(mediaType) === 'media-type')
+      : declared;
+    const match = selectBestMatch(candidates, requested, { parameterMatching: 'compatible' });
+    if (match === null) {
       throw new ClientError(
         isFormEncoded
           ? `Request body media type "${requested}" must be declared by the operation exactly, ` +

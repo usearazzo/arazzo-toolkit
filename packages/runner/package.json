@@ -67,6 +67,7 @@
     "@swaggerexpert/arazzo-runtime-expression": "^3.3.0",
     "@swaggerexpert/json-pointer": "^3.0.2",
     "@swaggerexpert/jsonpath": "^4.0.5",
+    "@swaggerexpert/media-types": "^1.0.1",
     "@usearazzo/parser": "1.0.1-alpha.9",
     "@usearazzo/resolver": "1.0.1-alpha.9",
     "@xmldom/xmldom": "^0.9.12",

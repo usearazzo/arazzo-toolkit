@@ -279,6 +279,96 @@ describe('OpenAPIOperationExecutor', function () {
       assert.strictEqual(requests.length, 0);
     });
 
+    describe('given media types declared with parameters', function () {
+      let parametersDoc: OpenAPIDocument;
+
+      const parametersLocator = (operationId: string) =>
+        ({
+          document: parametersDoc,
+          jsonPointer: parametersDoc.operationIndex.get(operationId),
+        }) as OpenAPIOperationLocator;
+
+      before(async function () {
+        parametersDoc = (await new DocumentRegistry().acquire(
+          path.join(fixturesPath, 'petstore.openapi-media-parameters.json'),
+        )) as OpenAPIDocument;
+      });
+
+      specify('should match a declared parameter the requested type omits', async function () {
+        const { executor, requests } = makeExecutor();
+
+        // the declared `charset=utf-8` describes the content, so a plain
+        // `application/json` still names it
+        await executor.execute(parametersLocator('addPet'), {
+          requestBody: { name: 'fido' },
+          requestContentType: 'application/json',
+        });
+
+        assert.deepEqual(JSON.parse(requests[0].body as string), { name: 'fido' });
+        assert.strictEqual(requests[0].headers['Content-Type'], 'application/json');
+      });
+
+      specify('should match a parameter value differing only in charset case', async function () {
+        const { executor, requests } = makeExecutor();
+
+        await executor.execute(parametersLocator('addPet'), {
+          requestBody: { name: 'fido' },
+          requestContentType: 'application/json; charset=UTF-8',
+        });
+
+        assert.deepEqual(JSON.parse(requests[0].body as string), { name: 'fido' });
+        assert.strictEqual(requests[0].headers['Content-Type'], 'application/json; charset=UTF-8');
+      });
+
+      specify('should match the declaration whose parameters agree', async function () {
+        const { executor, requests } = makeExecutor();
+
+        await executor.execute(parametersLocator('updatePet'), {
+          requestBody: { name: 'fido' },
+          requestContentType: 'application/vnd.pet+json;version=2',
+        });
+
+        assert.strictEqual(requests[0].method, 'PUT');
+        assert.strictEqual(
+          requests[0].headers['Content-Type'],
+          'application/vnd.pet+json;version=2',
+        );
+      });
+
+      specify('should throw ClientError when the parameters conflict', async function () {
+        const { executor, requests } = makeExecutor();
+
+        const thrown = await rejects(
+          executor.execute(parametersLocator('updatePet'), {
+            requestBody: { name: 'fido' },
+            requestContentType: 'application/vnd.pet+json; version=3',
+          }),
+          ClientError,
+        );
+
+        assert.match((thrown as ClientError).message, /is not declared by the operation/);
+        assert.strictEqual(requests.length, 0);
+      });
+    });
+
+    specify('should throw ClientError for a malformed media type', async function () {
+      const orderLocator = await locatorNormalizer.normalizeOperationId('placeOrder', entry);
+      const { executor, requests } = makeExecutor();
+
+      // a parameter without a value is not a media type, and guessing the
+      // author meant `application/json` would hide the mistake
+      const thrown = await rejects(
+        executor.execute(orderLocator, {
+          requestBody: { petId: 42 },
+          requestContentType: 'application/json; charset',
+        }),
+        ClientError,
+      );
+
+      assert.match((thrown as ClientError).message, /is not a valid media type/);
+      assert.strictEqual(requests.length, 0);
+    });
+
     specify('should not double the slash when a server ends with one', async function () {
       const { executor, requests } = makeExecutor();
 
