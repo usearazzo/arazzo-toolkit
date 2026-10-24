@@ -6,8 +6,12 @@
     "arazzo",
     "arazzo-specification",
     "runner",
+    "execute",
+    "executor",
     "workflow",
-    "workflows"
+    "workflows",
+    "api",
+    "api-workflow"
   ],
   "publishConfig": {
     "access": "public",
