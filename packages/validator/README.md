@@ -47,6 +47,16 @@ npm install @usearazzo/validator
 
 Ships ESM and CommonJS builds with TypeScript declarations. Requires Node.js 20.10 or newer.
 
+## From the command line
+
+To check a document without writing any code, use [@usearazzo/cli](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/cli#readme), which wraps this package:
+
+```sh
+npx @usearazzo/cli validate adopt-a-pet.arazzo.yaml
+```
+
+It prints every problem with its location and exits with `1` when it finds an error, so it works as a CI step too. Add `--format json` for output a script can read. The [CLI README](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/cli#readme) covers every option, the exit codes, and the configuration file.
+
 ## Usage
 
 ```js

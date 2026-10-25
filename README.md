@@ -58,6 +58,8 @@ const diagnostics = await validateURI('./adopt-a-pet.arazzo.yaml');
 const errors = diagnostics.filter((d) => d.severity === DiagnosticSeverity.Error);
 ```
 
+To validate from the terminal or CI without writing code, use the [CLI](#cli): `npx @usearazzo/cli validate ./adopt-a-pet.arazzo.yaml`.
+
 See the [product page](https://usearazzo.com/validator/) for what it checks, the [@usearazzo/validator README](./packages/validator/README.md) for an overview, and the [API reference](https://usearazzo.com/docs/validator/) for every option, diagnostic code, and rule.
 
 ---
