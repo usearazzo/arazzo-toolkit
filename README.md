@@ -87,33 +87,29 @@ Here it runs a workflow that logs in, finds a pet, orders it, and checks the ord
 
 ```console
 $ docker run --rm -d -p 8080:8080 swaggerapi/petstore3:1.0.28
-c0e5624dc0fcd9f2dff83a25996174e9a0d764b4029abfc315842f968fa71e82
+4d570a52c1bcdb87286e5ceed5177b033cf54d1de70c5279b6db33a4f40f0f1c
 $ node
 Welcome to Node.js v24.10.0.
 Type ".help" for more information.
-> const runner = await import('@usearazzo/runner')
-undefined
-> const url = 'https://usearazzo.com/assets/reference/runner/petstore-order.arazzo.yaml'
-undefined
-> const registry = new runner.DocumentRegistry()
-undefined
-> const document = await registry.acquireEntryDocument(url)
-undefined
-> const operationExecutor = new runner.OpenAPIOperationExecutor()
-undefined
-> const stepExecutor = new runner.StepExecutor({ document, registry, operationExecutor })
-undefined
-> const executor = new runner.WorkflowExecutor({ document, registry, stepExecutor })
-undefined
-> const inputs = { username: 'theUser', password: '12345', preferredPetStatus: 'available', orderQuantity: 1 }
-undefined
-> const options = { inputs, executeOptions: { server: 'http://localhost:8080/api/v3' } }
-undefined
-> const result = await executor.execute('authenticateAndOrderPet', options)
-undefined
-> result.status
-'completed'
-> result.steps.map((s) => `${s.successful ? '✓' : '✗'} ${s.stepId}`)
+> .editor
+// Entering editor mode (Ctrl+D to finish, Ctrl+C to cancel)
+const { DocumentRegistry, OpenAPIOperationExecutor, StepExecutor, WorkflowExecutor } =
+  await import('@usearazzo/runner');
+
+const registry = new DocumentRegistry();
+const document = await registry.acquireEntryDocument(
+  'https://usearazzo.com/assets/reference/runner/petstore-order.arazzo.yaml',
+);
+const operationExecutor = new OpenAPIOperationExecutor();
+const stepExecutor = new StepExecutor({ document, registry, operationExecutor });
+const executor = new WorkflowExecutor({ document, registry, stepExecutor });
+
+const result = await executor.execute('authenticateAndOrderPet', {
+  inputs: { username: 'theUser', password: '12345', preferredPetStatus: 'available', orderQuantity: 1 },
+  executeOptions: { server: 'http://localhost:8080/api/v3' },
+});
+result.steps.map((s) => `${s.successful ? '✓' : '✗'} ${s.stepId}`);
+
 [
   '✓ loginUser',
   '✓ findAvailablePets',
@@ -121,6 +117,8 @@ undefined
   '✓ retrieveOrderedPetDetails',
   '✓ verifyOrderConfirmation'
 ]
+> result.status
+'completed'
 ```
 
 </details>
