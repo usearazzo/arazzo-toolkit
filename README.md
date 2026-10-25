@@ -79,24 +79,18 @@ Here it runs a workflow that logs in, finds a pet, orders it, and checks the ord
 
 ```console
 $ docker run --rm -d -p 8080:8080 swaggerapi/petstore3:1.0.28
-4d570a52c1bcdb87286e5ceed5177b033cf54d1de70c5279b6db33a4f40f0f1c
+e7d2c5a17eb5b5b8c316000c8987d5d4a6c2f93ba161c5bd6fb1cec26cfc9d9a
 $ node
 Welcome to Node.js v24.10.0.
 Type ".help" for more information.
 > .editor
 // Entering editor mode (Ctrl+D to finish, Ctrl+C to cancel)
-const { DocumentRegistry, OpenAPIOperationExecutor, StepExecutor, WorkflowExecutor } =
-  await import('@usearazzo/runner');
+const { ArazzoRunner } = await import('@usearazzo/runner');
 
-const registry = new DocumentRegistry();
-const document = await registry.acquireEntryDocument(
+const runner = await ArazzoRunner.load(
   'https://usearazzo.com/assets/reference/runner/petstore-order.arazzo.yaml',
 );
-const operationExecutor = new OpenAPIOperationExecutor();
-const stepExecutor = new StepExecutor({ document, registry, operationExecutor });
-const executor = new WorkflowExecutor({ document, registry, stepExecutor });
-
-const result = await executor.execute('authenticateAndOrderPet', {
+const result = await runner.execute('authenticateAndOrderPet', {
   inputs: { username: 'theUser', password: '12345', preferredPetStatus: 'available', orderQuantity: 1 },
   executeOptions: { server: 'http://localhost:8080/api/v3' },
 });

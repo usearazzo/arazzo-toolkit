@@ -3,6 +3,8 @@
 // pinned @usearazzo/runner, pasted as one block in editor mode.
 //
 // usage: node packages/runner/assets/src/generate.mjs
+//        RUNNER_SPEC=/path/to/usearazzo-runner.tgz node packages/runner/assets/src/generate.mjs
+//        (records an unreleased build: `npm pack` in packages/runner after `npm run build`)
 //
 // Requires Docker and util-linux `script` (the REPL's editor mode needs a terminal). The container
 // is published on a free local port; the transcript shows the port a reader would use (8080).
@@ -13,25 +15,19 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const RUNNER_VERSION = '1.0.1-alpha.10';
+const RUNNER_VERSION = '1.0.1-alpha.11';
 const PETSTORE_IMAGE = 'swaggerapi/petstore3:1.0.28';
 const SHOWN_PORT = '8080';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, '..');
 
 // pasted into the REPL as one block
-const BLOCK = `const { DocumentRegistry, OpenAPIOperationExecutor, StepExecutor, WorkflowExecutor } =
-  await import('@usearazzo/runner');
+const BLOCK = `const { ArazzoRunner } = await import('@usearazzo/runner');
 
-const registry = new DocumentRegistry();
-const document = await registry.acquireEntryDocument(
+const runner = await ArazzoRunner.load(
   'https://usearazzo.com/assets/reference/runner/petstore-order.arazzo.yaml',
 );
-const operationExecutor = new OpenAPIOperationExecutor();
-const stepExecutor = new StepExecutor({ document, registry, operationExecutor });
-const executor = new WorkflowExecutor({ document, registry, stepExecutor });
-
-const result = await executor.execute('authenticateAndOrderPet', {
+const result = await runner.execute('authenticateAndOrderPet', {
   inputs: { username: 'theUser', password: '12345', preferredPetStatus: 'available', orderQuantity: 1 },
   executeOptions: { server: 'http://localhost:${SHOWN_PORT}/api/v3' },
 });
@@ -50,7 +46,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // install the pinned runner outside the repo; the REPL runs there so the import resolves
 const prefix = mkdtempSync(join(tmpdir(), 'usearazzo-runner-'));
-execFileSync('npm', ['install', '--silent', '--prefix', prefix, `@usearazzo/runner@${RUNNER_VERSION}`], { stdio: 'inherit' });
+const spec = process.env.RUNNER_SPEC ?? `@usearazzo/runner@${RUNNER_VERSION}`;
+execFileSync('npm', ['install', '--silent', '--prefix', prefix, spec], { stdio: 'inherit' });
 
 // start the Petstore the way the reader would, on a free port
 const containerId = execFileSync('docker', ['run', '--rm', '-d', '-p', '127.0.0.1:0:8080', PETSTORE_IMAGE], { encoding: 'utf8' }).trim();
