@@ -31,7 +31,7 @@ This monorepo contains the following packages:
 
 ---
 
-## CLI
+## [CLI](./packages/cli)
 
 `@usearazzo/cli` puts the toolkit behind a single `usearazzo` binary for your terminal or CI/CD pipeline. Its one command today is `validate`, which wraps `@usearazzo/validator` and exits non-zero when the document has errors. A command to run workflows, wrapping `@usearazzo/runner`, comes next.
 
@@ -41,11 +41,11 @@ npx @usearazzo/cli validate ./adopt-a-pet.arazzo.yaml
 
 <a href="https://usearazzo.com/cli/"><img alt="usearazzo validate reporting two duplicate stepId errors in one Arazzo document and a missing step description warning in another, each with its line range and rule code" src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/packages/cli/assets/validate-demo.svg"></a>
 
-Settings for the validator can live in a YAML or JSON configuration file (`.usearazzo.yaml`, `.usearazzo.json`, and a few variants) in the working directory. See the [product page](https://usearazzo.com/cli/) for what it does, the [@usearazzo/cli README](./packages/cli/README.md) for an overview, and the [CLI reference](https://usearazzo.com/docs/cli/) for every option, output format, exit code, and the configuration file.
+Settings for the validator can live in a YAML or JSON configuration file (`.usearazzo.yaml`, `.usearazzo.json`, and a few variants) in the working directory. See the [product page](https://usearazzo.com/cli/) for what it does and the [CLI reference](https://usearazzo.com/docs/cli/) for every option, output format, exit code, and the configuration file.
 
 ---
 
-## Validator
+## [Validator](./packages/validator)
 
 `@usearazzo/validator` checks an Arazzo document and reports every problem it finds as a [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) diagnostic, with its location, severity, and rule code.
 
@@ -62,11 +62,11 @@ const errors = diagnostics.filter((d) => d.severity === DiagnosticSeverity.Error
 
 To validate from the terminal or CI without writing code, use the [CLI](#cli): `npx @usearazzo/cli validate ./adopt-a-pet.arazzo.yaml`.
 
-See the [product page](https://usearazzo.com/validator/) for what it checks, the [@usearazzo/validator README](./packages/validator/README.md) for an overview, and the [API reference](https://usearazzo.com/docs/validator/) for every option, diagnostic code, and rule.
+See the [product page](https://usearazzo.com/validator/) for what it checks and the [API reference](https://usearazzo.com/docs/validator/) for every option, diagnostic code, and rule.
 
 ---
 
-## Runner
+## [Runner](./packages/runner)
 
 `@usearazzo/runner` runs an Arazzo workflow. For each step it sends a real HTTP request to the API its OpenAPI source description points at, checks the step's success criteria against the response, and follows the control flow the document declares: `goto`, `retry`, `end`, sub-workflows, and `dependsOn`. A run hands back the workflow's outputs and a trace of every step.
 
@@ -110,7 +110,7 @@ const result = await executor.execute('authenticateAndOrderPet', {
 result.status; // 'completed'
 ```
 
-Today you compose its four building blocks; a single call that runs a workflow comes next. See the [product page](https://usearazzo.com/runner/) for what it handles and what comes next, the [@usearazzo/runner README](./packages/runner/README.md) for an overview, and the [API reference](https://usearazzo.com/docs/runner/) for every option, result field, and error.
+Today you compose its four building blocks; a single call that runs a workflow comes next. See the [product page](https://usearazzo.com/runner/) for what it handles and what comes next, and the [API reference](https://usearazzo.com/docs/runner/) for every option, result field, and error.
 
 ---
 
