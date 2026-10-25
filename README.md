@@ -1,21 +1,13 @@
 # Arazzo Toolkit
 
-A comprehensive JavaScript/TypeScript toolkit for **parsing**, **resolving**, **validating** and **running** [Arazzo Specification](https://spec.openapis.org/arazzo/latest.html) documents.
+JavaScript/TypeScript libraries and a command-line tool for **parsing**, **resolving**, **validating**, and **running** [Arazzo Specification](https://spec.openapis.org/arazzo/latest.html) documents.
+
+**[Website](https://usearazzo.com/)** · **[Docs](https://usearazzo.com/docs/)** · **[Discussions](https://github.com/orgs/usearazzo/discussions)** · **[Issues](https://github.com/usearazzo/arazzo-toolkit/issues)**
 
 [![Build Status](https://github.com/usearazzo/arazzo-toolkit/actions/workflows/build.yml/badge.svg)](https://github.com/usearazzo/arazzo-toolkit/actions)
 [![Dependabot enabled](https://badgen.net/badge/icon/dependabot?icon=dependabot&label)](https://docs.github.com/en/code-security/supply-chain-security/keeping-your-dependencies-updated-automatically)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-3.0-40c463.svg)](https://github.com/usearazzo/arazzo-toolkit/blob/HEAD/CODE_OF_CONDUCT.md)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/usearazzo/arazzo-toolkit/blob/HEAD/LICENSE)
-
-**Supported Arazzo versions:**
-- [Arazzo 1.0.0](https://spec.openapis.org/arazzo/v1.0.0)
-- [Arazzo 1.0.1](https://spec.openapis.org/arazzo/v1.0.1)
-- [Arazzo 1.1.0](https://spec.openapis.org/arazzo/v1.1.0)
-
-**Supported OpenAPI versions (for source descriptions):**
-- [OpenAPI 2.0](https://spec.openapis.org/oas/v2.0)
-- [OpenAPI 3.0.x](https://spec.openapis.org/oas/v3.0.4)
-- [OpenAPI 3.1.x](https://spec.openapis.org/oas/v3.1.2)
 
 ## Packages
 
@@ -26,8 +18,8 @@ This monorepo contains the following packages:
 | [@usearazzo/cli](./packages/cli) | Command-line interface for the toolkit: validate Arazzo documents from the terminal and CI |
 | [@usearazzo/validator](./packages/validator) | Validator and linter for Arazzo documents, reporting LSP diagnostics |
 | [@usearazzo/runner](./packages/runner) | Runs Arazzo workflows step by step against live APIs, with a trace of every step |
-| [@usearazzo/parser](./packages/parser) | Parser for Arazzo documents, producing the [SpecLynx ApiDOM](https://github.com/speclynx/apidom) data model |
-| [@usearazzo/resolver](./packages/resolver) | Dereferences, bundles, and resolves the references in Arazzo and OpenAPI documents |
+| [@usearazzo/parser](./packages/parser) | Parser for Arazzo documents, producing the [SpecLynx ApiDOM](https://github.com/speclynx/apidom) data model. [API reference](https://usearazzo.com/docs/parser/) |
+| [@usearazzo/resolver](./packages/resolver) | Dereferences, bundles, and resolves the references in Arazzo and OpenAPI documents. [API reference](https://usearazzo.com/docs/resolver/) |
 
 ---
 
@@ -80,7 +72,7 @@ npm install @usearazzo/runner
 
 Here it runs a workflow that logs in, finds a pet, orders it, and checks the order, against a local Petstore (the public one rejects orders):
 
-<a href="https://usearazzo.com/runner/"><img alt="A terminal session: start a Petstore with Docker, open a Node.js REPL, build a runner from @usearazzo/runner, and run the authenticateAndOrderPet workflow against the Petstore; all five steps pass and the status is completed" src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/packages/runner/assets/run-demo.svg"></a>
+<a href="https://usearazzo.com/runner/"><img alt="A terminal session: start a Petstore with Docker, open a Node.js REPL, paste code that builds a runner from @usearazzo/runner, and run the authenticateAndOrderPet workflow against the Petstore; all five steps pass and the status is completed" src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/packages/runner/assets/run-demo.svg"></a>
 
 <details>
 <summary>Text version</summary>
@@ -126,6 +118,20 @@ result.steps.map((s) => `${s.successful ? '✓' : '✗'} ${s.stepId}`);
 Today you compose its four building blocks; a single call that runs a workflow comes next. See the [product page](https://usearazzo.com/runner/) for what it handles and what comes next, and the [API reference](https://usearazzo.com/docs/runner/) for every option, result field, and error.
 
 ---
+
+## Supported versions
+
+Arazzo documents:
+
+- [Arazzo 1.0.0](https://spec.openapis.org/arazzo/v1.0.0)
+- [Arazzo 1.0.1](https://spec.openapis.org/arazzo/v1.0.1)
+- [Arazzo 1.1.0](https://spec.openapis.org/arazzo/v1.1.0)
+
+OpenAPI documents, as source descriptions:
+
+- [OpenAPI 2.0](https://spec.openapis.org/oas/v2.0)
+- [OpenAPI 3.0.x](https://spec.openapis.org/oas/v3.0.4)
+- [OpenAPI 3.1.x](https://spec.openapis.org/oas/v3.1.2)
 
 ## Contributing
 

@@ -54,6 +54,12 @@ Every option is documented on [usearazzo.com](https://usearazzo.com/) and in `us
 - **[UseArazzo CLI](https://usearazzo.com/cli/)** introduces the CLI: what it does in a terminal and in CI, and the commands that come next. Start here when you are deciding whether it fits.
 - **[CLI Reference](https://usearazzo.com/docs/cli/)** covers every command and option, both output formats, the exit codes, the configuration file, and running in CI. Start here when you know what you want to run.
 
+## Supported versions
+
+- [Arazzo 1.0.0](https://spec.openapis.org/arazzo/v1.0.0)
+- [Arazzo 1.0.1](https://spec.openapis.org/arazzo/v1.0.1)
+- [Arazzo 1.1.0](https://spec.openapis.org/arazzo/v1.1.0)
+
 ## Part of the Arazzo Toolkit
 
 `@usearazzo/cli` is the command-line layer of the [arazzo-toolkit](https://github.com/usearazzo/arazzo-toolkit) monorepo, beside [@usearazzo/parser](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/parser#readme), [@usearazzo/resolver](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/resolver#readme), [@usearazzo/validator](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/validator#readme), and [@usearazzo/runner](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/runner#readme). Questions and ideas go to [GitHub Discussions](https://github.com/orgs/usearazzo/discussions).

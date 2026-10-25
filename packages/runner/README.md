@@ -58,7 +58,7 @@ Ships ESM and CommonJS builds with TypeScript declarations. Requires Node.js 20.
 
 The sample workflow logs a user in, finds a pet, orders it, and checks the order. The public Petstore rejects orders, so the session starts a local one for it to call:
 
-<a href="https://usearazzo.com/runner/"><img alt="A terminal session: start a Petstore with Docker, open a Node.js REPL, build a runner from @usearazzo/runner, and run the authenticateAndOrderPet workflow against the Petstore; all five steps pass and the status is completed" src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/packages/runner/assets/run-demo.svg"></a>
+<a href="https://usearazzo.com/runner/"><img alt="A terminal session: start a Petstore with Docker, open a Node.js REPL, paste code that builds a runner from @usearazzo/runner, and run the authenticateAndOrderPet workflow against the Petstore; all five steps pass and the status is completed" src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/packages/runner/assets/run-demo.svg"></a>
 
 <details>
 <summary>Text version</summary>
@@ -100,40 +100,6 @@ result.steps.map((s) => `${s.successful ? '✓' : '✗'} ${s.stepId}`);
 ```
 
 </details>
-
-The same run as a script:
-
-```js
-import {
-  DocumentRegistry,
-  OpenAPIOperationExecutor,
-  StepExecutor,
-  WorkflowExecutor,
-} from '@usearazzo/runner';
-
-const registry = new DocumentRegistry();
-const document = await registry.acquireEntryDocument(
-  'https://usearazzo.com/assets/reference/runner/petstore-order.arazzo.yaml',
-);
-
-const operationExecutor = new OpenAPIOperationExecutor();
-const stepExecutor = new StepExecutor({ document, registry, operationExecutor });
-const executor = new WorkflowExecutor({ document, registry, stepExecutor });
-
-const result = await executor.execute('authenticateAndOrderPet', {
-  inputs: {
-    username: 'theUser',
-    password: '12345',
-    preferredPetStatus: 'available',
-    orderQuantity: 1,
-  },
-  executeOptions: { server: 'http://localhost:8080/api/v3' },
-});
-
-result.status; // 'completed'
-result.outputs; // the workflow's outputs
-result.steps; // each step: stepId, successful, action, attempts, durationMs
-```
 
 To add credentials, give the operation executor a `requestInterceptor`:
 
