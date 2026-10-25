@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.11](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.10...v1.0.1-alpha.11) (2026-10-25)
+
+### Features
+
+- **runner:** add ArazzoRunner entry facade ([#271](https://github.com/usearazzo/arazzo-toolkit/issues/271)) ([3d88c2a](https://github.com/usearazzo/arazzo-toolkit/commit/3d88c2a09c797b73f44c1ba00030ddcded987695))
+
 ## [1.0.1-alpha.10](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.9...v1.0.1-alpha.10) (2026-10-23)
 
 ### Bug Fixes
