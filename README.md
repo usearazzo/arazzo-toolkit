@@ -23,17 +23,17 @@ This monorepo contains the following packages:
 
 | Package | Description |
 |---------|-------------|
-| [@usearazzo/parser](./packages/parser) | Parser for Arazzo Documents producing [SpecLynx ApiDOM](https://github.com/speclynx/apidom) data model |
-| [@usearazzo/resolver](./packages/resolver) | Resolver for Arazzo Documents |
+| [@usearazzo/cli](./packages/cli) | Command-line interface for the toolkit: validate Arazzo documents from the terminal and CI |
 | [@usearazzo/validator](./packages/validator) | Validator and linter for Arazzo documents, reporting LSP diagnostics |
-| [@usearazzo/runner](./packages/runner) | Runner for Arazzo Workflows |
-| [@usearazzo/cli](./packages/cli) | Command-line interface for Arazzo documents |
+| [@usearazzo/runner](./packages/runner) | Runs Arazzo workflows step by step against live APIs, with a trace of every step |
+| [@usearazzo/parser](./packages/parser) | Parser for Arazzo documents, producing the [SpecLynx ApiDOM](https://github.com/speclynx/apidom) data model |
+| [@usearazzo/resolver](./packages/resolver) | Dereferences, bundles, and resolves the references in Arazzo and OpenAPI documents |
 
 ---
 
 ## CLI
 
-`@usearazzo/cli` puts the toolkit behind a single `usearazzo` binary for your terminal or CI/CD pipeline. Its one command today is `validate`, which wraps `@usearazzo/validator` and exits non-zero when the document has errors.
+`@usearazzo/cli` puts the toolkit behind a single `usearazzo` binary for your terminal or CI/CD pipeline. Its one command today is `validate`, which wraps `@usearazzo/validator` and exits non-zero when the document has errors. A command to run workflows, wrapping `@usearazzo/runner`, comes next.
 
 ```sh
 npx @usearazzo/cli validate ./adopt-a-pet.arazzo.yaml
@@ -64,10 +64,16 @@ See the [product page](https://usearazzo.com/validator/) for what it checks, the
 
 ## Runner
 
-`@usearazzo/runner` executes an Arazzo workflow against the live API its source descriptions point at, one step at a time, with control flow (`goto`, `retry`, `end`) and sub-workflows decided by the document.
+`@usearazzo/runner` runs an Arazzo workflow. For each step it sends a real HTTP request to the API its OpenAPI source description points at, checks the step's success criteria against the response, and follows the control flow the document declares: `goto`, `retry`, `end`, sub-workflows, and `dependsOn`. A run hands back the workflow's outputs and a trace of every step.
 
 ```sh
 npm install @usearazzo/runner
+```
+
+The example below orders a pet from a local Petstore, since the public one rejects orders:
+
+```sh
+docker run --rm -p 8080:8080 swaggerapi/petstore3:1.0.28
 ```
 
 ```js
@@ -79,18 +85,28 @@ import {
 } from '@usearazzo/runner';
 
 const registry = new DocumentRegistry();
-const document = await registry.acquireEntryDocument('./adopt-a-pet.arazzo.yaml');
-const stepExecutor = new StepExecutor({
-  document,
-  registry,
-  operationExecutor: new OpenAPIOperationExecutor(),
+const document = await registry.acquireEntryDocument(
+  'https://usearazzo.com/assets/reference/runner/petstore-order.arazzo.yaml',
+);
+
+const operationExecutor = new OpenAPIOperationExecutor();
+const stepExecutor = new StepExecutor({ document, registry, operationExecutor });
+const executor = new WorkflowExecutor({ document, registry, stepExecutor });
+
+const result = await executor.execute('authenticateAndOrderPet', {
+  inputs: {
+    username: 'theUser',
+    password: '12345',
+    preferredPetStatus: 'available',
+    orderQuantity: 1,
+  },
+  executeOptions: { server: 'http://localhost:8080/api/v3' },
 });
 
-const executor = new WorkflowExecutor({ document, registry, stepExecutor });
-const result = await executor.execute('adoptAPet', { inputs: { petId: 1 } });
+result.status; // 'completed'
 ```
 
-The runner is published under the alpha channel, so its API may still change before 1.0.0. See the [product page](https://usearazzo.com/runner/) for what it handles and what comes next, the [@usearazzo/runner README](./packages/runner/README.md) for an overview, and the [API reference](https://usearazzo.com/docs/runner/) for every option, result field, and error.
+Today you compose its four building blocks; a single call that runs a workflow comes next. See the [product page](https://usearazzo.com/runner/) for what it handles and what comes next, the [@usearazzo/runner README](./packages/runner/README.md) for an overview, and the [API reference](https://usearazzo.com/docs/runner/) for every option, result field, and error.
 
 ---
 
