@@ -136,13 +136,11 @@ const runner = await ArazzoRunner.load(uri, {
 
 The two combine: the interceptor changes the request, and the client sends it. Both are options of `OpenAPIOperationExecutor` too, for when you compose the building blocks yourself.
 
-Coming next: a command in [@usearazzo/cli](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/cli#readme) to run workflows from the terminal.
-
 ## Documentation
 
 The example above is the happy path. Everything else is on [usearazzo.com](https://usearazzo.com/):
 
-- **[UseArazzo Runner](https://usearazzo.com/runner/)** introduces the runner: what it handles, how it is built, and what comes next. Start here when you are deciding whether it fits.
+- **[UseArazzo Runner](https://usearazzo.com/runner/)** introduces the runner: what it handles and how it is built. Start here when you are deciding whether it fits.
 - **[Runner API Reference](https://usearazzo.com/docs/runner/)** covers every building block: its options, the result and the step trace, control flow and composition rules, choosing the server, the HTTP client, cancellation, and every error. Start here when you know what you want to call.
 
 ## Supported versions

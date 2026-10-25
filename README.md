@@ -25,7 +25,7 @@ This monorepo contains the following packages:
 
 ## [CLI](./packages/cli)
 
-`@usearazzo/cli` puts the toolkit behind a single `usearazzo` binary for your terminal or CI/CD pipeline. Its one command today is `validate`, which wraps `@usearazzo/validator` and exits non-zero when the document has errors. A command to run workflows, wrapping `@usearazzo/runner`, comes next.
+`@usearazzo/cli` puts the toolkit behind a single `usearazzo` binary for your terminal or CI/CD pipeline. Its one command today is `validate`, which wraps `@usearazzo/validator` and exits non-zero when the document has errors.
 
 ```sh
 npx @usearazzo/cli validate ./adopt-a-pet.arazzo.yaml
@@ -109,7 +109,7 @@ result.steps.map((s) => `${s.successful ? '✓' : '✗'} ${s.stepId}`);
 
 </details>
 
-`ArazzoRunner.load` and `execute` run a workflow in two calls, and its four building blocks stay public for composing your own. See the [product page](https://usearazzo.com/runner/) for what it handles and what comes next, and the [API reference](https://usearazzo.com/docs/runner/) for every option, result field, and error.
+`ArazzoRunner.load` and `execute` run a workflow in two calls, and its four building blocks stay public for composing your own. See the [product page](https://usearazzo.com/runner/) for what it handles and the [API reference](https://usearazzo.com/docs/runner/) for every option, result field, and error.
 
 ---
 

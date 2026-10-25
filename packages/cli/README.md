@@ -45,13 +45,11 @@ Requires Node.js 20.10 or newer.
 
 Built for CI: the exit code gates on a severity you choose (`--fail-severity`), and problems are available as JSON (`--format json`). Settings can live in a `.usearazzo.yaml` or `.usearazzo.json` file in the working directory.
 
-A command to run workflows, wrapping [@usearazzo/runner](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/runner#readme), comes next.
-
 ## Documentation
 
 Every option is documented on [usearazzo.com](https://usearazzo.com/) and in `usearazzo <command> --help`:
 
-- **[UseArazzo CLI](https://usearazzo.com/cli/)** introduces the CLI: what it does in a terminal and in CI, and the commands that come next. Start here when you are deciding whether it fits.
+- **[UseArazzo CLI](https://usearazzo.com/cli/)** introduces the CLI: what it does in a terminal and in CI. Start here when you are deciding whether it fits.
 - **[CLI Reference](https://usearazzo.com/docs/cli/)** covers every command and option, both output formats, the exit codes, the configuration file, and running in CI. Start here when you know what you want to run.
 
 ## Supported versions
