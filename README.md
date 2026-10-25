@@ -39,7 +39,9 @@ This monorepo contains the following packages:
 npx @usearazzo/cli validate ./adopt-a-pet.arazzo.yaml
 ```
 
-Settings for the validator can live in a YAML or JSON configuration file (`.usearazzo.yaml`, `.usearazzo.json`, and a few variants) in the working directory. See the [@usearazzo/cli README](./packages/cli/README.md) for every option, the exit codes, and the configuration file.
+<a href="https://usearazzo.com/cli/"><img alt="usearazzo validate reporting two duplicate stepId errors in one Arazzo document and a missing step description warning in another, each with its line range and rule code" src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/packages/cli/assets/validate-demo.svg"></a>
+
+Settings for the validator can live in a YAML or JSON configuration file (`.usearazzo.yaml`, `.usearazzo.json`, and a few variants) in the working directory. See the [product page](https://usearazzo.com/cli/) for what it does, the [@usearazzo/cli README](./packages/cli/README.md) for an overview, and the [CLI reference](https://usearazzo.com/docs/cli/) for every option, output format, exit code, and the configuration file.
 
 ---
 

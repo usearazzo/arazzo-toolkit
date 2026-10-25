@@ -16,79 +16,43 @@
 
 ---
 
-## What it does
+## Get started
 
-This package puts the toolkit behind a single `usearazzo` binary. Its one command today is `validate`, a thin wrapper around [@usearazzo/validator](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/validator#readme): it checks an Arazzo document, local file or remote URL, and prints every problem with the location that caused it.
-
-## Installation
-
-```sh
-npm install --global @usearazzo/cli
-```
-
-Or run it without installing:
+Validate an Arazzo document. Nothing to install:
 
 ```sh
 npx @usearazzo/cli validate adopt-a-pet.arazzo.yaml
 ```
 
+<a href="https://usearazzo.com/cli/"><img alt="usearazzo validate reporting two duplicate stepId errors in one Arazzo document and a missing step description warning in another, each with its line range and rule code" src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/packages/cli/assets/validate-demo.svg"></a>
+
+The argument is a path, a `file:` URI, or an HTTP(S) URL. Every problem comes with the line range that caused it and the code of the rule it broke.
+
+Prefer a global install?
+
+```sh
+npm install --global @usearazzo/cli
+usearazzo --help
+```
+
 Requires Node.js 20.10 or newer.
 
-## Usage
+## Commands
 
-```console
-$ usearazzo validate adopt-a-pet.arazzo.yaml
-adopt-a-pet.arazzo.yaml
-  2:1-2:5      error    9010300  should always have a 'version'
-  2:1-2:5      warning  9010101  Info 'description' should be present and non-empty string.
-  2:1-2:5      hint     9010401  Info 'summary' is recommended to be present and a non-empty string.
-  9:5-18:1     hint     9040203  Workflow 'summary' is recommended to be present and a non-empty string.
-  12:9-18:1    warning  9050201  Step 'description' should be present and non-empty string.
-  17:21-17:29  error    9070401  Success action "stepId" must reference an existing step in the same workflow.
+| Command | What it does |
+| :------ | :----------- |
+| [`validate`](https://usearazzo.com/docs/cli/#validate) | Validate and lint an Arazzo 1.0.x or 1.1.0 document, from a file or a URL. Wraps [@usearazzo/validator](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/validator#readme). |
 
-✖ 6 problems (2 errors, 2 warnings, 2 hints)
-```
+Built for CI: the exit code gates on a severity you choose (`--fail-severity`), and problems are available as JSON (`--format json`). Settings can live in a `.usearazzo.yaml` or `.usearazzo.json` file in the working directory.
 
-The argument is a path, a `file:` URI, or an HTTP(S) URL. Relative source descriptions resolve against the document's location.
-
-| Option | Description |
-|---|---|
-| `-f, --format <format>` | Output format: `stylish` (default) or `json` |
-| `--json` | Shorthand for `--format json` |
-| `-o, --output <file>` | Write the report to a file instead of stdout. Never the input document |
-| `-c, --config <file>` | Configuration file. Defaults to the first [configuration file](#configuration-file) found in the current working directory |
-| `--json-schema-validation` | Also run JSON Schema validation (off by default) |
-| `--max-problems <n>` | Report at most `n` problems. The exit code still counts all of them |
-| `--fail-severity <severity>` | Lowest severity that fails the run: `error` (default), `warning`, `info`, `hint` |
-
-### Exit codes
-
-- `0`: no problem at or above `--fail-severity`.
-- `1`: at least one problem at or above `--fail-severity`, or the document, the configuration file, or the output file could not be read or written. The reason goes to stderr.
-
-## Configuration file
-
-`usearazzo` looks for a configuration file in the current working directory, the way Spectral looks for its ruleset. The first match among `.usearazzo.yaml`, `.usearazzo.yml`, `.usearazzo.json`, `usearazzo.yaml`, `usearazzo.yml` and `usearazzo.json` wins; parent directories are not searched. `--config` points at any other file, relative to the current working directory.
-
-The file is YAML or JSON. Its `languageService` key is the [SpecLynx ApiDOM Language Service](https://www.npmjs.com/package/@speclynx/api-languageservice) context that `@usearazzo/validator` takes, deep-merged over the validator's defaults:
-
-```yaml
-languageService:
-  validationContext:
-    jsonSchemaValidation: true # default: false
-    semanticValidation: true # default: true
-    referenceValidation: true # default: true
-    semanticLinting: true # default: true
-  parseContext:
-    arazzo:
-      sourceDescriptionsResolution: true # fetch and parse source descriptions (default: true)
-```
-
-Command-line flags win over the configuration file, and the configuration file wins over the validator's defaults.
+A command to run workflows, wrapping [@usearazzo/runner](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/runner#readme), comes next.
 
 ## Documentation
 
-See the [@usearazzo/validator README](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/validator#readme) for what is checked, and the [Validator API Reference](https://usearazzo.com/docs/validator/) for every diagnostic code and rule.
+Every option is documented on [usearazzo.com](https://usearazzo.com/) and in `usearazzo <command> --help`:
+
+- **[UseArazzo CLI](https://usearazzo.com/cli/)** introduces the CLI: what it does in a terminal and in CI, and the commands that come next. Start here when you are deciding whether it fits.
+- **[CLI Reference](https://usearazzo.com/docs/cli/)** covers every command and option, both output formats, the exit codes, the configuration file, and running in CI. Start here when you know what you want to run.
 
 ## Part of the Arazzo Toolkit
 

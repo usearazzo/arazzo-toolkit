@@ -1,0 +1,21 @@
+arazzo: 1.0.1
+info:
+  title: Adopt a pet
+  summary: Find a pet and adopt it.
+  description: Find an available pet in the store and adopt it.
+  version: 1.0.0
+sourceDescriptions:
+  - name: petstore
+    url: ./petstore.openapi.json
+    type: openapi
+workflows:
+  - workflowId: adopt-a-pet
+    summary: Adopt a pet.
+    description: Find an available pet and adopt it.
+    steps:
+      - stepId: find-pet
+        description: Find an available pet.
+        operationId: findPetsByStatus
+      - stepId: find-pet
+        description: Adopt the pet.
+        operationId: updatePet

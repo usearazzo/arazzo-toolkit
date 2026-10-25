@@ -55,7 +55,9 @@ To check a document without writing any code, use [@usearazzo/cli](https://githu
 npx @usearazzo/cli validate adopt-a-pet.arazzo.yaml
 ```
 
-It prints every problem with its location and exits with `1` when it finds an error, so it works as a CI step too. Add `--format json` for output a script can read. The [CLI README](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/cli#readme) covers every option, the exit codes, and the configuration file.
+<a href="https://usearazzo.com/cli/"><img alt="usearazzo validate reporting two duplicate stepId errors in one Arazzo document and a missing step description warning in another, each with its line range and rule code" src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/packages/cli/assets/validate-demo.svg"></a>
+
+It prints every problem with its location and exits with `1` when it finds an error, so it works as a CI step too. Add `--format json` for output a script can read. The [CLI Reference](https://usearazzo.com/docs/cli/) covers every option, the exit codes, and the configuration file.
 
 ## Usage
 
