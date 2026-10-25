@@ -73,9 +73,20 @@ class ArazzoRunner {
    */
   static async load(uri: string, options: ArazzoRunnerLoadOptions = {}): Promise<ArazzoRunner> {
     const { registry = new DocumentRegistry(), ...rest } = options;
-    const document = await registry.acquireEntryDocument(uri);
+    // acquiring a second entry would pin it for good and, through the LRU
+    // order, could displace the first as the registry's entry; a registry that
+    // already backs one only looks the document up.
+    const entry = registry.entryDocument ?? (await registry.acquireEntryDocument(uri));
+    const document = await registry.acquire(uri);
 
-    return new ArazzoRunner({ ...rest, document, registry });
+    if (document !== entry) {
+      throw new InvalidEntryDocumentError(
+        `Document at "${uri}" is not the entry document of the given registry`,
+        { uri },
+      );
+    }
+
+    return new ArazzoRunner({ ...rest, document: entry, registry });
   }
 
   /**

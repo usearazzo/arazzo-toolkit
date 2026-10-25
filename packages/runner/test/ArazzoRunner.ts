@@ -104,6 +104,20 @@ describe('ArazzoRunner', function () {
       assert.instanceOf(error, InvalidEntryDocumentError);
     });
 
+    specify('should keep the given registry usable after a rejected load', async function () {
+      const registry = new DocumentRegistry();
+      const first = await ArazzoRunner.load(entryPath, { registry });
+      await captureRejection(ArazzoRunner.load(compositionPath, { registry }));
+
+      // the rejected document is cached but not pinned as a second entry.
+      const rejected = registry.get(compositionPath);
+      assert.isDefined(rejected);
+      assert.isFalse(ArazzoDocument.is(rejected!) && rejected.isEntry);
+      const second = await ArazzoRunner.load(entryPath, { registry });
+      assert.strictEqual(second.document, first.document);
+      assert.strictEqual(registry.entryDocument, first.document);
+    });
+
     specify('should reject a document that is not an Arazzo document', async function () {
       const error = await captureRejection(
         ArazzoRunner.load(path.join(fixturesPath, 'petstore.openapi.json')),
