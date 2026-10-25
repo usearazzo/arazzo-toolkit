@@ -1,3 +1,10 @@
+/* Runner */
+export {
+  default as ArazzoRunner,
+  type ArazzoRunnerOptions,
+  type ArazzoRunnerLoadOptions,
+} from './ArazzoRunner.ts';
+
 /* Document Registry */
 export {
   default as DocumentRegistry,

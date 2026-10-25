@@ -3,27 +3,15 @@ import { fileURLToPath } from 'node:url';
 
 import { assert } from 'chai';
 
-import {
-  DocumentRegistry,
-  OpenAPIOperationExecutor,
-  StepExecutor,
-  WorkflowExecutor,
-} from '../../src/index.ts';
+import { ArazzoRunner } from '../../src/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const run = async (entryPath: string, workflowId: string, inputs: Record<string, unknown>) => {
-  const registry = new DocumentRegistry();
-  const document = await registry.acquireEntryDocument(entryPath);
-  // no httpClient: the operation executor defaults to httpClientFetch, real HTTP
-  const stepExecutor = new StepExecutor({
-    document,
-    registry,
-    operationExecutor: new OpenAPIOperationExecutor(),
-  });
-  const executor = new WorkflowExecutor({ document, registry, stepExecutor });
+  // no httpClient: the runner defaults to httpClientFetch, real HTTP
+  const runner = await ArazzoRunner.load(entryPath);
 
-  return executor.execute(workflowId, {
+  return runner.execute(workflowId, {
     inputs,
     executeOptions: { server: process.env.PETSTORE_URL },
   });

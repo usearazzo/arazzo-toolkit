@@ -99,7 +99,7 @@ Phases are intentionally small — each one is a shippable, independently review
 - A `successCriteria` entry that is not a Criterion Object is an authoring error, not silently skipped (#127).
 - Embedded runtime expressions in `requestBody` payloads are evaluated per the 1.0.1 MUST (#129).
 
-## Phase 9 — Runner entry facade
+## Phase 9 — Runner entry facade ✅
 
 **Goal:** a consumer can run a workflow with one call.  
 **Depends on:** Phase 7  
