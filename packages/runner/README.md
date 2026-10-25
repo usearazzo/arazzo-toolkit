@@ -100,6 +100,20 @@ const operationExecutor = new OpenAPIOperationExecutor({
 });
 ```
 
+To send requests through another HTTP stack, replace the `httpClient`. It is a function from the built request to a WHATWG `Response`; here undici with a connection pool that global `fetch` cannot take:
+
+```js
+import { fetch, Agent } from 'undici';
+
+const dispatcher = new Agent({ connections: 16, keepAliveTimeout: 60_000 });
+
+const operationExecutor = new OpenAPIOperationExecutor({
+  httpClient: (request) => fetch(request.url, { ...request, dispatcher }),
+});
+```
+
+The two combine: the interceptor changes the request, and the client sends it.
+
 Coming next: a single call that runs a workflow, then a command in [@usearazzo/cli](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/cli#readme) to run workflows from the terminal.
 
 ## Documentation
