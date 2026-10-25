@@ -10,6 +10,7 @@ import WorkflowExecutor, {
   type WorkflowExecuteOptions,
   type WorkflowExecutionResult,
 } from './executor/WorkflowExecutor.ts';
+import InvalidEntryDocumentError from './errors/InvalidEntryDocumentError.ts';
 
 /**
  * Options for {@link ArazzoRunner.load}.
@@ -25,6 +26,10 @@ export interface ArazzoRunnerLoadOptions
   extends
     Pick<OpenAPIOperationExecutorOptions, 'httpClient' | 'requestInterceptor'>,
     Pick<WorkflowExecutorOptions, 'maxSteps' | 'maxWorkflowDepth' | 'sleep' | 'now'> {
+  /**
+   * The registry to load the documents into. A registry backs one entry
+   * document: loading a different one into it throws.
+   */
   readonly registry?: DocumentRegistry;
 }
 
@@ -38,7 +43,7 @@ export interface ArazzoRunnerOptions extends Omit<ArazzoRunnerLoadOptions, 'regi
    */
   readonly document: ArazzoDocument;
   /**
-   * The document registry the entry document was acquired from.
+   * The document registry whose entry document is `document`.
    */
   readonly registry: DocumentRegistry;
 }
@@ -63,7 +68,8 @@ class ArazzoRunner {
    * returns a runner bound to it.
    *
    * @throws UnmatchedProviderError - When no provider can load the document
-   * @throws InvalidEntryDocumentError - When the document is not an Arazzo document
+   * @throws InvalidEntryDocumentError - When the document is not an Arazzo
+   * document, or the given registry already backs another entry document
    */
   static async load(uri: string, options: ArazzoRunnerLoadOptions = {}): Promise<ArazzoRunner> {
     const { registry = new DocumentRegistry(), ...rest } = options;
@@ -72,9 +78,24 @@ class ArazzoRunner {
     return new ArazzoRunner({ ...rest, document, registry });
   }
 
+  /**
+   * Binds a runner to an entry document the caller already acquired.
+   *
+   * @throws InvalidEntryDocumentError - When `document` is not the entry document of `registry`
+   */
   constructor(options: ArazzoRunnerOptions) {
     const { document, registry, httpClient, requestInterceptor, ...workflowExecutorOptions } =
       options;
+
+    // a registry pins every entry document it acquires but reports only the
+    // first as its entry, so one registry serves one entry document.
+    if (registry.entryDocument !== document) {
+      throw new InvalidEntryDocumentError(
+        `Document at "${document.uri}" is not the entry document of the given registry`,
+        { uri: document.uri },
+      );
+    }
+
     const operationExecutor = new OpenAPIOperationExecutor({ httpClient, requestInterceptor });
     const stepExecutor = new StepExecutor({ document, registry, operationExecutor });
 

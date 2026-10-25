@@ -116,7 +116,7 @@ const result = await runner.execute('authenticateAndOrderPet', {
 });
 ```
 
-`runner.document` and `runner.registry` are the loaded entry document and the registry holding its source descriptions. `load` takes the seams of the building blocks it wires: `registry`, `httpClient` and `requestInterceptor`, and the workflow executor's `maxSteps`, `maxWorkflowDepth`, `sleep` and `now`. To bind a runner to a document you already acquired, use `new ArazzoRunner({ document, registry })`.
+`runner.document` and `runner.registry` are the loaded entry document and the registry holding its source descriptions; unless you pass one, every runner `load` returns has a registry of its own. `load` takes the seams of the building blocks it wires: `registry` (one registry backs one entry document, so loading a different document into it throws `InvalidEntryDocumentError`), `httpClient` and `requestInterceptor`, and the workflow executor's `maxSteps`, `maxWorkflowDepth`, `sleep` and `now`. To bind a runner to a document you already acquired, use `new ArazzoRunner({ document, registry })`; it throws `InvalidEntryDocumentError` unless `document` is the entry document of `registry`.
 
 To add credentials, pass a `requestInterceptor`:
 
