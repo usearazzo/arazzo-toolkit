@@ -115,7 +115,7 @@ result.steps.map((s) => `${s.successful ? '✓' : '✗'} ${s.stepId}`);
 
 </details>
 
-Today you compose its four building blocks; a single call that runs a workflow comes next. See the [product page](https://usearazzo.com/runner/) for what it handles and what comes next, and the [API reference](https://usearazzo.com/docs/runner/) for every option, result field, and error.
+`ArazzoRunner.load` and `execute` run a workflow in two calls, and its four building blocks stay public for composing your own. See the [product page](https://usearazzo.com/runner/) for what it handles and what comes next, and the [API reference](https://usearazzo.com/docs/runner/) for every option, result field, and error.
 
 ---
 

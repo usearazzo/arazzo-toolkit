@@ -31,7 +31,7 @@ Use it to test an API flow end to end in CI, to drive a workflow from your own s
 
 ## At a glance
 
-A runner is four building blocks, composed bottom-up:
+A runner is four building blocks, composed bottom-up; `ArazzoRunner` composes them for you:
 
 | Building block | Job |
 |---|---|
@@ -101,10 +101,27 @@ result.steps.map((s) => `${s.successful ? '✓' : '✗'} ${s.stepId}`);
 
 </details>
 
-To add credentials, give the operation executor a `requestInterceptor`:
+`ArazzoRunner` wires the four building blocks with their defaults, so the same run is a `load` and an `execute`:
 
 ```js
-const operationExecutor = new OpenAPIOperationExecutor({
+import { ArazzoRunner } from '@usearazzo/runner';
+
+const runner = await ArazzoRunner.load(
+  'https://usearazzo.com/assets/reference/runner/petstore-order.arazzo.yaml',
+);
+
+const result = await runner.execute('authenticateAndOrderPet', {
+  inputs: { username: 'theUser', password: '12345', preferredPetStatus: 'available', orderQuantity: 1 },
+  executeOptions: { server: 'http://localhost:8080/api/v3' },
+});
+```
+
+`runner.document` and `runner.registry` are the loaded entry document and the registry holding its source descriptions. `load` takes the seams of the building blocks it wires: `registry`, `httpClient` and `requestInterceptor`, and the workflow executor's `maxSteps`, `maxWorkflowDepth`, `sleep` and `now`. To bind a runner to a document you already acquired, use `new ArazzoRunner({ document, registry })`.
+
+To add credentials, pass a `requestInterceptor`:
+
+```js
+const runner = await ArazzoRunner.load(uri, {
   requestInterceptor: async (request) => {
     request.headers.Authorization = `Bearer ${await acquireToken()}`;
   },
@@ -118,14 +135,14 @@ import { fetch, Agent } from 'undici';
 
 const dispatcher = new Agent({ connections: 16, keepAliveTimeout: 60_000 });
 
-const operationExecutor = new OpenAPIOperationExecutor({
+const runner = await ArazzoRunner.load(uri, {
   httpClient: (request) => fetch(request.url, { ...request, dispatcher }),
 });
 ```
 
-The two combine: the interceptor changes the request, and the client sends it.
+The two combine: the interceptor changes the request, and the client sends it. Both are options of `OpenAPIOperationExecutor` too, for when you compose the building blocks yourself.
 
-Coming next: a single call that runs a workflow, then a command in [@usearazzo/cli](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/cli#readme) to run workflows from the terminal.
+Coming next: a command in [@usearazzo/cli](https://github.com/usearazzo/arazzo-toolkit/tree/main/packages/cli#readme) to run workflows from the terminal.
 
 ## Documentation
 
