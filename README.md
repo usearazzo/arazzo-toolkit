@@ -90,7 +90,7 @@ const executor = new WorkflowExecutor({ document, registry, stepExecutor });
 const result = await executor.execute('adoptAPet', { inputs: { petId: 1 } });
 ```
 
-The runner is published under the alpha channel, so its API may still change before 1.0.0. For complete documentation, see the [@usearazzo/runner README](./packages/runner/README.md).
+The runner is published under the alpha channel, so its API may still change before 1.0.0. See the [product page](https://usearazzo.com/runner/) for what it handles and what comes next, the [@usearazzo/runner README](./packages/runner/README.md) for an overview, and the [API reference](https://usearazzo.com/docs/runner/) for every option, result field, and error.
 
 ---
 
