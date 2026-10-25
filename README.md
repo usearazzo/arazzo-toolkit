@@ -78,41 +78,52 @@ See the [product page](https://usearazzo.com/validator/) for what it checks and 
 npm install @usearazzo/runner
 ```
 
-The example below orders a pet from a local Petstore, since the public one rejects orders:
+Here it runs a workflow that logs in, finds a pet, orders it, and checks the order, against a local Petstore (the public one rejects orders):
 
-```sh
-docker run --rm -p 8080:8080 swaggerapi/petstore3:1.0.28
+<a href="https://usearazzo.com/runner/"><img alt="A terminal session: start a Petstore with Docker, open a Node.js REPL, build a runner from @usearazzo/runner, and run the authenticateAndOrderPet workflow against the Petstore; all five steps pass and the status is completed" src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/packages/runner/assets/run-demo.svg"></a>
+
+<details>
+<summary>Text version</summary>
+
+```console
+$ docker run --rm -d -p 8080:8080 swaggerapi/petstore3:1.0.28
+c0e5624dc0fcd9f2dff83a25996174e9a0d764b4029abfc315842f968fa71e82
+$ node
+Welcome to Node.js v24.10.0.
+Type ".help" for more information.
+> const runner = await import('@usearazzo/runner')
+undefined
+> const url = 'https://usearazzo.com/assets/reference/runner/petstore-order.arazzo.yaml'
+undefined
+> const registry = new runner.DocumentRegistry()
+undefined
+> const document = await registry.acquireEntryDocument(url)
+undefined
+> const operationExecutor = new runner.OpenAPIOperationExecutor()
+undefined
+> const stepExecutor = new runner.StepExecutor({ document, registry, operationExecutor })
+undefined
+> const executor = new runner.WorkflowExecutor({ document, registry, stepExecutor })
+undefined
+> const inputs = { username: 'theUser', password: '12345', preferredPetStatus: 'available', orderQuantity: 1 }
+undefined
+> const options = { inputs, executeOptions: { server: 'http://localhost:8080/api/v3' } }
+undefined
+> const result = await executor.execute('authenticateAndOrderPet', options)
+undefined
+> result.status
+'completed'
+> result.steps.map((s) => `${s.successful ? '✓' : '✗'} ${s.stepId}`)
+[
+  '✓ loginUser',
+  '✓ findAvailablePets',
+  '✓ placeOrder',
+  '✓ retrieveOrderedPetDetails',
+  '✓ verifyOrderConfirmation'
+]
 ```
 
-```js
-import {
-  DocumentRegistry,
-  OpenAPIOperationExecutor,
-  StepExecutor,
-  WorkflowExecutor,
-} from '@usearazzo/runner';
-
-const registry = new DocumentRegistry();
-const document = await registry.acquireEntryDocument(
-  'https://usearazzo.com/assets/reference/runner/petstore-order.arazzo.yaml',
-);
-
-const operationExecutor = new OpenAPIOperationExecutor();
-const stepExecutor = new StepExecutor({ document, registry, operationExecutor });
-const executor = new WorkflowExecutor({ document, registry, stepExecutor });
-
-const result = await executor.execute('authenticateAndOrderPet', {
-  inputs: {
-    username: 'theUser',
-    password: '12345',
-    preferredPetStatus: 'available',
-    orderQuantity: 1,
-  },
-  executeOptions: { server: 'http://localhost:8080/api/v3' },
-});
-
-result.status; // 'completed'
-```
+</details>
 
 Today you compose its four building blocks; a single call that runs a workflow comes next. See the [product page](https://usearazzo.com/runner/) for what it handles and what comes next, and the [API reference](https://usearazzo.com/docs/runner/) for every option, result field, and error.
 

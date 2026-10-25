@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="972" height="358" viewBox="0 0 972 358" role="img" aria-label="Running an Arazzo workflow with @usearazzo/runner: start a Petstore with Docker, then run the workflow in a Node.js REPL; every step passes">
+  <style>
+    @keyframes s0{0%,40.060%{opacity:1}40.063%,100%{opacity:0}}
+    .s0{animation:s0 31.53s linear infinite}
+    @keyframes a0{0%,1.583%{opacity:0}1.586%,100%{opacity:1}}
+    @keyframes t0{0%,1.586%{transform:translateX(0);animation-timing-function:steps(59,end)}8.136%,100%{transform:translateX(497.4px)}}
+    @keyframes o0{0%,9.088%{opacity:0}9.091%,100%{opacity:1}}
+    .a0{animation:a0 31.53s linear infinite}.t0{animation:t0 31.53s linear infinite}.o0{animation:o0 31.53s linear infinite}
+    @keyframes a1{0%,10.798%{opacity:0}10.801%,100%{opacity:1}}
+    @keyframes t1{0%,10.801%{transform:translateX(0);animation-timing-function:steps(4,end)}11.245%,100%{transform:translateX(33.7px)}}
+    @keyframes o1{0%,12.197%{opacity:0}12.200%,100%{opacity:1}}
+    .a1{animation:a1 31.53s linear infinite}.t1{animation:t1 31.53s linear infinite}.o1{animation:o1 31.53s linear infinite}
+    @keyframes a2{0%,13.240%{opacity:0}13.243%,100%{opacity:1}}
+    @keyframes t2{0%,13.243%{transform:translateX(0);animation-timing-function:steps(48,end)}15.071%,100%{transform:translateX(404.6px)}}
+    @keyframes o2{0%,16.022%{opacity:0}16.025%,100%{opacity:1}}
+    .a2{animation:a2 31.53s linear infinite}.t2{animation:t2 31.53s linear infinite}.o2{animation:o2 31.53s linear infinite}
+    @keyframes a3{0%,16.939%{opacity:0}16.942%,100%{opacity:1}}
+    @keyframes t3{0%,16.942%{transform:translateX(0);animation-timing-function:steps(86,end)}20.216%,100%{transform:translateX(725.0px)}}
+    @keyframes o3{0%,21.167%{opacity:0}21.170%,100%{opacity:1}}
+    .a3{animation:a3 31.53s linear infinite}.t3{animation:t3 31.53s linear infinite}.o3{animation:o3 31.53s linear infinite}
+    @keyframes a4{0%,22.084%{opacity:0}22.087%,100%{opacity:1}}
+    @keyframes t4{0%,22.087%{transform:translateX(0);animation-timing-function:steps(46,end)}23.838%,100%{transform:translateX(387.8px)}}
+    @keyframes o4{0%,24.790%{opacity:0}24.793%,100%{opacity:1}}
+    .a4{animation:a4 31.53s linear infinite}.t4{animation:t4 31.53s linear infinite}.o4{animation:o4 31.53s linear infinite}
+    @keyframes a5{0%,25.707%{opacity:0}25.710%,100%{opacity:1}}
+    @keyframes t5{0%,25.710%{transform:translateX(0);animation-timing-function:steps(57,end)}27.879%,100%{transform:translateX(480.5px)}}
+    @keyframes o5{0%,28.831%{opacity:0}28.834%,100%{opacity:1}}
+    .a5{animation:a5 31.53s linear infinite}.t5{animation:t5 31.53s linear infinite}.o5{animation:o5 31.53s linear infinite}
+    @keyframes s1{0%,40.060%{opacity:0}40.063%,76.736%{opacity:1}76.739%,100%{opacity:0}}
+    .s1{animation:s1 31.53s linear infinite}
+    @keyframes a6{0%,40.850%{opacity:0}40.853%,100%{opacity:1}}
+    @keyframes t6{0%,40.853%{transform:translateX(0);animation-timing-function:steps(63,end)}43.251%,100%{transform:translateX(531.1px)}}
+    @keyframes o6{0%,44.203%{opacity:0}44.206%,100%{opacity:1}}
+    .a6{animation:a6 31.53s linear infinite}.t6{animation:t6 31.53s linear infinite}.o6{animation:o6 31.53s linear infinite}
+    @keyframes a7{0%,45.120%{opacity:0}45.123%,100%{opacity:1}}
+    @keyframes t7{0%,45.123%{transform:translateX(0);animation-timing-function:steps(87,end)}48.435%,100%{transform:translateX(733.4px)}}
+    @keyframes o7{0%,49.386%{opacity:0}49.389%,100%{opacity:1}}
+    .a7{animation:a7 31.53s linear infinite}.t7{animation:t7 31.53s linear infinite}.o7{animation:o7 31.53s linear infinite}
+    @keyframes a8{0%,50.303%{opacity:0}50.306%,100%{opacity:1}}
+    @keyframes t8{0%,50.306%{transform:translateX(0);animation-timing-function:steps(82,end)}53.427%,100%{transform:translateX(691.3px)}}
+    @keyframes o8{0%,54.379%{opacity:0}54.382%,100%{opacity:1}}
+    .a8{animation:a8 31.53s linear infinite}.t8{animation:t8 31.53s linear infinite}.o8{animation:o8 31.53s linear infinite}
+    @keyframes a9{0%,55.296%{opacity:0}55.299%,100%{opacity:1}}
+    @keyframes t9{0%,55.299%{transform:translateX(0);animation-timing-function:steps(108,end)}59.410%,100%{transform:translateX(910.4px)}}
+    @keyframes o9{0%,60.362%{opacity:0}60.365%,100%{opacity:1}}
+    .a9{animation:a9 31.53s linear infinite}.t9{animation:t9 31.53s linear infinite}.o9{animation:o9 31.53s linear infinite}
+    @keyframes a10{0%,61.278%{opacity:0}61.282%,100%{opacity:1}}
+    @keyframes t10{0%,61.282%{transform:translateX(0);animation-timing-function:steps(86,end)}64.555%,100%{transform:translateX(725.0px)}}
+    @keyframes o10{0%,65.507%{opacity:0}65.510%,100%{opacity:1}}
+    .a10{animation:a10 31.53s linear infinite}.t10{animation:t10 31.53s linear infinite}.o10{animation:o10 31.53s linear infinite}
+    @keyframes s2{0%,76.736%{opacity:0}76.739%,100.000%{opacity:1}100.003%,100%{opacity:0}}
+    .s2{animation:s2 31.53s linear infinite}
+    @keyframes a11{0%,77.526%{opacity:0}77.529%,100%{opacity:1}}
+    @keyframes t11{0%,77.529%{transform:translateX(0);animation-timing-function:steps(73,end)}80.308%,100%{transform:translateX(615.4px)}}
+    @keyframes o11{0%,81.259%{opacity:0}81.262%,100%{opacity:1}}
+    .a11{animation:a11 31.53s linear infinite}.t11{animation:t11 31.53s linear infinite}.o11{animation:o11 31.53s linear infinite}
+    @keyframes a12{0%,82.176%{opacity:0}82.179%,100%{opacity:1}}
+    @keyframes t12{0%,82.179%{transform:translateX(0);animation-timing-function:steps(13,end)}82.674%,100%{transform:translateX(109.6px)}}
+    @keyframes o12{0%,83.626%{opacity:0}83.629%,100%{opacity:1}}
+    .a12{animation:a12 31.53s linear infinite}.t12{animation:t12 31.53s linear infinite}.o12{animation:o12 31.53s linear infinite}
+    @keyframes a13{0%,84.542%{opacity:0}84.546%,100%{opacity:1}}
+    @keyframes t13{0%,84.546%{transform:translateX(0);animation-timing-function:steps(66,end)}87.058%,100%{transform:translateX(556.4px)}}
+    @keyframes o13{0%,88.010%{opacity:0}88.013%,100%{opacity:1}}
+    .a13{animation:a13 31.53s linear infinite}.t13{animation:t13 31.53s linear infinite}.o13{animation:o13 31.53s linear infinite}
+    @media (prefers-reduced-motion: reduce){*{animation:none!important}}
+  </style>
+  <clipPath id="w"><rect width="972" height="358" rx="8"/></clipPath>
+  <g clip-path="url(#w)">
+    <rect width="972" height="358" fill="#1F2937"/>
+    <rect width="972" height="36" fill="#111827"/>
+    <rect y="35" width="972" height="1" fill="#374151"/>
+  </g>
+  <circle cx="20" cy="18" r="5.5" fill="#FF5F56"/><circle cx="38" cy="18" r="5.5" fill="#FFBD2E"/><circle cx="56" cy="18" r="5.5" fill="#27C93F"/>
+  <text x="74" y="22" fill="#9CA3AF" font-family="'Fira Code',Monaco,Consolas,ui-monospace,SFMono-Regular,Menlo,'Liberation Mono',monospace" font-size="12">@usearazzo/runner</text>
+  <g font-family="'Fira Code',Monaco,Consolas,ui-monospace,SFMono-Regular,Menlo,'Liberation Mono',monospace" font-size="14" xml:space="preserve">
+  <g class="s0" opacity="0">
+    <g class="a0">
+      <text x="22.0" y="70" fill="#AEB6C2">$</text><text x="38.9" y="70" fill="#A3D977">docker run --rm -d -p 8080:8080 swaggerapi/petstore3:1.0.28</text>
+      <g class="t0" transform="translate(497.4 0)"><rect x="38.9" y="54" width="972" height="22" fill="#1F2937"/></g>
+      <g class="o0"><text x="22.0" y="92" fill="#AEB6C2">c0e5624dc0fcd9f2dff83a25996174e9a0d764b4029abfc315842f968fa71e82</text></g>
+    </g>
+    <g class="a1">
+      <text x="22.0" y="114" fill="#AEB6C2">$</text><text x="38.9" y="114" fill="#A3D977">node</text>
+      <g class="t1" transform="translate(33.7 0)"><rect x="38.9" y="98" width="972" height="22" fill="#1F2937"/></g>
+      <g class="o1"><text x="22.0" y="136" fill="#AEB6C2">Welcome to Node.js v24.10.0.</text><text x="22.0" y="158" fill="#AEB6C2">Type ".help" for more information.</text></g>
+    </g>
+    <g class="a2">
+      <text x="22.0" y="180" fill="#A3D977">&gt;</text><text x="38.9" y="180" fill="#E5E7EB">const runner = await import('@usearazzo/runner')</text>
+      <g class="t2" transform="translate(404.6 0)"><rect x="38.9" y="164" width="972" height="22" fill="#1F2937"/></g>
+      <g class="o2"><text x="22.0" y="202" fill="#AEB6C2">undefined</text></g>
+    </g>
+    <g class="a3">
+      <text x="22.0" y="224" fill="#A3D977">&gt;</text><text x="38.9" y="224" fill="#E5E7EB">const url = 'https://usearazzo.com/assets/reference/runner/petstore-order.arazzo.yaml'</text>
+      <g class="t3" transform="translate(725.0 0)"><rect x="38.9" y="208" width="972" height="22" fill="#1F2937"/></g>
+      <g class="o3"><text x="22.0" y="246" fill="#AEB6C2">undefined</text></g>
+    </g>
+    <g class="a4">
+      <text x="22.0" y="268" fill="#A3D977">&gt;</text><text x="38.9" y="268" fill="#E5E7EB">const registry = new runner.DocumentRegistry()</text>
+      <g class="t4" transform="translate(387.8 0)"><rect x="38.9" y="252" width="972" height="22" fill="#1F2937"/></g>
+      <g class="o4"><text x="22.0" y="290" fill="#AEB6C2">undefined</text></g>
+    </g>
+    <g class="a5">
+      <text x="22.0" y="312" fill="#A3D977">&gt;</text><text x="38.9" y="312" fill="#E5E7EB">const document = await registry.acquireEntryDocument(url)</text>
+      <g class="t5" transform="translate(480.5 0)"><rect x="38.9" y="296" width="972" height="22" fill="#1F2937"/></g>
+      <g class="o5"><text x="22.0" y="334" fill="#AEB6C2">undefined</text></g>
+    </g>
+  </g>
+  <g class="s1" opacity="0">
+    <g class="a6">
+      <text x="22.0" y="70" fill="#A3D977">&gt;</text><text x="38.9" y="70" fill="#E5E7EB">const operationExecutor = new runner.OpenAPIOperationExecutor()</text>
+      <g class="t6" transform="translate(531.1 0)"><rect x="38.9" y="54" width="972" height="22" fill="#1F2937"/></g>
+      <g class="o6"><text x="22.0" y="92" fill="#AEB6C2">undefined</text></g>
+    </g>
+    <g class="a7">
+      <text x="22.0" y="114" fill="#A3D977">&gt;</text><text x="38.9" y="114" fill="#E5E7EB">const stepExecutor = new runner.StepExecutor({ document, registry, operationExecutor })</text>
+      <g class="t7" transform="translate(733.4 0)"><rect x="38.9" y="98" width="972" height="22" fill="#1F2937"/></g>
+      <g class="o7"><text x="22.0" y="136" fill="#AEB6C2">undefined</text></g>
+    </g>
+    <g class="a8">
+      <text x="22.0" y="158" fill="#A3D977">&gt;</text><text x="38.9" y="158" fill="#E5E7EB">const executor = new runner.WorkflowExecutor({ document, registry, stepExecutor })</text>
+      <g class="t8" transform="translate(691.3 0)"><rect x="38.9" y="142" width="972" height="22" fill="#1F2937"/></g>
+      <g class="o8"><text x="22.0" y="180" fill="#AEB6C2">undefined</text></g>
+    </g>
+    <g class="a9">
+      <text x="22.0" y="202" fill="#A3D977">&gt;</text><text x="38.9" y="202" fill="#E5E7EB">const inputs = { username: 'theUser', password: '12345', preferredPetStatus: 'available', orderQuantity: 1 }</text>
+      <g class="t9" transform="translate(910.4 0)"><rect x="38.9" y="186" width="972" height="22" fill="#1F2937"/></g>
+      <g class="o9"><text x="22.0" y="224" fill="#AEB6C2">undefined</text></g>
+    </g>
+    <g class="a10">
+      <text x="22.0" y="246" fill="#A3D977">&gt;</text><text x="38.9" y="246" fill="#E5E7EB">const options = { inputs, executeOptions: { server: 'http://localhost:8080/api/v3' } }</text>
+      <g class="t10" transform="translate(725.0 0)"><rect x="38.9" y="230" width="972" height="22" fill="#1F2937"/></g>
+      <g class="o10"><text x="22.0" y="268" fill="#AEB6C2">undefined</text></g>
+    </g>
+  </g>
+  <g class="s2">
+    <g class="a11">
+      <text x="22.0" y="70" fill="#A3D977">&gt;</text><text x="38.9" y="70" fill="#E5E7EB">const result = await executor.execute('authenticateAndOrderPet', options)</text>
+      <g class="t11" transform="translate(615.4 0)"><rect x="38.9" y="54" width="972" height="22" fill="#1F2937"/></g>
+      <g class="o11"><text x="22.0" y="92" fill="#AEB6C2">undefined</text></g>
+    </g>
+    <g class="a12">
+      <text x="22.0" y="114" fill="#A3D977">&gt;</text><text x="38.9" y="114" fill="#E5E7EB">result.status</text>
+      <g class="t12" transform="translate(109.6 0)"><rect x="38.9" y="98" width="972" height="22" fill="#1F2937"/></g>
+      <g class="o12"><text x="22.0" y="136" fill="#A3D977">'completed'</text></g>
+    </g>
+    <g class="a13">
+      <text x="22.0" y="158" fill="#A3D977">&gt;</text><text x="38.9" y="158" fill="#E5E7EB">result.steps.map((s) =&gt; `${s.successful ? '✓' : '✗'} ${s.stepId}`)</text>
+      <g class="t13" transform="translate(556.4 0)"><rect x="38.9" y="142" width="972" height="22" fill="#1F2937"/></g>
+      <g class="o13"><text x="22.0" y="180" fill="#A3D977">[</text><text x="38.9" y="202" fill="#A3D977">'✓ loginUser',</text><text x="38.9" y="224" fill="#A3D977">'✓ findAvailablePets',</text><text x="38.9" y="246" fill="#A3D977">'✓ placeOrder',</text><text x="38.9" y="268" fill="#A3D977">'✓ retrieveOrderedPetDetails',</text><text x="38.9" y="290" fill="#A3D977">'✓ verifyOrderConfirmation'</text><text x="22.0" y="312" fill="#A3D977">]</text></g>
+    </g>
+  </g>
+  </g>
+</svg>
