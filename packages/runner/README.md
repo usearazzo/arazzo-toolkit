@@ -18,7 +18,11 @@
 
 ## What it does
 
-This package runs an Arazzo workflow. It sends real HTTP requests to the APIs its OpenAPI source descriptions describe, one step at a time, and hands back a trace of every step:
+An Arazzo document describes a multi-step API workflow: which operations to call, in what order, what to pass from one step to the next, and what counts as success. This package runs it.
+
+It loads the workflow and the OpenAPI documents its source descriptions point at. For each step it builds a real HTTP request, sends it to the live API, checks the step's success criteria against the response, and follows the control flow the document declares. When the run ends, you get the workflow's outputs and a trace of every step: whether it passed, which action was picked, how many attempts it took, and how long it ran.
+
+Use it to test an API flow end to end in CI, to drive a workflow from your own service, or to let an agent run a workflow instead of improvising the calls. It handles:
 
 - **Steps.** Parameters and request bodies resolved from runtime expressions, `successCriteria` evaluated (`simple`, `regex`, `jsonpath`, `xpath`), `outputs` resolved from the response.
 - **Control flow.** `goto`, `retry` (with `retryLimit`, `retryAfter`, and references), and `end`, as the specification defines them, with workflow-level default actions and parameters.
