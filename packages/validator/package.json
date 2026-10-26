@@ -62,7 +62,7 @@
     "@usearazzo/parser": "1.0.1-alpha.11",
     "ramda": "^0.32.0",
     "type-fest": "^5.10.0",
-    "vscode-languageserver-textdocument": "^1.0.15",
+    "vscode-languageserver-textdocument": "^1.0.16",
     "vscode-languageserver-types": "=3.18.3"
   },
   "files": [
