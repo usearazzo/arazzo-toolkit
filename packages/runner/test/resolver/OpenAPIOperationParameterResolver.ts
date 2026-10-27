@@ -114,6 +114,57 @@ describe('OpenAPIOperationParameterResolver', function () {
       );
     });
 
+    specify('should throw invalid-location for an in: body parameter', function () {
+      // Arazzo 1.0.1 removed `body` from the Parameter Object's locations; a
+      // payload travels as the step's `requestBody`.
+      try {
+        resolver.resolve(parameters({ name: 'pet', in: 'body', value: { id: 7 } }), resolve, scope);
+        assert.fail('expected resolve to throw');
+      } catch (error) {
+        assert.instanceOf(error, ResolverError);
+        assert.strictEqual((error as ResolverError).reason, 'invalid-location');
+        assert.strictEqual((error as ResolverError).target, 'pet');
+        assert.match((error as Error).message, /Parameter "pet" has location "body"/);
+      }
+    });
+
+    specify('should throw invalid-location for an unknown location', function () {
+      try {
+        resolver.resolve(parameters({ name: 'x', in: 'headers', value: 'v' }), resolve, scope);
+        assert.fail('expected resolve to throw');
+      } catch (error) {
+        assert.instanceOf(error, ResolverError);
+        assert.strictEqual((error as ResolverError).reason, 'invalid-location');
+        assert.strictEqual((error as ResolverError).target, 'x');
+        assert.match(
+          (error as Error).message,
+          /has location "headers", which is not one of path, query, header, cookie, querystring/,
+        );
+      }
+    });
+
+    specify('should not throw invalid-location for any defined location', function () {
+      const result = resolver.resolve(
+        parameters(
+          { name: 'id', in: 'path', value: 1 },
+          { name: 'q', in: 'query', value: 2 },
+          { name: 'h', in: 'header', value: 3 },
+          { name: 'c', in: 'cookie', value: 4 },
+          { name: 'qs', in: 'querystring', value: 5 },
+        ),
+        resolve,
+        scope,
+      );
+
+      assert.deepEqual(result, {
+        'path.id': 1,
+        'query.q': 2,
+        'header.h': 3,
+        'cookie.c': 4,
+        qs: 5,
+      });
+    });
+
     specify('should throw when a querystring parameter shadows a qualified one', function () {
       // the two produce different keys ('token' and 'header.token'), so this
       // is not a key collision — but the client consults the bare name first

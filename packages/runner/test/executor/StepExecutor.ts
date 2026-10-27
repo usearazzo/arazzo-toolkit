@@ -564,6 +564,59 @@ describe('StepExecutor', function () {
     });
   });
 
+  context('parameters in an undefined location', function () {
+    specify(
+      'should reject invalid-location before any request to an OpenAPI 3 operation',
+      async function () {
+        const step = refractStep({
+          stepId: 'findPets',
+          operationId: 'findPetsByStatus',
+          parameters: [
+            { name: 'status', in: 'query', value: 'available' },
+            { name: 'pet', in: 'body', value: { id: 7 } },
+          ],
+        }) as StepElement;
+        const { executor, requests } = makeExecutor();
+
+        const error = await executor.execute(step, state()).catch((thrown: unknown) => thrown);
+
+        assert.instanceOf(error, ResolverError);
+        assert.strictEqual((error as ResolverError).reason, 'invalid-location');
+        assert.strictEqual((error as ResolverError).target, 'pet');
+        assert.strictEqual(requests.length, 0);
+      },
+    );
+
+    specify(
+      'should reject invalid-location before any request to an OpenAPI 2.0 operation',
+      async function () {
+        // `placeOrder` declares an `in: body` parameter named `body`, which the
+        // request builder would fill from a step parameter of that name and
+        // location: the removed construct must not deliver a body here either.
+        const registry2 = new DocumentRegistry();
+        const entry2 = await registry2.acquireEntryDocument(
+          path.join(fixturesPath, 'petstore-order-workflow-2-0.arazzo.yaml'),
+        );
+        const { executor, requests } = makeExecutorFor(entry2, registry2);
+        const step = refractStep({
+          stepId: 'placeOrder',
+          operationId: 'placeOrder',
+          parameters: [{ name: 'body', in: 'body', value: { petId: 7, quantity: 1 } }],
+        }) as StepElement;
+
+        const error = await executor
+          .execute(step, new WorkflowExecutionState({ inputs: {} }))
+          .catch((thrown: unknown) => thrown);
+
+        assert.instanceOf(error, ResolverError);
+        assert.strictEqual((error as ResolverError).reason, 'invalid-location');
+        assert.strictEqual((error as ResolverError).target, 'body');
+        assert.match((error as Error).message, /Parameter "body" has location "body"/);
+        assert.strictEqual(requests.length, 0);
+      },
+    );
+  });
+
   context('given a Swagger 2.0 source description', function () {
     let registry2: DocumentRegistry;
     let entry2: ArazzoDocument;

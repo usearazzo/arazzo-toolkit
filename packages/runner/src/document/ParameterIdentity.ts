@@ -71,6 +71,14 @@ class ParameterIdentity {
     return isStringElement(location) ? (toValue(location) as string) : null;
   }
 
+  /**
+   * The locations the Parameter Object defines: Arazzo 1.0.1's closed set plus
+   * 1.1.0's `querystring`. 1.0.0's field description also listed `body`, which
+   * its own summary of locations did not; 1.0.1 removed it as an erratum, so it
+   * is not a location in any version (a payload is the step's `requestBody`).
+   */
+  static readonly LOCATIONS = ['path', 'query', 'header', 'cookie', 'querystring'] as const;
+
   readonly name: string;
 
   readonly location: string | undefined | null;
@@ -78,6 +86,14 @@ class ParameterIdentity {
   private constructor(name: string, location: string | undefined | null) {
     this.name = name;
     this.location = location;
+  }
+
+  /**
+   * Whether the location is one the Parameter Object defines. An absent or
+   * malformed location is not.
+   */
+  get hasDefinedLocation(): boolean {
+    return (ParameterIdentity.LOCATIONS as readonly unknown[]).includes(this.location);
   }
 
   /**
