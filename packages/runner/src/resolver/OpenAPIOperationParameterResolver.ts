@@ -8,6 +8,10 @@ import StepParameterResolver from './StepParameterResolver.ts';
 import type { RuntimeExpressionResolver } from './ArazzoValueResolver.ts';
 import type { StepScope } from './ResolverScope.ts';
 
+// the Parameter Object's locations: Arazzo 1.0.1's closed set, which dropped
+// `body`, plus 1.1.0's `querystring`
+const LOCATIONS = new Set(['path', 'query', 'header', 'cookie', 'querystring']);
+
 /**
  * Resolves the `parameters` of a step targeting an OpenAPI operation into the
  * map the operation is executed with.
@@ -32,7 +36,11 @@ import type { StepScope } from './ResolverScope.ts';
  * instead would let it capture *every* declared location of that name — see
  * `ParameterDelivery` for the lookup order that makes it so. A
  * non-string location throws for the same reason it deduplicates with nothing
- * in the normalizer: it names no location. And two *different* parameters the
+ * in the normalizer: it names no location. So does a location outside
+ * `path`, `query`, `header`, `cookie` and `querystring`: Arazzo 1.0.1 removed
+ * `in: body`, and forwarding one would let it still deliver a request body
+ * against an OpenAPI 2.0 operation, bypassing the step's `requestBody`, while
+ * an unknown location reaches nothing at all. And two *different* parameters the
  * map reports as colliding cannot both be delivered, so a collision throws
  * rather than silently dropping one — whether they collide on one key (the
  * scheme is not injective: a `querystring` parameter named `header.token` and
@@ -94,6 +102,13 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
           target: name,
           reason: 'malformed-location',
         });
+      }
+      if (!LOCATIONS.has(location)) {
+        throw new ResolverError(
+          `Parameter "${name}" has location "${location}", which is not one of ` +
+            `${[...LOCATIONS].join(', ')}`,
+          { ...scope, target: name, reason: 'invalid-location' },
+        );
       }
 
       const { key, outcome } = delivery.claim(location, name);
