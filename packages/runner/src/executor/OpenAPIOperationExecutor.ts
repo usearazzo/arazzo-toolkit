@@ -461,12 +461,16 @@ class OpenAPIOperationExecutor {
   }
 
   /**
-   * A header or cookie value with no schema to serialize it by: strings as
-   * authored, objects and arrays as JSON, anything else via `String()`.
+   * A header or cookie value with no schema to serialize it by, the way
+   * OpenAPI's default for those locations (`simple` and `form`, not exploded)
+   * serializes a declared one: an array as `a,b`, an object as `k,v,k2,v2`,
+   * anything else via `String()`.
    */
   #stringify(value: unknown): string {
-    if (typeof value === 'string') return value;
-    if (typeof value === 'object' && value !== null) return JSON.stringify(value);
+    if (Array.isArray(value)) return value.map(String).join(',');
+    if (typeof value === 'object' && value !== null) {
+      return Object.entries(value).flat().map(String).join(',');
+    }
     return String(value);
   }
 

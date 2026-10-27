@@ -825,6 +825,28 @@ describe('OpenAPIOperationExecutor', function () {
       },
     );
 
+    specify(
+      'should serialize array and object values the way declared ones are',
+      async function () {
+        // OpenAPI's default for headers and cookies (simple / form, not
+        // exploded): `session` is declared, `theme` is not, same value.
+        const { executor, requests } = makeExecutor();
+
+        await executor.execute(locatorFor('listPets'), {
+          parameters: {
+            'header.X-Tags': ['a', 'b'],
+            'header.X-Filter': { k: 1, j: 2 },
+            'cookie.session': ['a', 'b'],
+            'cookie.theme': ['a', 'b'],
+          },
+        });
+
+        assert.strictEqual(requests[0].headers['X-Tags'], 'a,b');
+        assert.strictEqual(requests[0].headers['X-Filter'], 'k,1,j,2');
+        assert.strictEqual(requests[0].headers.Cookie, 'session=a%2Cb; theme=a%2Cb');
+      },
+    );
+
     specify('should treat a path-level declaration as declared', async function () {
       const { executor, requests } = makeExecutor();
 
