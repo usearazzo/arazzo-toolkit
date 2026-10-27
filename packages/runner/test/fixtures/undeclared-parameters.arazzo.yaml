@@ -9,6 +9,10 @@ sourceDescriptions:
     type: openapi
 workflows:
   - workflowId: tokenThenCall
+    parameters:
+      - name: X-Client
+        in: header
+        value: arazzo-runner
     steps:
       - stepId: login
         operationId: listPets

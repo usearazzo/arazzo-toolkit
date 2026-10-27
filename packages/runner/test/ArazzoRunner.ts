@@ -211,6 +211,8 @@ describe('ArazzoRunner', function () {
       assert.strictEqual(calls[1].url, 'https://petstore3.swagger.io/api/v3/pet/7');
       assert.strictEqual(calls[1].headers.Authorization, 'Rex');
       assert.strictEqual(calls[1].headers.Cookie, 'tracking=a%20b%3Bc');
+      // a workflow-level parameter reaches every step, declared there or not
+      assert.isTrue(calls.every((request) => request.headers['X-Client'] === 'arazzo-runner'));
     });
   });
 
