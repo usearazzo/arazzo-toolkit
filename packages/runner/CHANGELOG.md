@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.13](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.12...v1.0.1-alpha.13) (2026-10-27)
+
+### Bug Fixes
+
+- **runner:** send step parameters the operation does not declare ([#279](https://github.com/usearazzo/arazzo-toolkit/issues/279)) ([5bcb78f](https://github.com/usearazzo/arazzo-toolkit/commit/5bcb78f594bc0a53f8f3288d9b9c0ff0001219f7)), closes [#273](https://github.com/usearazzo/arazzo-toolkit/issues/273)
+
 ## [1.0.1-alpha.12](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.11...v1.0.1-alpha.12) (2026-10-27)
 
 ### Bug Fixes
