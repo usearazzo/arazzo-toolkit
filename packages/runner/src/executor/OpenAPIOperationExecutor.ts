@@ -282,11 +282,7 @@ class OpenAPIOperationExecutor {
       locator.jsonPointer,
     );
 
-    const undeclared = this.#undeclaredParameters(
-      buildOptions.parameters,
-      normalizedOperation,
-      locator.document,
-    );
+    const undeclared = this.#undeclaredParameters(buildOptions.parameters, normalizedOperation);
     const spec = assembled.toJSON() as AssembledSpec;
     this.#declareQueryAndPathParameters(
       spec,
@@ -349,18 +345,17 @@ class OpenAPIOperationExecutor {
    * declare. `buildRequest` delivers only what the operation declares, yet a
    * step's parameters are what its author asked to send — an `Authorization`
    * header carrying a token from an earlier step most of all, which OpenAPI 3
-   * cannot even declare. A declared OpenAPI 3 `Accept`, `Authorization` or
+   * cannot even declare. A declared `Accept`, `Authorization` or
    * `Content-Type` header parameter counts as undeclared too: `buildRequest`
-   * drops it, as that specification requires. Bare keys are left to
+   * drops it for OpenAPI 3, as that specification requires, and for 2.0
+   * delivering it here sends the same value. Bare keys are left to
    * `buildRequest`: they name no location to deliver to.
    */
   #undeclaredParameters(
     parameters: unknown,
     operation: OpenAPIOperationElement,
-    document: OpenAPIDocument,
   ): UndeclaredParameter[] {
     if (!isPlainObject(parameters)) return [];
-    const isSwagger = isSwaggerElement(document.parseResult.api);
     const declared = new Set(
       (isArrayElement(operation.parameters) ? [...operation.parameters] : [])
         .filter(isObjectElement)
@@ -381,8 +376,7 @@ class OpenAPIOperationExecutor {
       ) {
         return [];
       }
-      const ignored =
-        !isSwagger && location === 'header' && IGNORED_HEADERS.has(name.toLowerCase());
+      const ignored = location === 'header' && IGNORED_HEADERS.has(name.toLowerCase());
       return declared.has(key) && !ignored
         ? []
         : [{ location, name, value } as UndeclaredParameter];
