@@ -578,7 +578,11 @@ describe('StepExecutor', function () {
         }) as StepElement;
         const { executor, requests } = makeExecutor();
 
-        await rejects(executor.execute(step, state()), ResolverError, /has location "body"/);
+        const error = await executor.execute(step, state()).catch((thrown: unknown) => thrown);
+
+        assert.instanceOf(error, ResolverError);
+        assert.strictEqual((error as ResolverError).reason, 'invalid-location');
+        assert.strictEqual((error as ResolverError).target, 'pet');
         assert.strictEqual(requests.length, 0);
       },
     );
@@ -600,11 +604,14 @@ describe('StepExecutor', function () {
           parameters: [{ name: 'body', in: 'body', value: { petId: 7, quantity: 1 } }],
         }) as StepElement;
 
-        await rejects(
-          executor.execute(step, new WorkflowExecutionState({ inputs: {} })),
-          ResolverError,
-          /Parameter "body" has location "body"/,
-        );
+        const error = await executor
+          .execute(step, new WorkflowExecutionState({ inputs: {} }))
+          .catch((thrown: unknown) => thrown);
+
+        assert.instanceOf(error, ResolverError);
+        assert.strictEqual((error as ResolverError).reason, 'invalid-location');
+        assert.strictEqual((error as ResolverError).target, 'body');
+        assert.match((error as Error).message, /Parameter "body" has location "body"/);
         assert.strictEqual(requests.length, 0);
       },
     );

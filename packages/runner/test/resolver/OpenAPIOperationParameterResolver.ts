@@ -129,12 +129,18 @@ describe('OpenAPIOperationParameterResolver', function () {
     });
 
     specify('should throw invalid-location for an unknown location', function () {
-      assert.throws(
-        () =>
-          resolver.resolve(parameters({ name: 'x', in: 'headers', value: 'v' }), resolve, scope),
-        ResolverError,
-        /has location "headers", which is not one of path, query, header, cookie, querystring/,
-      );
+      try {
+        resolver.resolve(parameters({ name: 'x', in: 'headers', value: 'v' }), resolve, scope);
+        assert.fail('expected resolve to throw');
+      } catch (error) {
+        assert.instanceOf(error, ResolverError);
+        assert.strictEqual((error as ResolverError).reason, 'invalid-location');
+        assert.strictEqual((error as ResolverError).target, 'x');
+        assert.match(
+          (error as Error).message,
+          /has location "headers", which is not one of path, query, header, cookie, querystring/,
+        );
+      }
     });
 
     specify('should not throw invalid-location for any defined location', function () {
