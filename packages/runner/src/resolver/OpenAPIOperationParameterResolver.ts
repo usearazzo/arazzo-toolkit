@@ -8,10 +8,6 @@ import StepParameterResolver from './StepParameterResolver.ts';
 import type { RuntimeExpressionResolver } from './ArazzoValueResolver.ts';
 import type { StepScope } from './ResolverScope.ts';
 
-// the Parameter Object's locations: Arazzo 1.0.1's closed set, which dropped
-// `body`, plus 1.1.0's `querystring`
-const LOCATIONS = new Set(['path', 'query', 'header', 'cookie', 'querystring']);
-
 /**
  * Resolves the `parameters` of a step targeting an OpenAPI operation into the
  * map the operation is executed with.
@@ -103,10 +99,10 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
           reason: 'malformed-location',
         });
       }
-      if (!LOCATIONS.has(location)) {
+      if (!identity.hasDefinedLocation) {
         throw new ResolverError(
           `Parameter "${name}" has location "${location}", which is not one of ` +
-            `${[...LOCATIONS].join(', ')}`,
+            `${ParameterIdentity.LOCATIONS.join(', ')}`,
           { ...scope, target: name, reason: 'invalid-location' },
         );
       }
