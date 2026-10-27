@@ -564,6 +564,80 @@ describe('StepExecutor', function () {
     });
   });
 
+  context('malformed successCriteria', function () {
+    const captureResolverError = async (promise: Promise<unknown>): Promise<ResolverError> => {
+      const error = await promise.catch((thrown: unknown) => thrown);
+      assert.instanceOf(error, ResolverError);
+      return error as ResolverError;
+    };
+
+    specify(
+      'should reject an entry that is not a Criterion Object before the request',
+      async function () {
+        const step = refractStep({
+          stepId: 'findPets',
+          operationId: 'findPetsByStatus',
+          parameters: [{ name: 'status', in: 'query', value: 'available' }],
+          successCriteria: [42],
+        }) as StepElement;
+        const { executor, requests } = makeExecutor();
+
+        const error = await captureResolverError(executor.execute(step, state()));
+
+        assert.strictEqual(error.reason, 'malformed-criterion');
+        assert.strictEqual(error.stepId, 'findPets');
+        assert.strictEqual(error.target, 'successCriteria');
+        assert.strictEqual(requests.length, 0);
+      },
+    );
+
+    specify('should reject a readable entry next to an unreadable one', async function () {
+      // evaluating only the readable half would assert less than the author wrote
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        successCriteria: [{ condition: '$statusCode == 200' }, 'not a criterion'],
+      }) as StepElement;
+      const { executor, requests } = makeExecutor();
+
+      const error = await captureResolverError(executor.execute(step, state()));
+
+      assert.strictEqual(error.reason, 'malformed-criterion');
+      assert.strictEqual(requests.length, 0);
+    });
+
+    specify('should reject a successCriteria that is not a list', async function () {
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        successCriteria: { condition: '$statusCode == 200' },
+      }) as StepElement;
+      const { executor, requests } = makeExecutor();
+
+      const error = await captureResolverError(executor.execute(step, state()));
+
+      assert.strictEqual(error.reason, 'malformed-criteria');
+      assert.strictEqual(error.target, 'successCriteria');
+      assert.strictEqual(requests.length, 0);
+    });
+
+    specify('should succeed without a successCriteria on any received response', async function () {
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+      }) as StepElement;
+      const { executor } = makeExecutor(notFoundResponse);
+
+      const result = await executor.execute(step, state());
+
+      assert.isTrue(result.successful);
+      assert.strictEqual(result.response.status, 404);
+    });
+  });
+
   context('parameters in an undefined location', function () {
     specify(
       'should reject invalid-location before any request to an OpenAPI 3 operation',

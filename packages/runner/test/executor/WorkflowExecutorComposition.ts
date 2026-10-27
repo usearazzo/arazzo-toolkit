@@ -799,6 +799,19 @@ describe('WorkflowExecutor composition', function () {
       },
     );
 
+    specify('should reject a malformed successCriteria before any step runs', async function () {
+      // the unreadable entry sits on the second step, which calls a workflow;
+      // the first step would make a live request, and neither must fire.
+      const { executor, calls } = makeExecutor();
+
+      const error = await captureResolverError(executor.execute('malformedCriteriaOnCallingStep'));
+
+      assert.strictEqual(error.reason, 'malformed-criterion');
+      assert.strictEqual(error.stepId, 'child');
+      assert.strictEqual(error.target, 'successCriteria');
+      assert.strictEqual(calls.length, 0);
+    });
+
     specify('should throw for a present but non-list "dependsOn"', async function () {
       const { executor } = makeExecutor();
 
