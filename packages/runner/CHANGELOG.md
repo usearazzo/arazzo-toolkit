@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.14](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.13...v1.0.1-alpha.14) (2026-10-27)
+
+### Bug Fixes
+
+- **runner:** reject a parameter location outside the defined set ([#283](https://github.com/usearazzo/arazzo-toolkit/issues/283)) ([250f6bf](https://github.com/usearazzo/arazzo-toolkit/commit/250f6bf6a23bbb8b2f305480dc3d728d419e3017)), closes [#126](https://github.com/usearazzo/arazzo-toolkit/issues/126)
+
 ## [1.0.1-alpha.13](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.12...v1.0.1-alpha.13) (2026-10-27)
 
 ### Bug Fixes
