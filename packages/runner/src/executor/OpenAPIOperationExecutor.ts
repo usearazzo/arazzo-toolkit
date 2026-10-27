@@ -6,6 +6,11 @@ import {
   isParameterElement,
   type ParameterElement as ParameterElement2,
 } from '@speclynx/apidom-ns-openapi-2';
+import {
+  serializeCookie,
+  cookieNameLenientValidator,
+  cookieValueStrictPercentEncoder,
+} from '@swaggerexpert/cookie';
 import { identify, matches, selectBestMatch } from '@swaggerexpert/media-types';
 import { isPlainObject } from 'ramda-adjunct';
 
@@ -37,6 +42,29 @@ import type { OpenAPIOperationLocator } from './OpenAPIOperationLocatorNormalize
 export type RequestInterceptor = (
   request: OpenAPIOperationRequest,
 ) => OpenAPIOperationRequest | void | Promise<OpenAPIOperationRequest | void>;
+
+/**
+ * The plain-JSON shape of the assembled document, as far as declaring a
+ * parameter on its one operation needs it.
+ */
+interface AssembledSpec {
+  paths: Record<string, Record<string, { parameters?: unknown[] }>>;
+}
+
+/**
+ * A caller-supplied parameter the operation does not declare, in a location
+ * it can still be delivered to.
+ */
+interface UndeclaredParameter {
+  readonly location: 'header' | 'query' | 'cookie' | 'path';
+  readonly name: string;
+  readonly value: unknown;
+}
+
+const UNDECLARED_LOCATIONS = new Set(['header', 'query', 'cookie', 'path']);
+
+// the header parameters OpenAPI 3 says SHALL be ignored, which buildRequest drops
+const IGNORED_HEADERS = new Set(['accept', 'authorization', 'content-type']);
 
 /**
  * Options for executing an OpenAPI operation.
@@ -254,9 +282,18 @@ class OpenAPIOperationExecutor {
       locator.jsonPointer,
     );
 
+    const undeclared = this.#undeclaredParameters(buildOptions.parameters, normalizedOperation);
+    const spec = assembled.toJSON() as AssembledSpec;
+    this.#declareQueryAndPathParameters(
+      spec,
+      undeclared,
+      toValue(operation.meta.get('path')) as string,
+      toValue(operation.meta.get('http-method')) as string,
+      locator,
+    );
+
     let request: OpenAPIOperationRequest;
     try {
-      const spec = assembled.toJSON();
       request = buildRequest({ ...buildOptions, spec, operationId }) as OpenAPIOperationRequest;
     } catch (error: unknown) {
       throw new ClientError('Failed to build request for OpenAPI operation', {
@@ -276,6 +313,7 @@ class OpenAPIOperationExecutor {
       request.headers['Content-Type'] = authoredContentType;
     }
 
+    this.#deliverHeadersAndCookies(request, undeclared);
     request = await this.#finalizeRequest(request, requestInterceptor);
 
     // capture the request as sent, so `$url` / `$method` / `$request.*` can be
@@ -299,6 +337,135 @@ class OpenAPIOperationExecutor {
     }
 
     return this.#responseNormalizer.normalize(rawResponse, requestInfo);
+  }
+
+  /**
+   * The `{in}.{name}`-keyed parameters (see {@link ParameterDelivery}) in a
+   * header, query, cookie or path location that the operation does not
+   * declare. `buildRequest` delivers only what the operation declares, yet a
+   * step's parameters are what its author asked to send — an `Authorization`
+   * header carrying a token from an earlier step most of all, which OpenAPI 3
+   * cannot even declare. A declared `Accept`, `Authorization` or
+   * `Content-Type` header parameter counts as undeclared too: `buildRequest`
+   * drops it for OpenAPI 3, as that specification requires, and for 2.0
+   * delivering it here sends the same value. Bare keys are left to
+   * `buildRequest`: they name no location to deliver to.
+   */
+  #undeclaredParameters(
+    parameters: unknown,
+    operation: OpenAPIOperationElement,
+  ): UndeclaredParameter[] {
+    if (!isPlainObject(parameters)) return [];
+    const declared = new Set(
+      (isArrayElement(operation.parameters) ? [...operation.parameters] : [])
+        .filter(isObjectElement)
+        .map((parameter) => `${toValue(parameter.get('in'))}.${toValue(parameter.get('name'))}`),
+    );
+
+    return Object.entries(parameters as Record<string, unknown>).flatMap(([key, value]) => {
+      const separator = key.indexOf('.');
+      const location = key.slice(0, separator);
+      const name = key.slice(separator + 1);
+      // an unresolved expression or a null delivers nothing, as buildRequest
+      // does for a declared parameter
+      if (
+        separator === -1 ||
+        !UNDECLARED_LOCATIONS.has(location) ||
+        value === undefined ||
+        value === null
+      ) {
+        return [];
+      }
+      const ignored = location === 'header' && IGNORED_HEADERS.has(name.toLowerCase());
+      return declared.has(key) && !ignored
+        ? []
+        : [{ location, name, value } as UndeclaredParameter];
+    });
+  }
+
+  /**
+   * Declares the undeclared query and path parameters on the assembled
+   * operation, so `buildRequest` serializes and encodes them as it does
+   * declared ones. A path parameter is declared only when the path has its
+   * `{name}` template expression; otherwise there is nowhere to put it, and
+   * that authoring error throws {@link ClientError} rather than sending a
+   * request without it.
+   */
+  #declareQueryAndPathParameters(
+    spec: AssembledSpec,
+    undeclared: readonly UndeclaredParameter[],
+    path: string,
+    method: string,
+    locator: OpenAPIOperationLocator,
+  ): void {
+    const operation = spec.paths[path]![method]!;
+    const isSwagger = isSwaggerElement(locator.document.parseResult.api);
+    for (const { location, name } of undeclared) {
+      if (location !== 'query' && location !== 'path') continue;
+      if (location === 'path' && !path.includes(`{${name}}`)) {
+        throw new ClientError(
+          `Path parameter "${name}" is not declared by the operation and its path "${path}" ` +
+            `has no "{${name}}" to substitute it into`,
+          { operationPath: locator.jsonPointer },
+        );
+      }
+      const required = location === 'path';
+      (operation.parameters ??= []).push(
+        isSwagger
+          ? { name, in: location, required, type: 'string' }
+          : { name, in: location, required, schema: {} },
+      );
+    }
+  }
+
+  /**
+   * Sets the undeclared header parameters on the built request and appends the
+   * undeclared cookie parameters to its `Cookie` header. A header replaces any
+   * value the build gave it under any spelling — the default `Accept`, say —
+   * since the step naming it is the more specific intent. OpenAPI 2.0 has no
+   * cookie location, so its cookies always go this way.
+   */
+  #deliverHeadersAndCookies(
+    request: OpenAPIOperationRequest,
+    undeclared: readonly UndeclaredParameter[],
+  ): void {
+    const present = (name: string): string | undefined =>
+      Object.keys(request.headers).find((header) => header.toLowerCase() === name.toLowerCase());
+
+    for (const { location, name, value } of undeclared) {
+      if (location !== 'header') continue;
+      const built = present(name);
+      if (built !== undefined) delete request.headers[built];
+      request.headers[name] = this.#stringify(value);
+    }
+
+    const cookies = undeclared
+      .filter(({ location }) => location === 'cookie')
+      .map(({ name, value }): [string, string] => [name, this.#stringify(value)]);
+    if (cookies.length === 0) return;
+    // serialized as buildRequest serializes a declared cookie, so a `;` in the
+    // value is percent-encoded rather than splitting it into further cookies
+    const serialized = serializeCookie(cookies, {
+      encoders: { value: cookieValueStrictPercentEncoder },
+      validators: { name: cookieNameLenientValidator },
+    });
+    const cookieHeader = present('Cookie') ?? 'Cookie';
+    const existing = request.headers[cookieHeader];
+    request.headers[cookieHeader] = existing ? `${existing}; ${serialized}` : serialized;
+  }
+
+  /**
+   * A header or cookie value with no schema to serialize it by, the way
+   * OpenAPI's default for those locations (`simple` and `form`, not exploded)
+   * serializes a declared one: an array as `a,b`, an object as `k,v,k2,v2`,
+   * anything else via `String()`.
+   */
+  #stringify(value: unknown): string {
+    if (Array.isArray(value)) return value.map(String).join(',');
+    if (typeof value === 'object' && value !== null) {
+      return Object.entries(value).flat().map(String).join(',');
+    }
+    return String(value);
   }
 
   /**
