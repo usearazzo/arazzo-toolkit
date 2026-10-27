@@ -2,23 +2,61 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Petstore (undeclared parameters)",
-    "description": "Declares an Authorization header parameter, which OpenAPI 3 says to ignore, and templates a path parameter it never declares.",
+    "description": "Declares an Authorization header parameter, which OpenAPI 3 says to ignore, a cookie parameter and a path-level query parameter, and templates a path parameter it never declares.",
     "version": "1.0.0"
   },
-  "servers": [{ "url": "https://petstore3.swagger.io/api/v3" }],
+  "servers": [
+    {
+      "url": "https://petstore3.swagger.io/api/v3"
+    }
+  ],
   "paths": {
     "/pet": {
+      "parameters": [
+        {
+          "name": "limit",
+          "in": "query",
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
       "get": {
         "summary": "List pets",
         "operationId": "listPets",
         "parameters": [
-          { "name": "Authorization", "in": "header", "schema": { "type": "string" } },
-          { "name": "status", "in": "query", "schema": { "type": "string" } }
+          {
+            "name": "Authorization",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
             "description": "successful operation",
-            "content": { "application/json": { "schema": { "type": "array" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array"
+                }
+              }
+            }
           }
         }
       }
@@ -30,7 +68,13 @@
         "responses": {
           "200": {
             "description": "successful operation",
-            "content": { "application/json": { "schema": { "type": "object" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         }
       }

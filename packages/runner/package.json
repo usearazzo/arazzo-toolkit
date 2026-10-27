@@ -69,6 +69,7 @@
     "@speclynx/apidom-traverse": "^6.1.0",
     "@swaggerexpert/arazzo-criterion": "^1.0.1",
     "@swaggerexpert/arazzo-runtime-expression": "^3.3.0",
+    "@swaggerexpert/cookie": "^2.0.2",
     "@swaggerexpert/json-pointer": "^3.0.2",
     "@swaggerexpert/jsonpath": "^4.0.5",
     "@swaggerexpert/media-types": "^1.0.1",

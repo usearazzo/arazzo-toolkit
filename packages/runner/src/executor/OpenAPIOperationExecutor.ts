@@ -6,6 +6,11 @@ import {
   isParameterElement,
   type ParameterElement as ParameterElement2,
 } from '@speclynx/apidom-ns-openapi-2';
+import {
+  serializeCookie,
+  cookieNameLenientValidator,
+  cookieValueStrictPercentEncoder,
+} from '@swaggerexpert/cookie';
 import { identify, matches, selectBestMatch } from '@swaggerexpert/media-types';
 import { isPlainObject } from 'ramda-adjunct';
 
@@ -366,8 +371,14 @@ class OpenAPIOperationExecutor {
       const separator = key.indexOf('.');
       const location = key.slice(0, separator);
       const name = key.slice(separator + 1);
-      // an unresolved expression delivers nothing, as for a declared parameter
-      if (separator === -1 || !UNDECLARED_LOCATIONS.has(location) || value === undefined) {
+      // an unresolved expression or a null delivers nothing, as buildRequest
+      // does for a declared parameter
+      if (
+        separator === -1 ||
+        !UNDECLARED_LOCATIONS.has(location) ||
+        value === undefined ||
+        value === null
+      ) {
         return [];
       }
       const ignored =
@@ -436,11 +447,17 @@ class OpenAPIOperationExecutor {
 
     const cookies = undeclared
       .filter(({ location }) => location === 'cookie')
-      .map(({ name, value }) => `${name}=${this.#stringify(value)}`);
+      .map(({ name, value }): [string, string] => [name, this.#stringify(value)]);
     if (cookies.length === 0) return;
+    // serialized as buildRequest serializes a declared cookie, so a `;` in the
+    // value is percent-encoded rather than splitting it into further cookies
+    const serialized = serializeCookie(cookies, {
+      encoders: { value: cookieValueStrictPercentEncoder },
+      validators: { name: cookieNameLenientValidator },
+    });
     const cookieHeader = present('Cookie') ?? 'Cookie';
     const existing = request.headers[cookieHeader];
-    request.headers[cookieHeader] = [existing, ...cookies].filter(Boolean).join('; ');
+    request.headers[cookieHeader] = existing ? `${existing}; ${serialized}` : serialized;
   }
 
   /**

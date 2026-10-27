@@ -792,14 +792,46 @@ describe('OpenAPIOperationExecutor', function () {
       assert.strictEqual(requests.length, 0);
     });
 
-    specify('should deliver nothing for an unresolved undeclared parameter', async function () {
+    specify(
+      'should deliver nothing for an unresolved or null undeclared parameter',
+      async function () {
+        const { executor, requests } = makeExecutor();
+
+        await executor.execute(locator, {
+          parameters: {
+            'query.status': 'available',
+            'header.X-Trace': undefined,
+            'header.X-Null': null,
+            'cookie.session': null,
+          },
+        });
+
+        assert.notProperty(requests[0].headers, 'X-Trace');
+        assert.notProperty(requests[0].headers, 'X-Null');
+        assert.notProperty(requests[0].headers, 'Cookie');
+      },
+    );
+
+    specify(
+      'should add undeclared cookies to the declared ones, percent-encoded',
+      async function () {
+        const { executor, requests } = makeExecutor();
+
+        await executor.execute(locatorFor('listPets'), {
+          parameters: { 'cookie.session': 'abc', 'cookie.theme': 'x; admin=1' },
+        });
+
+        assert.strictEqual(requests[0].headers.Cookie, 'session=abc; theme=x%3B%20admin=1');
+      },
+    );
+
+    specify('should treat a path-level declaration as declared', async function () {
       const { executor, requests } = makeExecutor();
 
-      await executor.execute(locator, {
-        parameters: { 'query.status': 'available', 'header.X-Trace': undefined },
-      });
+      await executor.execute(locatorFor('listPets'), { parameters: { 'query.limit': 5 } });
 
-      assert.notProperty(requests[0].headers, 'X-Trace');
+      assert.strictEqual(requests[0].url.match(/limit=/g)?.length, 1);
+      assert.include(requests[0].url, 'limit=5');
     });
 
     specify(
