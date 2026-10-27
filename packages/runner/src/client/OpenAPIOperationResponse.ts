@@ -17,6 +17,14 @@ export interface OpenAPIOperationRequestInfo {
 
 /**
  * Response from an OpenAPI operation execution.
+ *
+ * `body` is the payload parsed by its content type, what `$response.body`
+ * reads. The body as received is read through `text()`, `blob()` and
+ * `bytes()`, named after the WHATWG `Response` methods but synchronous, and
+ * empty when the response carried no body (e.g. `204`, `304`). `bytes()` and
+ * `blob()` always return the bytes received. A body that is valid UTF-8 is held
+ * as its decoded string, which a plain-text or XML `body` shares rather than
+ * duplicates, and is encoded back on read; any other body is held as bytes.
  * @public
  */
 class OpenAPIOperationResponse {
@@ -25,9 +33,9 @@ class OpenAPIOperationResponse {
   readonly status: number;
   readonly statusText: string;
   readonly headers: Record<string, string>;
-  readonly text: string;
   readonly body: unknown;
   readonly request: OpenAPIOperationRequestInfo | undefined;
+  readonly #content: string | Uint8Array;
 
   constructor(raw: {
     ok: boolean;
@@ -35,8 +43,8 @@ class OpenAPIOperationResponse {
     status: number;
     statusText: string;
     headers: Record<string, string>;
-    text: string;
     body: unknown;
+    content: string | Uint8Array;
     request?: OpenAPIOperationRequestInfo;
   }) {
     this.ok = raw.ok;
@@ -44,9 +52,40 @@ class OpenAPIOperationResponse {
     this.status = raw.status;
     this.statusText = raw.statusText;
     this.headers = raw.headers;
-    this.text = raw.text;
     this.body = raw.body;
+    this.#content = raw.content;
     this.request = raw.request;
+  }
+
+  /**
+   * The body as text, like `Response.text()`; `''` when there is none.
+   */
+  text(): string {
+    return typeof this.#content === 'string'
+      ? this.#content
+      : new TextDecoder().decode(this.#content);
+  }
+
+  /**
+   * The body as a `Blob` typed by the response's `Content-Type`, like
+   * `Response.blob()`.
+   */
+  blob(): Blob {
+    // the lib types only take ArrayBuffer-backed views; the normalizer never
+    // produces a shared one.
+    return new Blob([this.#content as string | Uint8Array<ArrayBuffer>], {
+      type: this.headers['content-type'] ?? '',
+    });
+  }
+
+  /**
+   * The body as bytes, like `Response.bytes()`; a fresh copy on every call, so
+   * the response stays immutable.
+   */
+  bytes(): Uint8Array {
+    return typeof this.#content === 'string'
+      ? new TextEncoder().encode(this.#content)
+      : this.#content.slice();
   }
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@usearazzo/runner",
-  "version": "1.0.1-alpha.11",
+  "version": "1.0.1-alpha.12",
   "description": "Runner for Arazzo Workflows.",
   "keywords": [
     "arazzo",
@@ -69,11 +69,12 @@
     "@speclynx/apidom-traverse": "^6.1.0",
     "@swaggerexpert/arazzo-criterion": "^1.0.1",
     "@swaggerexpert/arazzo-runtime-expression": "^3.3.0",
+    "@swaggerexpert/cookie": "^2.0.2",
     "@swaggerexpert/json-pointer": "^3.0.2",
     "@swaggerexpert/jsonpath": "^4.0.5",
     "@swaggerexpert/media-types": "^1.0.1",
-    "@usearazzo/parser": "1.0.1-alpha.11",
-    "@usearazzo/resolver": "1.0.1-alpha.11",
+    "@usearazzo/parser": "1.0.1-alpha.12",
+    "@usearazzo/resolver": "1.0.1-alpha.12",
     "@xmldom/xmldom": "^0.9.12",
     "fontoxpath": "^3.34.0",
     "ramda": "^0.32.0",

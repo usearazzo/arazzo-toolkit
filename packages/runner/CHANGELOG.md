@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.12](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.11...v1.0.1-alpha.12) (2026-10-27)
+
+### Bug Fixes
+
+- **runner:** read the response body via text(), blob() and bytes() ([#278](https://github.com/usearazzo/arazzo-toolkit/issues/278)) ([c6f0250](https://github.com/usearazzo/arazzo-toolkit/commit/c6f0250ba89a44c44202b16849ccad820d0da482)), closes [#264](https://github.com/usearazzo/arazzo-toolkit/issues/264)
+
+### BREAKING CHANGES
+
+- **runner:** the OpenAPIOperationResponse.text field is replaced by
+  the text(), blob() and bytes() methods, and the constructor takes the
+  body as content instead of text.
+
 ## [1.0.1-alpha.11](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.10...v1.0.1-alpha.11) (2026-10-25)
 
 ### Features
