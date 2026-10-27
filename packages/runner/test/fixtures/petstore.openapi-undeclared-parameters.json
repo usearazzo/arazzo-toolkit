@@ -1,0 +1,39 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Petstore (undeclared parameters)",
+    "description": "Declares an Authorization header parameter, which OpenAPI 3 says to ignore, and templates a path parameter it never declares.",
+    "version": "1.0.0"
+  },
+  "servers": [{ "url": "https://petstore3.swagger.io/api/v3" }],
+  "paths": {
+    "/pet": {
+      "get": {
+        "summary": "List pets",
+        "operationId": "listPets",
+        "parameters": [
+          { "name": "Authorization", "in": "header", "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": { "application/json": { "schema": { "type": "array" } } }
+          }
+        }
+      }
+    },
+    "/pet/{petId}": {
+      "get": {
+        "summary": "Find a pet by ID, its path parameter undeclared",
+        "operationId": "getPet",
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        }
+      }
+    }
+  }
+}

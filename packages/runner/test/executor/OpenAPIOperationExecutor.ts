@@ -687,6 +687,150 @@ describe('OpenAPIOperationExecutor', function () {
     });
   });
 
+  context('given parameters the operation does not declare', function () {
+    let undeclaredDoc: OpenAPIDocument;
+    const locatorFor = (operationId: string): OpenAPIOperationLocator =>
+      ({
+        document: undeclaredDoc,
+        jsonPointer: undeclaredDoc.operationIndex.get(operationId),
+      }) as OpenAPIOperationLocator;
+
+    before(async function () {
+      undeclaredDoc = (await new DocumentRegistry().acquire(
+        path.join(fixturesPath, 'petstore.openapi-undeclared-parameters.json'),
+      )) as OpenAPIDocument;
+    });
+
+    specify('should send undeclared header parameters as authored', async function () {
+      // the spec's own login-then-call example: a token from an earlier step
+      // travels in an Authorization header the operation does not declare.
+      const { executor, requests } = makeExecutor();
+
+      await executor.execute(locator, {
+        parameters: {
+          'query.status': 'available',
+          'header.Authorization': 'Bearer s3cr3t',
+          'header.X-Request-Id': 'abc-123',
+        },
+      });
+
+      assert.strictEqual(requests[0].headers.Authorization, 'Bearer s3cr3t');
+      assert.strictEqual(requests[0].headers['X-Request-Id'], 'abc-123');
+    });
+
+    specify(
+      'should send a declared Authorization header that OpenAPI 3 ignores',
+      async function () {
+        const { executor, requests } = makeExecutor();
+
+        await executor.execute(locatorFor('listPets'), {
+          parameters: { 'header.Authorization': 'Bearer s3cr3t', 'query.status': 'sold' },
+        });
+
+        assert.strictEqual(requests[0].headers.Authorization, 'Bearer s3cr3t');
+        assert.include(requests[0].url, 'status=sold');
+      },
+    );
+
+    specify('should let a header parameter replace the default Accept', async function () {
+      const { executor, requests } = makeExecutor();
+
+      await executor.execute(locator, {
+        parameters: { 'query.status': 'available', 'header.accept': 'application/xml' },
+      });
+
+      const accept = Object.entries(requests[0].headers).filter(
+        ([name]) => name.toLowerCase() === 'accept',
+      );
+      assert.deepEqual(accept, [['accept', 'application/xml']]);
+    });
+
+    specify('should serialize undeclared query parameters into the URL', async function () {
+      const { executor, requests } = makeExecutor();
+
+      await executor.execute(locator, {
+        parameters: { 'query.status': 'available', 'query.tag name': 'a&b c' },
+      });
+
+      // the fixture's server is relative, so the built URL is too
+      const url = new URL(requests[0].url, 'https://petstore3.swagger.io');
+      assert.strictEqual(url.searchParams.get('status'), 'available');
+      assert.strictEqual(url.searchParams.get('tag name'), 'a&b c');
+    });
+
+    specify('should send undeclared cookie parameters in the Cookie header', async function () {
+      const { executor, requests } = makeExecutor();
+
+      await executor.execute(locator, {
+        parameters: {
+          'query.status': 'available',
+          'cookie.session': 'xyz',
+          'cookie.theme': 'dark',
+        },
+      });
+
+      assert.strictEqual(requests[0].headers.Cookie, 'session=xyz; theme=dark');
+    });
+
+    specify('should substitute an undeclared path parameter the path templates', async function () {
+      const { executor, requests } = makeExecutor({ respond: () => jsonResponse({ id: 42 }) });
+
+      await executor.execute(locatorFor('getPet'), { parameters: { 'path.petId': 'a/b' } });
+
+      assert.strictEqual(requests[0].url, 'https://petstore3.swagger.io/api/v3/pet/a%2Fb');
+    });
+
+    specify('should throw for an undeclared path parameter the path lacks', async function () {
+      const { executor, requests } = makeExecutor();
+
+      const thrown = await rejects(
+        executor.execute(locator, { parameters: { 'query.status': 'sold', 'path.petId': 42 } }),
+        ClientError,
+      );
+
+      assert.match((thrown as ClientError).message, /Path parameter "petId" is not declared/);
+      assert.strictEqual(requests.length, 0);
+    });
+
+    specify('should deliver nothing for an unresolved undeclared parameter', async function () {
+      const { executor, requests } = makeExecutor();
+
+      await executor.execute(locator, {
+        parameters: { 'query.status': 'available', 'header.X-Trace': undefined },
+      });
+
+      assert.notProperty(requests[0].headers, 'X-Trace');
+    });
+
+    specify(
+      'should send undeclared headers and cookies to an OpenAPI 2.0 operation',
+      async function () {
+        const registry2 = new DocumentRegistry();
+        const entry2 = await registry2.acquireEntryDocument(
+          path.join(fixturesPath, 'petstore-order-workflow-2-0.arazzo.yaml'),
+        );
+        const petLocator = await new OpenAPIOperationLocatorNormalizer(
+          registry2,
+        ).normalizeOperationId('getPetById', entry2);
+        const { executor, requests } = makeExecutor({ respond: () => jsonResponse({ id: 42 }) });
+
+        await executor.execute(petLocator, {
+          parameters: {
+            'path.petId': 42,
+            'header.Authorization': 'Bearer s3cr3t',
+            'cookie.session': 'xyz',
+            'query.verbose': true,
+          },
+        });
+
+        assert.include(requests[0].url, '/pet/42');
+        assert.include(requests[0].url, 'verbose=true');
+        assert.strictEqual(requests[0].headers.Authorization, 'Bearer s3cr3t');
+        assert.strictEqual(requests[0].headers.Cookie, 'session=xyz');
+      },
+    );
+  });
+
   context('given a Swagger 2.0 source description', function () {
     let entry2: ArazzoDocument;
     let locatorNormalizer2: OpenAPIOperationLocatorNormalizer;
