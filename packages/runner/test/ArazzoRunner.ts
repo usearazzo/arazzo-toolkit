@@ -195,6 +195,23 @@ describe('ArazzoRunner', function () {
       assert.strictEqual(calls.length, 2);
       assert.isTrue(calls.every((request) => request.headers['x-trace'] === 'abc'));
     });
+
+    specify('should send step parameters the operation does not declare', async function () {
+      // a token from one step travels to the next in an Authorization header,
+      // a cookie and a path parameter its operation does not declare.
+      const calls: OpenAPIOperationRequest[] = [];
+      const runner = await ArazzoRunner.load(
+        path.join(fixturesPath, 'undeclared-parameters.arazzo.yaml'),
+        { httpClient: makeHTTPClient(calls) },
+      );
+
+      const result = await runner.execute('tokenThenCall');
+
+      assert.strictEqual(result.status, 'completed');
+      assert.strictEqual(calls[1].url, 'https://petstore3.swagger.io/api/v3/pet/7');
+      assert.strictEqual(calls[1].headers.Authorization, 'Rex');
+      assert.strictEqual(calls[1].headers.Cookie, 'tracking=a%20b%3Bc');
+    });
   });
 
   context('workflow executor options', function () {
