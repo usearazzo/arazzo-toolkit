@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.15](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.14...v1.0.1-alpha.15) (2026-10-28)
+
+### Bug Fixes
+
+- **runner:** reject an unreadable successCriteria before any request ([#284](https://github.com/usearazzo/arazzo-toolkit/issues/284)) ([11662f5](https://github.com/usearazzo/arazzo-toolkit/commit/11662f5e603909e356e95f0daa85a7e245667920)), closes [#127](https://github.com/usearazzo/arazzo-toolkit/issues/127)
+
 ## [1.0.1-alpha.14](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.13...v1.0.1-alpha.14) (2026-10-27)
 
 ### Bug Fixes
