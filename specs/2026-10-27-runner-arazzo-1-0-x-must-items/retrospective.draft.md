@@ -8,6 +8,8 @@ Raw material gathered during implementation, for the human-curated `retrospectiv
 
 - `plan.md` tasks 4 and 6 (#127) placed the `successCriteria` check before each step's own request (in `StepExecutor.execute()`, and before the sub-workflow for a step that targets a `workflowId`). The #127 implementation keeps the `execute()` check, for direct `StepExecutor` callers, and in `WorkflowExecutor` checks every step of a workflow at the start of the run, next to the existing `#orderedSteps` and `#validateWorkflowOutputsShape` checks, instead of per step. Otherwise a malformed `successCriteria` on step three would still cost the run the live requests of steps one and two, which the mission's "authoring mistakes are reported before any live request fires" rules out and the existing `outputs` check already avoids. Validation check 4 holds unchanged: no request is sent.
 
+- `plan.md` Group 5 task 17 and `validation.md` check 2 say the public surface does not change. #127 adds a public method, `StepExecutor.assertSuccessCriteria(step, workflowId?)`, on an exported class. It is public because `WorkflowExecutor` calls it, like `evaluateCriteria`. api-extractor reports no warnings and the declaration rollup gains the method. The package README's one-line `StepExecutor` entry needs no change.
+
 ## Root cause
 
 The spec's version claim was taken from the issues (#126 says "Arazzo 1.0.1 removed `in: body`") and from the field being unchanged in 1.1.0. Nobody read the 1.0.0 text itself while scaffolding.
