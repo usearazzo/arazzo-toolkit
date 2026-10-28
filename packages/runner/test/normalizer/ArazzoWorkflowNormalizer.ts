@@ -622,6 +622,15 @@ describe('ArazzoWorkflowNormalizer', function () {
       assert.isUndefined(step.onSuccess);
     });
 
+    specify('should skip a step whose own onFailure is present but not a list', async function () {
+      const [step] = await inherit({ failureActions: [retryOrder] }, {
+        stepId: 'a',
+        onFailure: 'not-a-list',
+      } as StepEntry);
+
+      assert.strictEqual(step.onFailure as unknown, 'not-a-list');
+    });
+
     specify('should skip a step whose own onSuccess is present but not a list', async function () {
       const [step] = await inherit({ successActions: [endRun] }, {
         stepId: 'a',
@@ -648,8 +657,29 @@ describe('ArazzoWorkflowNormalizer', function () {
         await normalizer.normalize(workflow, entryDoc);
         const normalized = await normalizer.normalize(workflow, entryDoc);
 
-        // the second pass sees a step that now has the key, and leaves it alone.
+        // the second pass finds every inherited action already in the list by
+        // its name, so it adds nothing
         assert.deepEqual((toValue(normalized.steps) as NormalizedStep[])[0].onSuccess, [endRun]);
+      },
+    );
+
+    specify(
+      'should be idempotent for a step with its own lists and nameless entries',
+      async function () {
+        const own = { name: 'own', type: 'end' };
+        const workflow = refractWorkflow({
+          workflowId: 'w',
+          successActions: [endRun, 'nameless'],
+          failureActions: [retryOrder, 'nameless'],
+          steps: [{ stepId: 'a', operationId: 'getInventory', onSuccess: [own], onFailure: [own] }],
+        }) as WorkflowElement;
+
+        await normalizer.normalize(workflow, entryDoc);
+        const normalized = await normalizer.normalize(workflow, entryDoc);
+
+        const [step] = toValue(normalized.steps) as NormalizedStep[];
+        assert.deepEqual(step.onSuccess, [own, endRun, 'nameless'] as unknown as ActionEntry[]);
+        assert.deepEqual(step.onFailure, [own, retryOrder, 'nameless'] as unknown as ActionEntry[]);
       },
     );
 
