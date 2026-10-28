@@ -872,3 +872,15 @@ workflows:
             value: "7"
         successCriteria:
           - 42
+
+  # the same check for a successCriteria that is not a list at all.
+  - workflowId: scalarCriteriaOnCallingStep
+    steps:
+      - stepId: before
+        operationId: getInventory
+      - stepId: child
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "7"
+        successCriteria: $statusCode == 200

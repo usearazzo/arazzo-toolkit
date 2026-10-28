@@ -614,7 +614,7 @@ class WorkflowExecutor {
     // included: an unreadable assertion found at step three must not cost the
     // run the requests of steps one and two.
     const stepExecutor = this.#stepExecutor.forDocument(locator.document);
-    for (const step of steps) stepExecutor.assertSuccessCriteria(step);
+    for (const step of steps) stepExecutor.assertSuccessCriteria(step, workflowId);
 
     const dependencies = await this.#runDependencies(workflow, invocation, scope);
     if (dependencies.some((dependency) => this.#settledFailed(dependency))) {

@@ -317,12 +317,17 @@ class StepExecutor {
    * Called before the step's request is sent, so no live side effect precedes
    * the error. Public because the workflow executor checks every step of a
    * workflow with it before any of them runs, a step targeting a `workflowId`
-   * included.
+   * included. It passes `workflowId`, which the error then carries: step ids
+   * are only unique within a workflow.
    */
-  assertSuccessCriteria(step: StepElement): void {
+  assertSuccessCriteria(step: StepElement, workflowId?: string): void {
     const criteria = step.successCriteria;
     if (criteria === undefined) return;
-    const scope = { stepId: toValue(step.stepId) as string, target: 'successCriteria' };
+    const scope = {
+      ...(workflowId === undefined ? {} : { workflowId }),
+      stepId: toValue(step.stepId) as string,
+      target: 'successCriteria',
+    };
     if (!isArrayElement(criteria)) {
       throw new ResolverError("A step's `successCriteria` is present but is not a list", {
         ...scope,
