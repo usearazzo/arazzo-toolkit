@@ -489,17 +489,34 @@ describe('ArazzoWorkflowNormalizer', function () {
       },
     );
 
-    specify('should resolve a duplicate name first-wins in either list', async function () {
+    specify(
+      "should keep a step's own list as written, duplicate names included",
+      async function () {
+        // a duplicate name in the step's own list is the validator's to report;
+        // inheritance only adds to the list, so both entries stay selectable
+        const first = { name: 'dup', type: 'end' };
+        const second = { name: 'dup', type: 'goto', stepId: 'a' };
+        const ownEndRun = { name: 'endRun', type: 'goto', stepId: 'a' };
+        const [stepDup] = await inherit(
+          { successActions: [endRun] },
+          { stepId: 'a', onSuccess: [first, second] },
+        );
+        const [overriding] = await inherit(
+          { successActions: [endRun] },
+          { stepId: 'a', onSuccess: [ownEndRun, { ...ownEndRun, stepId: 'b' }] },
+        );
+
+        assert.deepEqual(stepDup.onSuccess, [first, second, endRun]);
+        assert.deepEqual(overriding.onSuccess, [ownEndRun, { ...ownEndRun, stepId: 'b' }]);
+      },
+    );
+
+    specify("should resolve a duplicate name in the workflow's list first-wins", async function () {
       const first = { name: 'dup', type: 'end' };
       const second = { name: 'dup', type: 'goto', stepId: 'a' };
-      const [stepDup] = await inherit(
-        { successActions: [endRun] },
-        { stepId: 'a', onSuccess: [first, second] },
-      );
-      const [workflowDup] = await inherit({ successActions: [first, second] }, { stepId: 'a' });
+      const [step] = await inherit({ successActions: [first, second] }, { stepId: 'a' });
 
-      assert.deepEqual(stepDup.onSuccess, [first, endRun]);
-      assert.deepEqual(workflowDup.onSuccess, [first]);
+      assert.deepEqual(step.onSuccess, [first]);
     });
 
     specify(

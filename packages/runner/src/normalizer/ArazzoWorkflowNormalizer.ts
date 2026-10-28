@@ -195,8 +195,10 @@ class ArazzoWorkflowNormalizer {
    * the step's own actions in order, then the workflow actions it did not
    * override, in theirs — order matters, as selection is first-match-wins on
    * `criteria`. So a step with no list, or with `[]`, gets every workflow
-   * action. Within the step's list and within the workflow's alike, the first
-   * action with a given `name` wins. Success and failure merge independently.
+   * action. The step's own list is kept exactly as written, even a duplicate
+   * `name` in it, which the validator reports: inheritance only adds to it.
+   * Within the workflow's list the first action with a given `name` wins.
+   * Success and failure merge independently.
    *
    * An entry without a readable `name` (an unresolved Reusable Object, a
    * scalar someone put in the list) neither overrides nor is overridden: it
@@ -248,15 +250,17 @@ class ArazzoWorkflowNormalizer {
   }
 
   /**
-   * The step's actions followed by the workflow's, the first action with a
-   * given `name` winning; a nameless entry is kept unless that same element is
-   * already in the result.
+   * The step's actions as written, followed by each workflow action whose
+   * `name` neither the step nor an earlier workflow action carries; a nameless
+   * workflow entry is added unless that same element is already present.
    */
   static #mergeActions(own: Element[], inherited: Element[]): Element[] {
-    const names = new Set<string>();
-    const merged: Element[] = [];
-    for (const action of [...own, ...inherited]) {
-      const name = isObjectElement(action) ? toValue(action.get('name')) : undefined;
+    const nameOf = (action: Element): unknown =>
+      isObjectElement(action) ? toValue(action.get('name')) : undefined;
+    const names = new Set(own.map(nameOf));
+    const merged = [...own];
+    for (const action of inherited) {
+      const name = nameOf(action);
       if (typeof name !== 'string') {
         if (!merged.includes(action)) merged.push(action);
       } else if (!names.has(name)) {
