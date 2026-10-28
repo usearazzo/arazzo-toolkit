@@ -1,6 +1,10 @@
 import { toValue } from '@speclynx/apidom-core';
 import { isArrayElement, isStringElement } from '@speclynx/apidom-datamodel';
-import { isCriterionElement, type StepElement } from '@speclynx/apidom-ns-arazzo-1';
+import {
+  isCriterionElement,
+  type CriterionElement,
+  type StepElement,
+} from '@speclynx/apidom-ns-arazzo-1';
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
 import type DocumentRegistry from '../registry/DocumentRegistry.ts';
@@ -357,13 +361,12 @@ class StepExecutor {
     const criteria = step.successCriteria;
     if (criteria === undefined) return true;
 
-    return [...criteria]
-      .filter(isCriterionElement)
-      .every((criterion) =>
-        this.#criterionEvaluator.evaluate(criterion, (expression) =>
-          this.#evaluate(context, expression),
-        ),
-      );
+    // assertSuccessCriteria above guarantees every entry is a Criterion Object
+    return ([...criteria] as CriterionElement[]).every((criterion) =>
+      this.#criterionEvaluator.evaluate(criterion, (expression) =>
+        this.#evaluate(context, expression),
+      ),
+    );
   }
 
   /**
