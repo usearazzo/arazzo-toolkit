@@ -349,10 +349,10 @@ describe('WorkflowExecutor', function () {
     );
 
     specify(
-      "should let a step's own onFailure override the workflow failureActions wholesale",
+      "should run a step's own onFailure ahead of the workflow failureActions",
       async function () {
-        // the step fails (500) but its own onFailure gotos a recovery step; the
-        // workflow-level end is not applied.
+        // the step fails (500) and its own onFailure goto comes first in the
+        // merged list, so it wins; the workflow-level end follows it unused.
         const { executor, calls } = makeExecutor(serverErrorResponse);
 
         const result = await executor.execute('overridesFailureActions');
@@ -387,22 +387,49 @@ describe('WorkflowExecutor', function () {
     );
 
     specify(
-      'should let an empty step onSuccess suppress the workflow successActions',
+      'should not let an empty step onSuccess remove the workflow successActions',
       async function () {
-        // the first step declares onSuccess: [] — an explicit empty list, not an
-        // absent one — which overrides the workflow "end" wholesale. The run must
-        // proceed to the second step rather than ending early.
+        // the first step declares onSuccess: [], which overrides nothing, so the
+        // workflow's `end` still applies and the run stops after it.
         const { executor, calls } = makeExecutor();
 
-        const result = await executor.execute('emptyOnSuccessSuppressesDefault');
+        const result = await executor.execute('emptyOnSuccessKeepsDefault');
 
-        assert.strictEqual(result.status, 'completed');
+        assert.strictEqual(result.status, 'ended');
         assert.deepEqual(
           result.steps.map((step) => step.stepId),
-          ['first', 'second'],
+          ['first'],
         );
-        assert.strictEqual(calls.length, 2);
-        assert.strictEqual(result.outputs.second, 200);
+        assert.strictEqual(calls.length, 1);
+      },
+    );
+
+    specify("should run a step's own action before merged default actions", async function () {
+      // a 503 matches the step's own `recover` goto, which comes first
+      const { executor } = makeExecutor([serviceUnavailableResponse, okResponse]);
+
+      const result = await executor.execute('mergedDefaultActions');
+
+      assert.deepEqual(
+        result.steps.map((step) => step.stepId),
+        ['first', 'recovery'],
+      );
+    });
+
+    specify(
+      'should fall through to merged default actions the step does not name',
+      async function () {
+        // a 500 does not match `recover`, so the inherited `stopOnFailure` end applies
+        const { executor, calls } = makeExecutor(serverErrorResponse);
+
+        const result = await executor.execute('mergedDefaultActions');
+
+        assert.deepEqual(
+          result.steps.map((step) => step.stepId),
+          ['first'],
+        );
+        assert.strictEqual(result.status, 'ended');
+        assert.strictEqual(calls.length, 1);
       },
     );
 

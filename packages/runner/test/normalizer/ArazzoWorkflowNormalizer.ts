@@ -451,31 +451,143 @@ describe('ArazzoWorkflowNormalizer', function () {
       assert.deepEqual(steps[1].onSuccess, [endRun]);
     });
 
-    specify("should let a step's own list override wholesale, with no merge", async function () {
-      const own = { name: 'ownEnd', type: 'end' };
-      const [step] = await inherit({ successActions: [endRun] }, { stepId: 'a', onSuccess: [own] });
+    specify(
+      "should append the workflow actions a step's own list does not name",
+      async function () {
+        const own = { name: 'ownEnd', type: 'end' };
+        const [step] = await inherit(
+          { successActions: [endRun] },
+          { stepId: 'a', onSuccess: [own] },
+        );
 
-      // unlike parameters, which merge, an action list replaces the workflow's
-      // outright — nothing of the workflow's survives alongside it.
-      assert.deepEqual(step.onSuccess, [own]);
+        // a step can override workflow actions but not remove them: those it
+        // does not name follow its own, which come first.
+        assert.deepEqual(step.onSuccess, [own, endRun]);
+      },
+    );
+
+    specify(
+      'should let a step action replace the workflow action of the same name',
+      async function () {
+        const ownEndRun = { name: 'endRun', type: 'goto', stepId: 'a' };
+        const [step] = await inherit(
+          { successActions: [endRun, retryOrder] },
+          { stepId: 'a', onSuccess: [ownEndRun] },
+        );
+
+        assert.deepEqual(step.onSuccess, [ownEndRun, retryOrder]);
+      },
+    );
+
+    specify(
+      'should inherit every workflow action into an empty list a step declares',
+      async function () {
+        const [step] = await inherit({ successActions: [endRun] }, { stepId: 'a', onSuccess: [] });
+
+        // `onSuccess: []` overrides nothing, so it cannot remove anything either
+        assert.deepEqual(step.onSuccess, [endRun]);
+      },
+    );
+
+    specify(
+      "should keep a step's own list as written, duplicate names included",
+      async function () {
+        // a duplicate name in the step's own list is the validator's to report;
+        // inheritance only adds to the list, so both entries stay selectable
+        const first = { name: 'dup', type: 'end' };
+        const second = { name: 'dup', type: 'goto', stepId: 'a' };
+        const ownEndRun = { name: 'endRun', type: 'goto', stepId: 'a' };
+        const [stepDup] = await inherit(
+          { successActions: [endRun] },
+          { stepId: 'a', onSuccess: [first, second] },
+        );
+        const [overriding] = await inherit(
+          { successActions: [endRun] },
+          { stepId: 'a', onSuccess: [ownEndRun, { ...ownEndRun, stepId: 'b' }] },
+        );
+
+        assert.deepEqual(stepDup.onSuccess, [first, second, endRun]);
+        assert.deepEqual(overriding.onSuccess, [ownEndRun, { ...ownEndRun, stepId: 'b' }]);
+      },
+    );
+
+    specify("should resolve a duplicate name in the workflow's list first-wins", async function () {
+      const first = { name: 'dup', type: 'end' };
+      const second = { name: 'dup', type: 'goto', stepId: 'a' };
+      const [step] = await inherit({ successActions: [first, second] }, { stepId: 'a' });
+
+      assert.deepEqual(step.onSuccess, [first]);
     });
 
-    specify('should keep an empty list a step declares, without falling back', async function () {
-      const [step] = await inherit({ successActions: [endRun] }, { stepId: 'a', onSuccess: [] });
+    specify(
+      'should keep an entry without a name in place, and not append it twice',
+      async function () {
+        const workflow = refractWorkflow({
+          workflowId: 'w',
+          successActions: [endRun, 'nameless'],
+          steps: [{ stepId: 'a', operationId: 'getInventory', onSuccess: [{ type: 'end' }] }],
+        }) as WorkflowElement;
 
-      // `onSuccess: []` overrides the default with an empty set of actions; it
-      // does not ask for one.
-      assert.deepEqual(step.onSuccess, []);
+        await normalizer.normalize(workflow, entryDoc);
+        const normalized = await normalizer.normalize(workflow, entryDoc);
+
+        // the step's nameless entry neither overrides nor is overridden; the
+        // workflow's is appended once, by element identity
+        assert.deepEqual((toValue(normalized.steps) as NormalizedStep[])[0].onSuccess, [
+          { type: 'end' },
+          endRun,
+          'nameless',
+        ] as unknown as ActionEntry[]);
+      },
+    );
+
+    specify('should merge onFailure by name the same way as onSuccess', async function () {
+      const own = { name: 'own', type: 'end' };
+      const ownRetryOrder = { name: 'retryOrder', type: 'goto', stepId: 'a' };
+      const failureActions = [retryOrder, endRun];
+      const [appended] = await inherit({ failureActions }, { stepId: 'a', onFailure: [own] });
+      const [replaced] = await inherit(
+        { failureActions },
+        { stepId: 'a', onFailure: [ownRetryOrder] },
+      );
+      const [empty] = await inherit({ failureActions }, { stepId: 'a', onFailure: [] });
+      const [duplicated] = await inherit(
+        { failureActions: [retryOrder, { ...retryOrder, retryAfter: 9 }] },
+        { stepId: 'a' },
+      );
+
+      assert.deepEqual(appended.onFailure, [own, retryOrder, endRun]);
+      assert.deepEqual(replaced.onFailure, [ownRetryOrder, endRun]);
+      assert.deepEqual(empty.onFailure, [retryOrder, endRun]);
+      assert.deepEqual(duplicated.onFailure, [retryOrder]);
     });
 
-    specify('should fall back to success and failure independently', async function () {
+    specify(
+      'should merge a referenced workflow action by its dereferenced name',
+      async function () {
+        const registry = new DocumentRegistry();
+        const componentDoc = await registry.acquireEntryDocument(componentFixturePath);
+        const workflow = extractor.extract(componentDoc, 'mergeReferencedActions');
+        const normalized = await normalizer.normalize(workflow, componentDoc);
+
+        // the step's own `finish` (a goto) replaces the referenced `finish` (an
+        // end) by its name, and the workflow's `alsoEnd` still follows
+        const [step] = toValue(normalized.steps) as { onSuccess: Record<string, unknown>[] }[];
+        assert.deepEqual(step.onSuccess, [
+          { name: 'finish', type: 'goto', stepId: 'getPet' },
+          { name: 'alsoEnd', type: 'end' },
+        ]);
+      },
+    );
+
+    specify('should merge success and failure independently', async function () {
       const own = { name: 'ownRetry', type: 'retry', retryAfter: 2 };
       const [step] = await inherit(
         { successActions: [endRun], failureActions: [retryOrder] },
         { stepId: 'a', onFailure: [own] },
       );
 
-      assert.deepEqual(step.onFailure, [own]);
+      assert.deepEqual(step.onFailure, [own, retryOrder]);
       assert.deepEqual(step.onSuccess, [endRun]);
     });
 
@@ -510,6 +622,15 @@ describe('ArazzoWorkflowNormalizer', function () {
       assert.isUndefined(step.onSuccess);
     });
 
+    specify('should skip a step whose own onFailure is present but not a list', async function () {
+      const [step] = await inherit({ failureActions: [retryOrder] }, {
+        stepId: 'a',
+        onFailure: 'not-a-list',
+      } as StepEntry);
+
+      assert.strictEqual(step.onFailure as unknown, 'not-a-list');
+    });
+
     specify('should skip a step whose own onSuccess is present but not a list', async function () {
       const [step] = await inherit({ successActions: [endRun] }, {
         stepId: 'a',
@@ -536,8 +657,29 @@ describe('ArazzoWorkflowNormalizer', function () {
         await normalizer.normalize(workflow, entryDoc);
         const normalized = await normalizer.normalize(workflow, entryDoc);
 
-        // the second pass sees a step that now has the key, and leaves it alone.
+        // the second pass finds every inherited action already in the list by
+        // its name, so it adds nothing
         assert.deepEqual((toValue(normalized.steps) as NormalizedStep[])[0].onSuccess, [endRun]);
+      },
+    );
+
+    specify(
+      'should be idempotent for a step with its own lists and nameless entries',
+      async function () {
+        const own = { name: 'own', type: 'end' };
+        const workflow = refractWorkflow({
+          workflowId: 'w',
+          successActions: [endRun, 'nameless'],
+          failureActions: [retryOrder, 'nameless'],
+          steps: [{ stepId: 'a', operationId: 'getInventory', onSuccess: [own], onFailure: [own] }],
+        }) as WorkflowElement;
+
+        await normalizer.normalize(workflow, entryDoc);
+        const normalized = await normalizer.normalize(workflow, entryDoc);
+
+        const [step] = toValue(normalized.steps) as NormalizedStep[];
+        assert.deepEqual(step.onSuccess, [own, endRun, 'nameless'] as unknown as ActionEntry[]);
+        assert.deepEqual(step.onFailure, [own, retryOrder, 'nameless'] as unknown as ActionEntry[]);
       },
     );
 
@@ -560,6 +702,24 @@ describe('ArazzoWorkflowNormalizer', function () {
       assert.strictEqual([...a.onFailure!][0], [...b.onFailure!][0]);
       assert.strictEqual([...a.onFailure!][0], [...normalized.failureActions!][0]);
     });
+
+    specify(
+      "should share the workflow action elements merged after a step's own",
+      async function () {
+        const workflow = refractWorkflow({
+          workflowId: 'w',
+          failureActions: [retryOrder],
+          steps: [
+            { stepId: 'a', operationId: 'getInventory', onFailure: [{ name: 'own', type: 'end' }] },
+          ],
+        }) as WorkflowElement;
+
+        const normalized = await normalizer.normalize(workflow, entryDoc);
+
+        const [a] = [...normalized.steps!] as StepElement[];
+        assert.strictEqual([...a.onFailure!][1], [...normalized.failureActions!][0]);
+      },
+    );
 
     specify('should leave a malformed steps list alone', async function () {
       const workflow = refractWorkflow({

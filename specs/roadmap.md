@@ -88,7 +88,7 @@ Phases are intentionally small — each one is a shippable, independently review
 - Fold in the small consolidation issues that change the surface (#75, #76, #77) where they affect exports.
 - Regenerate the api-extractor rollup and update the README so every public symbol has an entry.
 
-## Phase 8 — Runner Arazzo 1.0.x MUST items
+## Phase 8 — Runner Arazzo 1.0.x MUST items ✅
 
 **Goal:** the runner honors every 1.0.x MUST it currently misses.  
 **Depends on:** Phase 5  
