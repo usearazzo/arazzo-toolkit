@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.16](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.15...v1.0.1-alpha.16) (2026-10-28)
+
+### Bug Fixes
+
+- **runner:** merge workflow default actions into steps by name ([#288](https://github.com/usearazzo/arazzo-toolkit/issues/288)) ([8ee0ba3](https://github.com/usearazzo/arazzo-toolkit/commit/8ee0ba387c475fef329c7d094e10ed3b2b0753c1)), closes [#117](https://github.com/usearazzo/arazzo-toolkit/issues/117)
+
 ## [1.0.1-alpha.15](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.14...v1.0.1-alpha.15) (2026-10-28)
 
 ### Bug Fixes
