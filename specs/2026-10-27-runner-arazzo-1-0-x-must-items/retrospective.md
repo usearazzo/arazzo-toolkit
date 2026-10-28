@@ -22,6 +22,10 @@ Phase 8 shipped in three pull requests: #283 (#126), #284 (#127) and #288 (#117)
 - Not in the spec: existing tests and fixtures asserted or described the old wholesale override, and were rewritten. That was three `ArazzoWorkflowNormalizer` specs, two `WorkflowExecutor` specs, a fixture workflow (`emptyOnSuccessSuppressesDefault`, renamed `emptyOnSuccessKeepsDefault`) and three fixture comments.
 - Not in the spec: the website's "What steps inherit" lead-in ("two things, and they behave in opposite ways") became false once actions merge like parameters, and was rewritten along with the "Default actions" paragraph.
 
+### Specification gap
+
+- The specification never defines what identifies a success or failure action for "override it but can never remove it", though it does for parameters ("A unique parameter is defined by the combination of a `name` and `in` fields"), following OpenAPI's Path Item / Operation `parameters`. Matching by the required `name` is the runner's reading, the only one consistent with both halves of the sentence. Filed upstream as OAI/Arazzo-Specification#619, per the mission's "gaps are fixed upstream in the Arazzo Specification".
+
 ## Root cause
 
 The scaffolding read the issues and the current code, but not three neighbouring sources it depended on.
