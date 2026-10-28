@@ -524,6 +524,45 @@ describe('ArazzoWorkflowNormalizer', function () {
       },
     );
 
+    specify('should merge onFailure by name the same way as onSuccess', async function () {
+      const own = { name: 'own', type: 'end' };
+      const ownRetryOrder = { name: 'retryOrder', type: 'goto', stepId: 'a' };
+      const failureActions = [retryOrder, endRun];
+      const [appended] = await inherit({ failureActions }, { stepId: 'a', onFailure: [own] });
+      const [replaced] = await inherit(
+        { failureActions },
+        { stepId: 'a', onFailure: [ownRetryOrder] },
+      );
+      const [empty] = await inherit({ failureActions }, { stepId: 'a', onFailure: [] });
+      const [duplicated] = await inherit(
+        { failureActions: [retryOrder, { ...retryOrder, retryAfter: 9 }] },
+        { stepId: 'a' },
+      );
+
+      assert.deepEqual(appended.onFailure, [own, retryOrder, endRun]);
+      assert.deepEqual(replaced.onFailure, [ownRetryOrder, endRun]);
+      assert.deepEqual(empty.onFailure, [retryOrder, endRun]);
+      assert.deepEqual(duplicated.onFailure, [retryOrder]);
+    });
+
+    specify(
+      'should merge a referenced workflow action by its dereferenced name',
+      async function () {
+        const registry = new DocumentRegistry();
+        const componentDoc = await registry.acquireEntryDocument(componentFixturePath);
+        const workflow = extractor.extract(componentDoc, 'mergeReferencedActions');
+        const normalized = await normalizer.normalize(workflow, componentDoc);
+
+        // the step's own `finish` (a goto) replaces the referenced `finish` (an
+        // end) by its name, and the workflow's `alsoEnd` still follows
+        const [step] = toValue(normalized.steps) as { onSuccess: Record<string, unknown>[] }[];
+        assert.deepEqual(step.onSuccess, [
+          { name: 'finish', type: 'goto', stepId: 'getPet' },
+          { name: 'alsoEnd', type: 'end' },
+        ]);
+      },
+    );
+
     specify('should merge success and failure independently', async function () {
       const own = { name: 'ownRetry', type: 'retry', retryAfter: 2 };
       const [step] = await inherit(
@@ -664,24 +703,6 @@ describe('ArazzoWorkflowNormalizer', function () {
       assert.isArray(parameters);
       assert.strictEqual(parameters[0].name, 'petId');
     });
-
-    specify(
-      'should merge a referenced workflow action by its dereferenced name',
-      async function () {
-        const registry = new DocumentRegistry();
-        const entryDoc = await registry.acquireEntryDocument(componentFixturePath);
-        const workflow = extractor.extract(entryDoc, 'mergeReferencedActions');
-        const normalized = await normalizer.normalize(workflow, entryDoc);
-
-        // the step's own `finish` (a goto) replaces the referenced `finish` (an
-        // end) by its name, and the workflow's `alsoEnd` still follows
-        const [step] = toValue(normalized.steps) as { onSuccess: Record<string, unknown>[] }[];
-        assert.deepEqual(step.onSuccess, [
-          { name: 'finish', type: 'goto', stepId: 'getPet' },
-          { name: 'alsoEnd', type: 'end' },
-        ]);
-      },
-    );
 
     specify('should inherit a referenced workflow action list already inlined', async function () {
       const registry = new DocumentRegistry();

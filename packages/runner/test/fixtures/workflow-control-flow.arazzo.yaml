@@ -710,10 +710,6 @@ workflows:
       first: $steps.first.outputs.firstStatus
       second: $steps.second.outputs.secondStatus
 
-  # the step overrides onSuccess (goto) but declares no onFailure, so success and
-  # failure fall back independently: on success the step's own goto wins; the
-  # workflow-level failureActions remain available to it. Driven by a 200 so the
-  # success path (goto) is exercised, skipping the middle step.
   # a step's own failure action comes first; the workflow's differently named
   # one still applies after it, since a step cannot remove a default.
   - workflowId: mergedDefaultActions
@@ -744,6 +740,10 @@ workflows:
             in: path
             value: "7"
 
+  # the step overrides onSuccess (goto) but declares no onFailure, so success and
+  # failure fall back independently: on success the step's own goto wins; the
+  # workflow-level failureActions remain available to it. Driven by a 200 so the
+  # success path (goto) is exercised, skipping the middle step.
   - workflowId: overrideSuccessInheritFailure
     failureActions:
       - name: stopOnFailure
