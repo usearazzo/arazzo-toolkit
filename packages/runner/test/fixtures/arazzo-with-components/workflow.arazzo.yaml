@@ -16,6 +16,21 @@ workflows:
         operationId: getPetById
         parameters:
           - reference: $components.parameters.petId
+  - workflowId: mergeReferencedActions
+    summary: A step action overrides a referenced workflow action by its dereferenced name
+    successActions:
+      - reference: $components.successActions.finish
+      - name: alsoEnd
+        type: end
+    steps:
+      - stepId: getPet
+        operationId: getPetById
+        parameters:
+          - reference: $components.parameters.petId
+        onSuccess:
+          - name: finish
+            type: goto
+            stepId: getPet
 components:
   parameters:
     petId:

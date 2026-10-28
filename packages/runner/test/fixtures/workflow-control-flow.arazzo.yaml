@@ -637,9 +637,9 @@ workflows:
         outputs:
           ran: $statusCode
 
-  # the step's own onFailure (break-by-omission: a goto to a later step)
-  # overrides the workflow-level failureActions wholesale — the workflow's
-  # "end" is not applied. Driven by a 500 so the step fails.
+  # the step's own onFailure (a goto to a later step) comes first in the merged
+  # list, so it wins over the workflow-level "end" that follows it. Driven by a
+  # 500 so the step fails.
   - workflowId: overridesFailureActions
     failureActions:
       - name: stopOnFailure
@@ -685,10 +685,9 @@ workflows:
       first: $steps.first.outputs.firstStatus
       second: $steps.second.outputs.secondStatus
 
-  # the first step declares an EMPTY onSuccess list, which overrides (suppresses)
-  # the workflow-level successActions wholesale — the workflow "end" must NOT
-  # apply, so the run proceeds to the second step rather than ending early.
-  - workflowId: emptyOnSuccessSuppressesDefault
+  # the first step declares an EMPTY onSuccess list, which overrides nothing, so
+  # the workflow-level "end" still applies and the run stops after the first step.
+  - workflowId: emptyOnSuccessKeepsDefault
     successActions:
       - name: stopOnSuccess
         type: end
@@ -698,8 +697,6 @@ workflows:
         onSuccess: []
         outputs:
           firstStatus: $statusCode
-      # also suppresses the default, so the run completes instead of the last
-      # step re-triggering the inherited end.
       - stepId: second
         operationId: findPetsByStatus
         onSuccess: []
@@ -717,6 +714,36 @@ workflows:
   # failure fall back independently: on success the step's own goto wins; the
   # workflow-level failureActions remain available to it. Driven by a 200 so the
   # success path (goto) is exercised, skipping the middle step.
+  # a step's own failure action comes first; the workflow's differently named
+  # one still applies after it, since a step cannot remove a default.
+  - workflowId: mergedDefaultActions
+    failureActions:
+      - name: stopOnFailure
+        type: end
+    steps:
+      - stepId: first
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: recover
+            type: goto
+            stepId: recovery
+            criteria:
+              - condition: $statusCode == 503
+      - stepId: second
+        operationId: findPetsByStatus
+        parameters:
+          - name: status
+            in: query
+            value: available
+      - stepId: recovery
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: "7"
+
   - workflowId: overrideSuccessInheritFailure
     failureActions:
       - name: stopOnFailure

@@ -8,7 +8,12 @@ import {
   type WorkflowElement,
 } from '@speclynx/apidom-ns-arazzo-1';
 import { toValue } from '@speclynx/apidom-core';
-import { isArrayElement, isStringElement } from '@speclynx/apidom-datamodel';
+import {
+  isArrayElement,
+  isObjectElement,
+  isStringElement,
+  type Element,
+} from '@speclynx/apidom-datamodel';
 import { dereferenceArazzoElement, defaultDereferenceArazzoOptions } from '@usearazzo/resolver';
 import {
   mergeOptions,
@@ -179,23 +184,30 @@ class ArazzoWorkflowNormalizer {
   }
 
   /**
-   * Inherits the workflow's `successActions` / `failureActions` into each step
-   * that declares no `onSuccess` / `onFailure` of its own.
+   * Merges the workflow's `successActions` / `failureActions` into each step's
+   * `onSuccess` / `onFailure`.
    *
-   * Per Arazzo 1.0.1 both lists are "applicable for all steps described under
-   * this workflow", and a step's own list **overrides** the corresponding
-   * workflow one — wholesale, with no per-action merge, which is where this
-   * differs from the parameters above. Success and failure fall back
-   * independently: a step may override only its `onFailure` and still inherit
-   * the workflow's `successActions`.
+   * Per Arazzo both lists are "applicable for all steps described under this
+   * workflow" and "can be overridden at the step level but cannot be removed
+   * there". The required action `name` is what makes both halves hold: a
+   * step's action replaces the workflow action of the same `name`, and every
+   * workflow action the step does not name still applies. The effective list is
+   * the step's own actions in order, then the workflow actions it did not
+   * override, in theirs — order matters, as selection is first-match-wins on
+   * `criteria`. So a step with no list, or with `[]`, gets every workflow
+   * action. Within the step's list and within the workflow's alike, the first
+   * action with a given `name` wins. Success and failure merge independently.
    *
-   * Presence is tested with `hasKey`, not truthiness: a step declaring an empty
-   * list (`onSuccess: []`) has *overridden* the default with an empty set of
-   * actions, not asked for one — it is skipped, as is a step whose `onSuccess`
-   * is present but not a list, for the same reason the parameters pass leaves a
-   * malformed list alone. Testing the key is also what makes the pass
-   * idempotent: after the first run the step has it, so a workflow reached again
-   * through the registry cache is skipped.
+   * An entry without a readable `name` (an unresolved Reusable Object, a
+   * scalar someone put in the list) neither overrides nor is overridden: it
+   * keeps its place, and is added only if that same element is not already in
+   * the list. A step whose `onSuccess` is present but not a list is left
+   * alone, for the same reason the parameters pass leaves a malformed list
+   * alone — overwriting it would erase what makes the document invalid.
+   *
+   * The pass is idempotent, so a workflow reached again through the registry
+   * cache is merged into once: on a second pass every inherited action is
+   * already in the step's list, under its own `name` or as the same element.
    *
    * Unlike parameters there is no step-kind filter — an action names a
    * transition within the workflow, which is as meaningful for a step targeting
@@ -222,13 +234,37 @@ class ArazzoWorkflowNormalizer {
     for (const step of workflow.steps) {
       if (!isStepElement(step)) continue;
 
-      if (inheritSuccess && !step.hasKey('onSuccess')) {
-        step.onSuccess = new StepOnSuccessElement([...successActions]);
+      if (inheritSuccess && (!step.hasKey('onSuccess') || isArrayElement(step.onSuccess))) {
+        step.onSuccess = new StepOnSuccessElement(
+          ArazzoWorkflowNormalizer.#mergeActions([...(step.onSuccess ?? [])], [...successActions]),
+        );
       }
-      if (inheritFailure && !step.hasKey('onFailure')) {
-        step.onFailure = new StepOnFailureElement([...failureActions]);
+      if (inheritFailure && (!step.hasKey('onFailure') || isArrayElement(step.onFailure))) {
+        step.onFailure = new StepOnFailureElement(
+          ArazzoWorkflowNormalizer.#mergeActions([...(step.onFailure ?? [])], [...failureActions]),
+        );
       }
     }
+  }
+
+  /**
+   * The step's actions followed by the workflow's, the first action with a
+   * given `name` winning; a nameless entry is kept unless that same element is
+   * already in the result.
+   */
+  static #mergeActions(own: Element[], inherited: Element[]): Element[] {
+    const names = new Set<string>();
+    const merged: Element[] = [];
+    for (const action of [...own, ...inherited]) {
+      const name = isObjectElement(action) ? toValue(action.get('name')) : undefined;
+      if (typeof name !== 'string') {
+        if (!merged.includes(action)) merged.push(action);
+      } else if (!names.has(name)) {
+        names.add(name);
+        merged.push(action);
+      }
+    }
+    return merged;
   }
 }
 
