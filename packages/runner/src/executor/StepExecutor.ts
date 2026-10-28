@@ -1,6 +1,10 @@
 import { toValue } from '@speclynx/apidom-core';
 import { isArrayElement, isStringElement } from '@speclynx/apidom-datamodel';
-import { isCriterionElement, type StepElement } from '@speclynx/apidom-ns-arazzo-1';
+import {
+  isCriterionElement,
+  type CriterionElement,
+  type StepElement,
+} from '@speclynx/apidom-ns-arazzo-1';
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
 import type DocumentRegistry from '../registry/DocumentRegistry.ts';
@@ -25,6 +29,7 @@ import OpenAPIOperationLocatorNormalizer, {
   type OpenAPIOperationLocator,
 } from './OpenAPIOperationLocatorNormalizer.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
+import ResolverError from '../errors/ResolverError.ts';
 import RuntimeExpressionError from '../errors/RuntimeExpressionError.ts';
 import { readAbortSignal, throwIfAborted } from './abort.ts';
 
@@ -199,6 +204,8 @@ class StepExecutor {
       });
     }
 
+    this.assertSuccessCriteria(step);
+
     // locate which operation the step invokes — reduced to a (document, JSON
     // Pointer) locator that the operation executor extracts, normalizes,
     // assembles into a standalone doc, and runs.
@@ -304,8 +311,45 @@ class StepExecutor {
   }
 
   /**
+   * Throws {@link ResolverError} unless the step's `successCriteria` is absent
+   * or a list of Criterion Objects: `malformed-criteria` for one that is
+   * present but not a list, `malformed-criterion` for an entry that is not a
+   * Criterion Object. Skipping an unreadable entry would turn the author's
+   * assertion into a vacuous pass, so it is an authoring error, as an action's
+   * unreadable `criteria` is in {@link ActionResolver}.
+   *
+   * Called before the step's request is sent, so no live side effect precedes
+   * the error. Public because the workflow executor checks every step of a
+   * workflow with it before any of them runs, a step targeting a `workflowId`
+   * included. It passes `workflowId`, which the error then carries: step ids
+   * are only unique within a workflow.
+   */
+  assertSuccessCriteria(step: StepElement, workflowId?: string): void {
+    const criteria = step.successCriteria;
+    if (criteria === undefined) return;
+    const scope = {
+      ...(workflowId === undefined ? {} : { workflowId }),
+      stepId: toValue(step.stepId) as string,
+      target: 'successCriteria',
+    };
+    if (!isArrayElement(criteria)) {
+      throw new ResolverError("A step's `successCriteria` is present but is not a list", {
+        ...scope,
+        reason: 'malformed-criteria',
+      });
+    }
+    if (![...criteria].every(isCriterionElement)) {
+      throw new ResolverError(
+        "A step's `successCriteria` contains an entry that is not a Criterion Object",
+        { ...scope, reason: 'malformed-criterion' },
+      );
+    }
+  }
+
+  /**
    * Evaluates the step's `successCriteria`; all criteria must pass. A step with
-   * no criteria succeeds on a received response.
+   * no criteria succeeds on a received response. An unreadable
+   * `successCriteria` throws, see {@link StepExecutor.assertSuccessCriteria}.
    *
    * Public for the same reason as {@link StepExecutor.selectActions}: a step
    * targeting a `workflowId` is run by the workflow executor and never reaches
@@ -313,18 +357,16 @@ class StepExecutor {
    * assertion about the step and must be evaluated somewhere.
    */
   evaluateCriteria(step: StepElement, context: RuntimeExpressionContext): boolean {
+    this.assertSuccessCriteria(step);
     const criteria = step.successCriteria;
-    // no (or non-array) successCriteria: the step succeeds on a received response.
-    if (!isArrayElement(criteria)) return true;
+    if (criteria === undefined) return true;
 
-    for (const criterion of criteria) {
-      if (!isCriterionElement(criterion)) continue;
-      const met = this.#criterionEvaluator.evaluate(criterion, (expression) =>
+    // assertSuccessCriteria above guarantees every entry is a Criterion Object
+    return ([...criteria] as CriterionElement[]).every((criterion) =>
+      this.#criterionEvaluator.evaluate(criterion, (expression) =>
         this.#evaluate(context, expression),
-      );
-      if (!met) return false;
-    }
-    return true;
+      ),
+    );
   }
 
   /**

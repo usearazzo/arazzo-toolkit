@@ -610,6 +610,10 @@ class WorkflowExecutor {
     // at `#result` where it used to be resolved, means the throw lands before
     // the first request rather than after the last.
     this.#validateWorkflowOutputsShape(workflow, workflowId);
+    // and to every step's `successCriteria`, a step calling a workflow
+    // included: an unreadable assertion found at step three must not cost the
+    // run the requests of steps one and two.
+    for (const step of steps) this.#stepExecutor.assertSuccessCriteria(step, workflowId);
 
     const dependencies = await this.#runDependencies(workflow, invocation, scope);
     if (dependencies.some((dependency) => this.#settledFailed(dependency))) {
