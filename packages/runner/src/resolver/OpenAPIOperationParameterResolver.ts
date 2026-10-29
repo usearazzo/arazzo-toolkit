@@ -38,15 +38,15 @@ import type { StepScope } from './ResolverScope.ts';
  * against an OpenAPI 2.0 operation, bypassing the step's `requestBody`, while
  * an unknown location reaches nothing at all. And two *different* parameters the
  * map reports as colliding cannot both be delivered, so a collision throws
- * rather than silently dropping one — whether they collide on one key (the
- * scheme is not injective: a `querystring` parameter named `header.token` and
- * a header parameter named `token` both produce `header.token`) or across a
- * bare/qualified pair sharing a name (a `querystring` `token` next to a
- * header `token`), where the client would consult the bare name first and
- * silently capture the qualified value. A `querystring` parameter whose name
- * starts with a location the client qualifies keys with (`header.X-Foo`)
- * throws even alone: the client would match its bare key as the qualified key
- * of a declared header `X-Foo` and deliver it there.
+ * rather than silently dropping one — a bare/qualified pair sharing a name (a
+ * `querystring` `token` next to a header `token`), where the client would
+ * consult the bare name first and silently capture the qualified value. A
+ * `querystring` parameter whose name starts with a location the client
+ * qualifies keys with (`header.X-Foo`) throws even alone: the client would
+ * match its bare key as the qualified key of a declared header `X-Foo` and
+ * deliver it there. The same check rejects it, in either order, next to a
+ * header parameter `X-Foo` producing that very key — the scheme is not
+ * injective, so the two could otherwise collide on one key.
  * @public
  */
 class OpenAPIOperationParameterResolver extends StepParameterResolver {

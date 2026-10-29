@@ -230,24 +230,24 @@ describe('OpenAPIOperationParameterResolver', function () {
       assert.strictEqual(Object.getPrototypeOf(result), Object.prototype);
     });
 
-    specify('should throw ResolverError when two parameters collide on one key', function () {
+    specify('should throw ResolverError for two parameters producing one key', function () {
       // the '{in}.{name}' scheme is the client's and is not injective: a
       // querystring parameter named `query.id` and a query parameter named
-      // `id` both produce the key `query.id`. Only one could be delivered, so
-      // the ambiguity is reported rather than resolved silently.
-      assert.throws(
-        () =>
-          resolver.resolve(
-            parameters(
-              { name: 'query.id', in: 'querystring', value: 'a' },
-              { name: 'id', in: 'query', value: 'b' },
-            ),
-            resolve,
-            scope,
-          ),
-        ResolverError,
-        /cannot be delivered unambiguously/,
-      );
+      // `id` both produce the key `query.id`. The querystring one is
+      // misaddressed on its own, so it is rejected whichever claims first.
+      const entries = [
+        { name: 'query.id', in: 'querystring', value: 'a' },
+        { name: 'id', in: 'query', value: 'b' },
+      ];
+      for (const ordered of [entries, [...entries].reverse()]) {
+        const error = assert.throws(
+          () => resolver.resolve(parameters(...ordered), resolve, scope),
+          ResolverError,
+          /reads as the delivery key of another location/,
+        ) as unknown as ResolverError;
+
+        assert.strictEqual(error.target, 'query.id');
+      }
     });
 
     specify(
