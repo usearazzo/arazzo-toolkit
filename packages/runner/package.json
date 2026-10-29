@@ -72,7 +72,7 @@
     "@swaggerexpert/cookie": "^2.0.2",
     "@swaggerexpert/json-pointer": "^3.0.2",
     "@swaggerexpert/jsonpath": "^4.0.5",
-    "@swaggerexpert/media-types": "^1.0.1",
+    "@swaggerexpert/media-types": "^1.0.2",
     "@usearazzo/parser": "1.0.1-alpha.17",
     "@usearazzo/resolver": "1.0.1-alpha.17",
     "@xmldom/xmldom": "^0.9.12",
