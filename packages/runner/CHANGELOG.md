@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.17](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.16...v1.0.1-alpha.17) (2026-10-29)
+
+### Bug Fixes
+
+- **runner:** reject a querystring name shaped like a location key ([#292](https://github.com/usearazzo/arazzo-toolkit/issues/292)) ([de44f5e](https://github.com/usearazzo/arazzo-toolkit/commit/de44f5e4c65b225cb3c6caad9887d5b51fcd02b8)), closes [#280](https://github.com/usearazzo/arazzo-toolkit/issues/280)
+
 ## [1.0.1-alpha.16](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.15...v1.0.1-alpha.16) (2026-10-28)
 
 ### Bug Fixes
