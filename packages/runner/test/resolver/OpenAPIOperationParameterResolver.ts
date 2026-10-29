@@ -230,24 +230,68 @@ describe('OpenAPIOperationParameterResolver', function () {
       assert.strictEqual(Object.getPrototypeOf(result), Object.prototype);
     });
 
-    specify('should throw ResolverError when two parameters collide on one key', function () {
+    specify('should throw ResolverError for two parameters producing one key', function () {
       // the '{in}.{name}' scheme is the client's and is not injective: a
       // querystring parameter named `query.id` and a query parameter named
-      // `id` both produce the key `query.id`. Only one could be delivered, so
-      // the ambiguity is reported rather than resolved silently.
-      assert.throws(
-        () =>
-          resolver.resolve(
-            parameters(
-              { name: 'query.id', in: 'querystring', value: 'a' },
-              { name: 'id', in: 'query', value: 'b' },
-            ),
-            resolve,
-            scope,
-          ),
-        ResolverError,
-        /cannot be delivered unambiguously/,
+      // `id` both produce the key `query.id`. The querystring one is
+      // misaddressed on its own, so it is rejected whichever claims first.
+      const entries = [
+        { name: 'query.id', in: 'querystring', value: 'a' },
+        { name: 'id', in: 'query', value: 'b' },
+      ];
+      for (const ordered of [entries, [...entries].reverse()]) {
+        const error = assert.throws(
+          () => resolver.resolve(parameters(...ordered), resolve, scope),
+          ResolverError,
+          /reads as the delivery key of another location/,
+        ) as unknown as ResolverError;
+
+        assert.strictEqual(error.target, 'query.id');
+      }
+    });
+
+    specify(
+      'should throw for a lone querystring parameter named like a location prefix',
+      function () {
+        // the client matches the bare key `header.X-Foo` as the qualified key of
+        // a declared header `X-Foo`, so the value would be sent as that header.
+        for (const name of [
+          'header.X-Foo',
+          'query.id',
+          'cookie.c',
+          'path.id',
+          'formData.f',
+          'body.b',
+        ]) {
+          const error = assert.throws(
+            () =>
+              resolver.resolve(
+                parameters({ name, in: 'querystring', value: 'q=1' }),
+                resolve,
+                scope,
+              ),
+            ResolverError,
+            /cannot be delivered unambiguously/,
+          ) as unknown as ResolverError;
+
+          assert.strictEqual(error.reason, 'ambiguous-delivery');
+          assert.strictEqual(error.target, name);
+        }
+      },
+    );
+
+    specify('should keep a querystring name whose prefix is not a location', function () {
+      const result = resolver.resolve(
+        parameters(
+          { name: 'filter.name', in: 'querystring', value: 'a' },
+          { name: 'headers', in: 'querystring', value: 'b' },
+          { name: 'Header.X', in: 'querystring', value: 'c' },
+        ),
+        resolve,
+        scope,
       );
+
+      assert.deepEqual(result, { 'filter.name': 'a', headers: 'b', 'Header.X': 'c' });
     });
 
     specify('should throw ResolverError for a present but non-list parameters', function () {

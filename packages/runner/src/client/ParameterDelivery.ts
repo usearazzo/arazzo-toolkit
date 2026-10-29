@@ -1,10 +1,19 @@
 /**
+ * A key starting with an `in` value the client builds qualified keys from —
+ * the OpenAPI locations, including OpenAPI 2.0's `formData` and `body`. The
+ * client qualifies whatever `in` an operation declares, so a non-standard one
+ * is not covered.
+ */
+const QUALIFIED_KEY = /^(?:path|query|header|cookie|formData|body)\./;
+
+/**
  * The outcome of claiming a delivery key: `claimed` for a first claim,
- * `duplicate` when the same `(name, in)` parameter claims its key again, and
- * `collision` when a *different* parameter produces an already-claimed key.
+ * `duplicate` when the same `(name, in)` parameter claims its key again,
+ * `collision` when a *different* parameter produces an already-claimed key,
+ * and `misaddressed` when a bare key has the shape of a qualified one.
  * @internal
  */
-export type ParameterClaimOutcome = 'claimed' | 'duplicate' | 'collision';
+export type ParameterClaimOutcome = 'claimed' | 'duplicate' | 'collision' | 'misaddressed';
 
 /**
  * A parameter claim: the delivery key the `(location, name)` pair encodes to,
@@ -46,8 +55,16 @@ export interface ParameterClaim {
  * alone identifies the claimant. A bare key and a qualified key sharing one
  * name are a collision too, even though the keys differ — the client consults
  * the bare name first for every declared parameter bearing it, so the bare
- * entry would silently capture the qualified one. What to do about a
- * collision is the caller's policy — the map only reports it.
+ * entry would silently capture the qualified one.
+ *
+ * A bare key that starts with a location the client qualifies keys with
+ * (`querystring` named `header.X-Foo`) is misaddressed even when it claims
+ * alone: the client matches it as the qualified key of every declared
+ * parameter that location and the rest of the name identify, so the value
+ * would reach the header `X-Foo` — and `OpenAPIOperationExecutor` reads such
+ * a key the same way when it delivers undeclared parameters. What to do about
+ * a collision or a misaddressed key is the caller's policy — the map only
+ * reports it.
  *
  * Diff this against the vendored bundle's lookup when bumping swagger-client.
  * @internal
@@ -71,16 +88,19 @@ class ParameterDelivery {
    * Only a `claimed` outcome entitles the caller to {@link ParameterDelivery.set}
    * the key; a `duplicate` means the same parameter already holds it, and a
    * `collision` means a different parameter does — on the same key, or across
-   * a bare/qualified pair sharing the name (see the class doc).
+   * a bare/qualified pair sharing the name (see the class doc). A
+   * `misaddressed` bare key is never claimed.
    */
   claim(location: string, name: string): ParameterClaim {
     const key = ParameterDelivery.keyFor(location, name);
+    const bare = key === name;
+    if (bare && QUALIFIED_KEY.test(name)) return { key, outcome: 'misaddressed' };
+
     const claimant = this.#claimedBy.get(key);
     if (claimant !== undefined) {
       return { key, outcome: claimant === location ? 'duplicate' : 'collision' };
     }
 
-    const bare = key === name;
     if (bare ? this.#qualifiedNames.has(name) : this.#bareNames.has(name)) {
       return { key, outcome: 'collision' };
     }
