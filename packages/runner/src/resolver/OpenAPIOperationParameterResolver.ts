@@ -113,17 +113,13 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
       const { key, outcome } = delivery.claim(location, name);
       // the same parameter declared again: the earlier, more specific one won
       if (outcome === 'duplicate') continue;
-      if (outcome === 'misaddressed') {
+      if (outcome !== 'claimed') {
+        const why =
+          outcome === 'collision'
+            ? `collides with another parameter on the delivery key "${key}"`
+            : 'has a name the client reads as the delivery key of another location';
         throw new ResolverError(
-          `Parameter "${name}" (in: ${location}) has a name the client reads as the delivery ` +
-            `key of another location and cannot be delivered unambiguously`,
-          { ...scope, target: name, reason: 'ambiguous-delivery' },
-        );
-      }
-      if (outcome === 'collision') {
-        throw new ResolverError(
-          `Parameter "${name}" (in: ${location}) collides with another parameter on the ` +
-            `delivery key "${key}" and cannot be delivered unambiguously`,
+          `Parameter "${name}" (in: ${location}) ${why} and cannot be delivered unambiguously`,
           { ...scope, target: name, reason: 'ambiguous-delivery' },
         );
       }

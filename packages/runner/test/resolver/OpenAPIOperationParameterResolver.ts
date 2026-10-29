@@ -234,14 +234,13 @@ describe('OpenAPIOperationParameterResolver', function () {
       // the '{in}.{name}' scheme is the client's and is not injective: a
       // querystring parameter named `query.id` and a query parameter named
       // `id` both produce the key `query.id`. Only one could be delivered, so
-      // the ambiguity is reported rather than resolved silently. The query
-      // parameter claims first: the querystring one alone is misaddressed.
+      // the ambiguity is reported rather than resolved silently.
       assert.throws(
         () =>
           resolver.resolve(
             parameters(
-              { name: 'id', in: 'query', value: 'b' },
               { name: 'query.id', in: 'querystring', value: 'a' },
+              { name: 'id', in: 'query', value: 'b' },
             ),
             resolve,
             scope,
