@@ -43,7 +43,10 @@ import type { StepScope } from './ResolverScope.ts';
  * a header parameter named `token` both produce `header.token`) or across a
  * bare/qualified pair sharing a name (a `querystring` `token` next to a
  * header `token`), where the client would consult the bare name first and
- * silently capture the qualified value.
+ * silently capture the qualified value. A `querystring` parameter whose name
+ * starts with a location the client qualifies keys with (`header.X-Foo`)
+ * throws even alone: the client would match its bare key as the qualified key
+ * of a declared header `X-Foo` and deliver it there.
  * @public
  */
 class OpenAPIOperationParameterResolver extends StepParameterResolver {
@@ -110,6 +113,13 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
       const { key, outcome } = delivery.claim(location, name);
       // the same parameter declared again: the earlier, more specific one won
       if (outcome === 'duplicate') continue;
+      if (outcome === 'misaddressed') {
+        throw new ResolverError(
+          `Parameter "${name}" (in: ${location}) has a name the client reads as the delivery ` +
+            `key of another location and cannot be delivered unambiguously`,
+          { ...scope, target: name, reason: 'ambiguous-delivery' },
+        );
+      }
       if (outcome === 'collision') {
         throw new ResolverError(
           `Parameter "${name}" (in: ${location}) collides with another parameter on the ` +
