@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.18](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.17...v1.0.1-alpha.18) (2026-10-30)
+
+### Bug Fixes
+
+- **runner:** wrap document load failures in DocumentLoadError ([#296](https://github.com/usearazzo/arazzo-toolkit/issues/296)) ([ad2307d](https://github.com/usearazzo/arazzo-toolkit/commit/ad2307debcebf05006f1b925fddeca9f138912ea)), closes [#272](https://github.com/usearazzo/arazzo-toolkit/issues/272)
+
 ## [1.0.1-alpha.17](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.16...v1.0.1-alpha.17) (2026-10-29)
 
 ### Bug Fixes
