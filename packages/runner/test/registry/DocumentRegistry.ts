@@ -14,6 +14,8 @@ import {
   OpenAPIDocument,
   ArazzoRunnerError,
   DocumentLoadError,
+  DocumentRegistryProvider,
+  type APIDocument,
 } from '../../src/index.ts';
 import InvalidEntryDocumentError from '../../src/errors/InvalidEntryDocumentError.ts';
 import UnmatchedProviderError from '../../src/errors/UnmatchedProviderError.ts';
@@ -255,44 +257,90 @@ describe('DocumentRegistry', function () {
 
   context('acquire with unreadable document', function () {
     const missingPath = path.join(__dirname, '..', 'fixtures', 'missing.arazzo.yaml');
+    const missingSourcePath = path.join(__dirname, '..', 'fixtures', 'missing.openapi.json');
+    const unresolvableRefPath = path.join(
+      __dirname,
+      '..',
+      'fixtures',
+      'unresolvable-ref.openapi.json',
+    );
+
+    /**
+     * Runs a promise expected to reject and returns what it rejected with.
+     */
+    const captureRejection = async (promise: Promise<unknown>): Promise<unknown> => {
+      try {
+        await promise;
+      } catch (error) {
+        return error;
+      }
+      return assert.fail('expected promise to reject, but it resolved');
+    };
 
     specify('should throw DocumentLoadError for the entry document', async function () {
       const registry = new DocumentRegistry();
 
-      try {
-        await registry.acquireEntryDocument(missingPath);
-        assert.fail('Expected DocumentLoadError to be thrown');
-      } catch (error) {
-        assert.instanceOf(error, DocumentLoadError);
-        assert.strictEqual((error as DocumentLoadError).uri, url.fromFileSystemPath(missingPath));
-        assert.instanceOf((error as DocumentLoadError).cause, Error);
-        assert.notInstanceOf((error as DocumentLoadError).cause, ArazzoRunnerError);
-      }
+      const error = await captureRejection(registry.acquireEntryDocument(missingPath));
+
+      assert.instanceOf(error, DocumentLoadError);
+      assert.strictEqual((error as DocumentLoadError).uri, url.fromFileSystemPath(missingPath));
+      assert.instanceOf((error as DocumentLoadError).cause, Error);
+      assert.notInstanceOf((error as DocumentLoadError).cause, ArazzoRunnerError);
     });
 
     specify('should throw DocumentLoadError for a source description', async function () {
       const registry = new DocumentRegistry();
       await registry.acquireEntryDocument(fixturePath);
-      const missingSourcePath = path.join(__dirname, '..', 'fixtures', 'missing.openapi.json');
 
-      try {
-        await registry.acquire(missingSourcePath);
-        assert.fail('Expected DocumentLoadError to be thrown');
-      } catch (error) {
-        assert.instanceOf(error, DocumentLoadError);
+      const error = await captureRejection(registry.acquire(missingSourcePath));
+
+      assert.instanceOf(error, DocumentLoadError);
+      assert.strictEqual(
+        (error as DocumentLoadError).uri,
+        url.fromFileSystemPath(missingSourcePath),
+      );
+      assert.instanceOf((error as DocumentLoadError).cause, Error);
+    });
+
+    specify('should throw DocumentLoadError for an unresolvable reference', async function () {
+      const registry = new DocumentRegistry();
+
+      const error = await captureRejection(registry.acquire(unresolvableRefPath));
+
+      assert.instanceOf(error, DocumentLoadError);
+      assert.strictEqual(
+        (error as DocumentLoadError).uri,
+        url.fromFileSystemPath(unresolvableRefPath),
+      );
+      assert.instanceOf((error as DocumentLoadError).cause, Error);
+      assert.notInstanceOf((error as DocumentLoadError).cause, ArazzoRunnerError);
+    });
+
+    specify('should pass a runner error from a provider through unwrapped', async function () {
+      const providerError = new UnmatchedProviderError('provider failed');
+      class FailingProvider extends DocumentRegistryProvider {
+        async canProvide(): Promise<boolean> {
+          return true;
+        }
+
+        async provide(): Promise<APIDocument> {
+          throw providerError;
+        }
       }
+      const registry = new DocumentRegistry({ providers: [new FailingProvider()] });
+
+      const error = await captureRejection(registry.acquire(fixturePath));
+
+      assert.strictEqual(error, providerError);
     });
 
     specify('should keep the registry usable', async function () {
       const registry = new DocumentRegistry();
 
-      try {
-        await registry.acquireEntryDocument(missingPath);
-      } catch {
-        // the failure itself is covered above
-      }
+      const error = await captureRejection(registry.acquireEntryDocument(missingPath));
       const document = await registry.acquireEntryDocument(fixturePath);
 
+      assert.instanceOf(error, DocumentLoadError);
       assert.strictEqual(registry.entryDocument, document);
     });
   });

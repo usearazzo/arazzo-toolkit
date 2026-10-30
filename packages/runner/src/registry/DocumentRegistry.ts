@@ -54,6 +54,9 @@ class DocumentRegistry {
    * Acquires a document by URI. Returns cached document if available,
    * otherwise detects the format, loads via the matching provider,
    * caches, and returns it.
+   *
+   * @throws DocumentLoadError - When the document cannot be read or loaded
+   * @throws UnmatchedProviderError - When no provider can load the document
    */
   async acquire(uri: string): Promise<APIDocument> {
     const canonicalURI = this.#canonicalize(uri);
@@ -68,7 +71,7 @@ class DocumentRegistry {
           return document;
         }
       } catch (error: unknown) {
-        // a document that cannot be read or parsed fails in ApiDOM or the parser;
+        // a document that cannot be read or loaded fails in ApiDOM or the parser;
         // wrapping it keeps every load failure inside the runner's error hierarchy.
         if (error instanceof ArazzoRunnerError) throw error;
         throw new DocumentLoadError(`Failed to load the document at "${canonicalURI}"`, {
@@ -117,6 +120,10 @@ class DocumentRegistry {
   /**
    * Acquires the entry Arazzo document and marks it with `isEntry: true`.
    * Validates that the document is an Arazzo specification.
+   *
+   * @throws DocumentLoadError - When the document cannot be read or loaded
+   * @throws UnmatchedProviderError - When no provider can load the document
+   * @throws InvalidEntryDocumentError - When the document is not an Arazzo document
    */
   async acquireEntryDocument(uri: string): Promise<ArazzoDocument> {
     const document = await this.acquire(uri);

@@ -67,7 +67,7 @@ class ArazzoRunner {
    * Loads the entry Arazzo document at `uri` (a file system path or URL) and
    * returns a runner bound to it.
    *
-   * @throws DocumentLoadError - When the document cannot be read or parsed
+   * @throws DocumentLoadError - When the document cannot be read or loaded
    * @throws UnmatchedProviderError - When no provider can load the document
    * @throws InvalidEntryDocumentError - When the document is not an Arazzo
    * document, or the given registry already backs another entry document
