@@ -154,6 +154,7 @@ export { default as NormalizationError } from './errors/NormalizationError.ts';
 export { default as ExtractionError } from './errors/ExtractionError.ts';
 export { default as InvalidEntryDocumentError } from './errors/InvalidEntryDocumentError.ts';
 export { default as UnmatchedProviderError } from './errors/UnmatchedProviderError.ts';
+export { default as DocumentLoadError } from './errors/DocumentLoadError.ts';
 export { default as RuntimeExpressionError } from './errors/RuntimeExpressionError.ts';
 export { default as CriterionError } from './errors/CriterionError.ts';
 export { default as ResolverError } from './errors/ResolverError.ts';

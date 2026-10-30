@@ -8,7 +8,13 @@ import { isArazzoSpecification1Element } from '@speclynx/apidom-ns-arazzo-1';
 import { isOpenApi3_0Element } from '@speclynx/apidom-ns-openapi-3-0';
 import { url } from '@speclynx/apidom-reference/configuration/empty';
 
-import { DocumentRegistry, ArazzoDocument, OpenAPIDocument } from '../../src/index.ts';
+import {
+  DocumentRegistry,
+  ArazzoDocument,
+  OpenAPIDocument,
+  ArazzoRunnerError,
+  DocumentLoadError,
+} from '../../src/index.ts';
 import InvalidEntryDocumentError from '../../src/errors/InvalidEntryDocumentError.ts';
 import UnmatchedProviderError from '../../src/errors/UnmatchedProviderError.ts';
 
@@ -244,6 +250,50 @@ describe('DocumentRegistry', function () {
       } catch (error) {
         assert.instanceOf(error, UnmatchedProviderError);
       }
+    });
+  });
+
+  context('acquire with unreadable document', function () {
+    const missingPath = path.join(__dirname, '..', 'fixtures', 'missing.arazzo.yaml');
+
+    specify('should throw DocumentLoadError for the entry document', async function () {
+      const registry = new DocumentRegistry();
+
+      try {
+        await registry.acquireEntryDocument(missingPath);
+        assert.fail('Expected DocumentLoadError to be thrown');
+      } catch (error) {
+        assert.instanceOf(error, DocumentLoadError);
+        assert.strictEqual((error as DocumentLoadError).uri, url.fromFileSystemPath(missingPath));
+        assert.instanceOf((error as DocumentLoadError).cause, Error);
+        assert.notInstanceOf((error as DocumentLoadError).cause, ArazzoRunnerError);
+      }
+    });
+
+    specify('should throw DocumentLoadError for a source description', async function () {
+      const registry = new DocumentRegistry();
+      await registry.acquireEntryDocument(fixturePath);
+      const missingSourcePath = path.join(__dirname, '..', 'fixtures', 'missing.openapi.json');
+
+      try {
+        await registry.acquire(missingSourcePath);
+        assert.fail('Expected DocumentLoadError to be thrown');
+      } catch (error) {
+        assert.instanceOf(error, DocumentLoadError);
+      }
+    });
+
+    specify('should keep the registry usable', async function () {
+      const registry = new DocumentRegistry();
+
+      try {
+        await registry.acquireEntryDocument(missingPath);
+      } catch {
+        // the failure itself is covered above
+      }
+      const document = await registry.acquireEntryDocument(fixturePath);
+
+      assert.strictEqual(registry.entryDocument, document);
     });
   });
 

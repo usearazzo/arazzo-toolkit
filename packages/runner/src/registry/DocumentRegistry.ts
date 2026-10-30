@@ -5,6 +5,8 @@ import ArazzoDocument from '../document/ArazzoDocument.ts';
 import type DocumentRegistryProvider from './providers/DocumentRegistryProvider.ts';
 import ArazzoDocumentRegistryProvider from './providers/ArazzoDocumentRegistryProvider.ts';
 import OpenAPIDocumentRegistryProvider from './providers/OpenAPIDocumentRegistryProvider.ts';
+import ArazzoRunnerError from '../errors/ArazzoRunnerError.ts';
+import DocumentLoadError from '../errors/DocumentLoadError.ts';
 import InvalidEntryDocumentError from '../errors/InvalidEntryDocumentError.ts';
 import UnmatchedProviderError from '../errors/UnmatchedProviderError.ts';
 import * as constants from '../constants.ts';
@@ -59,10 +61,20 @@ class DocumentRegistry {
     if (cachedDocument) return cachedDocument;
 
     for (const provider of this.#providers) {
-      if (await provider.canProvide(canonicalURI)) {
-        const document = await provider.provide(canonicalURI);
-        this.#set(canonicalURI, document);
-        return document;
+      try {
+        if (await provider.canProvide(canonicalURI)) {
+          const document = await provider.provide(canonicalURI);
+          this.#set(canonicalURI, document);
+          return document;
+        }
+      } catch (error: unknown) {
+        // a document that cannot be read or parsed fails in ApiDOM or the parser;
+        // wrapping it keeps every load failure inside the runner's error hierarchy.
+        if (error instanceof ArazzoRunnerError) throw error;
+        throw new DocumentLoadError(`Failed to load the document at "${canonicalURI}"`, {
+          uri: canonicalURI,
+          cause: error,
+        });
       }
     }
 
