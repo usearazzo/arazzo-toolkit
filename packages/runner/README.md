@@ -44,7 +44,7 @@ A runner is four building blocks, composed bottom-up; `ArazzoRunner` composes th
   <img alt="Runner architecture: WorkflowExecutor runs steps through StepExecutor, which runs OpenAPI operations through OpenAPIOperationExecutor and the HTTPClient; DocumentRegistry supplies documents to all three executors" src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/packages/runner/assets/architecture.svg">
 </p>
 
-A step whose criteria go unmet is a result, not an error: the run resolves with `status: 'failed'`. Only a document that cannot be run as written, a request that cannot be built or sent, or a cancelled run throws.
+A step whose criteria go unmet is a result, not an error: the run resolves with `status: 'failed'`. Only a document that cannot be loaded or run as written, a request that cannot be built or sent, or a cancelled run throws, and every such error extends `ArazzoRunnerError`; a document that cannot be read or loaded (a missing file, an HTTP error, an unresolvable reference) throws `DocumentLoadError` with the underlying failure as its `cause`.
 
 ## Installation
 

@@ -7,6 +7,8 @@ import {
   ArazzoRunner,
   ArazzoDocument,
   DocumentRegistry,
+  ArazzoRunnerError,
+  DocumentLoadError,
   ExecutionError,
   InvalidEntryDocumentError,
   type HTTPClient,
@@ -124,6 +126,15 @@ describe('ArazzoRunner', function () {
       );
 
       assert.instanceOf(error, InvalidEntryDocumentError);
+    });
+
+    specify('should reject an unreadable document with a runner error', async function () {
+      const error = await captureRejection(
+        ArazzoRunner.load(path.join(fixturesPath, 'missing.arazzo.yaml')),
+      );
+
+      assert.instanceOf(error, DocumentLoadError);
+      assert.instanceOf(error, ArazzoRunnerError);
     });
   });
 
