@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.19](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.18...v1.0.1-alpha.19) (2026-10-31)
+
+### Bug Fixes
+
+- **validator:** accept in: querystring in Arazzo 1.1.0 documents ([#299](https://github.com/usearazzo/arazzo-toolkit/issues/299)) ([4d26bbb](https://github.com/usearazzo/arazzo-toolkit/commit/4d26bbb3fd9c08c1345c51d4d6aae99f4e359f28)), closes [speclynx/api-languageservice#97](https://github.com/speclynx/api-languageservice/issues/97) [#281](https://github.com/usearazzo/arazzo-toolkit/issues/281)
+
 ## [1.0.1-alpha.18](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.17...v1.0.1-alpha.18) (2026-10-30)
 
 ### Bug Fixes

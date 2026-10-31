@@ -1,6 +1,6 @@
 {
   "name": "@usearazzo/validator",
-  "version": "1.0.1-alpha.18",
+  "version": "1.0.1-alpha.19",
   "description": "Validator and linter for Arazzo documents: semantic validation, semantic linting, and opt-in JSON Schema validation.",
   "keywords": [
     "arazzo",
@@ -59,7 +59,7 @@
     "@speclynx/apidom-error": "^6.1.2",
     "@speclynx/apidom-ns-arazzo-1": "^6.1.2",
     "@speclynx/apidom-reference": "^6.1.2",
-    "@usearazzo/parser": "1.0.1-alpha.18",
+    "@usearazzo/parser": "1.0.1-alpha.19",
     "ramda": "^0.32.0",
     "type-fest": "^5.10.0",
     "vscode-languageserver-textdocument": "^1.0.16",
