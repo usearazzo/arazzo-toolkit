@@ -362,6 +362,59 @@ describe('validate', function () {
       assert.isTrue(diagnostics.every((d) => d.source === 'Arazzo 1.1 Schema'));
     });
   });
+
+  context('given a parameter location', function () {
+    const withParameterIn = (version: string, location: string) => dedent`
+      arazzo: '${version}'
+      info:
+        title: My Workflow
+        version: '1.0.0'
+      sourceDescriptions:
+        - name: myApi
+          type: openapi
+          url: https://example.com/openapi.json
+      workflows:
+        - workflowId: myWorkflow
+          steps:
+            - stepId: step1
+              operationId: myApi.getUsers
+              parameters:
+                - name: filter
+                  in: ${location}
+                  value: 'a=1&b=2'
+    `;
+    const inEqualsDiagnostics = async (version: string, location: string) => {
+      const textDocument = createTextDocument(
+        'memory://arazzo.yaml',
+        withParameterIn(version, location),
+      );
+      const diagnostics = await validate(textDocument);
+      return diagnostics.filter((d) => d.code === ApilintCodes.ARAZZO_PARAMETER_FIELD_IN_EQUALS);
+    };
+
+    specify('should reject querystring in an Arazzo 1.0.x document', async function () {
+      const diagnostics = await inEqualsDiagnostics('1.0.1', 'querystring');
+      assert.lengthOf(diagnostics, 1);
+      assert.equal(
+        diagnostics[0].message,
+        "in must be one of: 'path', 'query', 'header', 'cookie'",
+      );
+    });
+
+    specify('should accept querystring in an Arazzo 1.1.0 document', async function () {
+      const diagnostics = await inEqualsDiagnostics('1.1.0', 'querystring');
+      assert.lengthOf(diagnostics, 0);
+    });
+
+    specify('should reject an unknown location in an Arazzo 1.1.0 document', async function () {
+      const diagnostics = await inEqualsDiagnostics('1.1.0', 'body');
+      assert.lengthOf(diagnostics, 1);
+      assert.equal(
+        diagnostics[0].message,
+        "in must be one of: 'path', 'query', 'header', 'cookie', 'querystring'",
+      );
+    });
+  });
 });
 
 describe('defaultLanguageServiceContext', function () {
