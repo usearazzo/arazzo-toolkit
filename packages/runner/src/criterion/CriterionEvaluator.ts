@@ -30,6 +30,10 @@ export type CriterionContextResolver = (expression: string) => unknown;
 
 /**
  * Options for the CriterionEvaluator.
+ *
+ * An injected evaluator signals a condition it cannot evaluate by throwing a
+ * {@link CriterionEvaluationError}, which fails the criterion; any other error
+ * it throws, a plain {@link CriterionError} included, propagates.
  * @public
  */
 export interface CriterionEvaluatorOptions {
