@@ -85,11 +85,10 @@ export interface CriterionEvaluatorOptions {
  * condition cannot apply to (non-XML data for `xpath`), or an XPath evaluation
  * error. The type-specific evaluators report these as a {@link CriterionError}
  * with an `invalid-*` reason, which this facade absorbs; any other error they
- * raise propagates. The error is not reported yet, so an unevaluable condition
- * looks like an unmet one. A criterion that is
- * malformed as written still throws: a missing `condition`, an unknown or
- * unreadable `type`, an unsupported expression `version`, or a `context` that
- * is missing or not a runtime expression.
+ * raise propagates. A criterion that is malformed as written still throws: a
+ * missing `condition`, an unknown or unreadable `type`, an unsupported
+ * expression `version`, or a `context` that is missing or not a runtime
+ * expression.
  *
  * The evaluator is agnostic about how runtime expressions are resolved: the
  * caller supplies a {@link CriterionContextResolver} per evaluation, keeping
