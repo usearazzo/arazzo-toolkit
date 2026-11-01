@@ -4,6 +4,9 @@ import { refractCriterion, CriterionExpressionTypeElement } from '@speclynx/apid
 import {
   CriterionEvaluator,
   CriterionError,
+  CriterionErrorReason,
+  CriterionEvaluationError,
+  RegexCriterionEvaluator,
   RuntimeExpressionEvaluator,
   type CriterionContextResolver,
 } from '../../src/index.ts';
@@ -243,6 +246,74 @@ describe('CriterionEvaluator', function () {
     );
   });
 
+  context('evaluation errors (Arazzo 1.1.0)', function () {
+    // a condition that cannot be evaluated MUST evaluate to fail, rather than
+    // abort the step.
+    const cases = [
+      { type: 'simple', condition: '$statusCode ==' },
+      { type: 'regex', context: '$statusCode', condition: '^(200' },
+      { type: 'jsonpath', context: '$response.body', condition: '$[?' },
+      { type: 'xpath', context: '$inputs.xml', condition: '//status[' },
+      // a context the condition cannot apply to: JSON data under an xpath query.
+      { type: 'xpath', context: '$response.body', condition: '//status' },
+    ];
+
+    for (const { type, context: criterionContext, condition } of cases) {
+      specify(
+        `should fail a ${type} criterion "${condition}" on ${criterionContext ?? 'no context'}`,
+        function () {
+          const criterion = refractCriterion({
+            ...(criterionContext === undefined ? {} : { context: criterionContext }),
+            condition,
+            type,
+          });
+
+          assert.isFalse(evaluator.evaluate(criterion, resolve));
+        },
+      );
+    }
+
+    specify('should let a non-criterion error from the resolver propagate', function () {
+      const criterion = refractCriterion({ condition: '$statusCode == 200' });
+      const failure = new Error('resolver failure');
+
+      assert.throws(
+        () =>
+          evaluator.evaluate(criterion, () => {
+            throw failure;
+          }),
+        failure,
+      );
+    });
+
+    specify(
+      'should let a structural CriterionError from an injected evaluator propagate',
+      function () {
+        // only a CriterionEvaluationError marks an unevaluable condition; any other
+        // CriterionError an evaluator raises is not absorbed as an unmet criterion.
+        class MisconfiguredRegexEvaluator extends RegexCriterionEvaluator {
+          override evaluate(): boolean {
+            throw new CriterionError('misconfigured', { reason: CriterionErrorReason.InvalidType });
+          }
+        }
+        const injected = new CriterionEvaluator({ regex: new MisconfiguredRegexEvaluator() });
+        const criterion = refractCriterion({
+          context: '$statusCode',
+          condition: '^200$',
+          type: 'regex',
+        });
+
+        const error = assert.throws(
+          () => injected.evaluate(criterion, resolve),
+          CriterionError,
+        ) as unknown as CriterionError;
+
+        assert.isFalse(error instanceof CriterionEvaluationError);
+        assert.strictEqual(error.reason, CriterionErrorReason.InvalidType);
+      },
+    );
+  });
+
   context('context validation', function () {
     for (const type of ['simple', 'regex']) {
       specify(`should reject a context that is not a runtime expression (${type})`, function () {
@@ -258,7 +329,7 @@ describe('CriterionEvaluator', function () {
           /not a valid runtime expression/,
         ) as unknown as CriterionError;
 
-        assert.strictEqual(error.reason, 'invalid-context');
+        assert.strictEqual(error.reason, CriterionErrorReason.InvalidContext);
       });
     }
 

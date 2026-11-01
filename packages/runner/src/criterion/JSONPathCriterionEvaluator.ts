@@ -1,6 +1,7 @@
 import { evaluate as evaluateJSONPath, JSONPathError } from '@swaggerexpert/jsonpath';
 
-import CriterionError from '../errors/CriterionError.ts';
+import CriterionEvaluationError from '../errors/CriterionEvaluationError.ts';
+import CriterionErrorReason from './CriterionErrorReason.ts';
 
 /**
  * Evaluates a `jsonpath` Arazzo criterion condition against a resolved context value.
@@ -20,7 +21,7 @@ class JSONPathCriterionEvaluator {
    * whether it matched anything.
    *
    * Returns `false` when the context is `null` or `undefined`. Throws
-   * {@link CriterionError} when the condition is not a valid JSONPath query.
+   * {@link CriterionEvaluationError} when the condition is not a valid JSONPath query.
    */
   evaluate(condition: string, context: unknown): boolean {
     if (context === null || context === undefined) return false;
@@ -29,11 +30,11 @@ class JSONPathCriterionEvaluator {
       return evaluateJSONPath(context, condition).length > 0;
     } catch (error: unknown) {
       if (error instanceof JSONPathError) {
-        throw new CriterionError(`Invalid jsonpath criterion condition "${condition}"`, {
+        throw new CriterionEvaluationError(`Invalid jsonpath criterion condition "${condition}"`, {
           cause: error,
           condition,
           type: 'jsonpath',
-          reason: 'invalid-jsonpath',
+          reason: CriterionErrorReason.InvalidJSONPath,
         });
       }
       throw error;

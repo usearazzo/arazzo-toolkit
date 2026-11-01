@@ -1,6 +1,10 @@
 import { assert } from 'chai';
 
-import { XPathCriterionEvaluator, CriterionError } from '../../src/index.ts';
+import {
+  XPathCriterionEvaluator,
+  CriterionEvaluationError,
+  CriterionErrorReason,
+} from '../../src/index.ts';
 
 describe('XPathCriterionEvaluator', function () {
   let evaluator: XPathCriterionEvaluator;
@@ -41,29 +45,37 @@ describe('XPathCriterionEvaluator', function () {
       assert.isFalse(evaluator.evaluate('//status', undefined));
     });
 
-    specify('should throw CriterionError for an invalid XPath query', function () {
-      assert.throws(() => evaluator.evaluate('//[', xml), CriterionError);
+    specify('should throw CriterionEvaluationError for an invalid XPath query', function () {
+      assert.throws(() => evaluator.evaluate('//[', xml), CriterionEvaluationError);
     });
 
-    specify('should throw CriterionError for a non-XML (object) context', function () {
-      assert.throws(() => evaluator.evaluate('//status', { status: 'available' }), CriterionError);
+    specify('should throw CriterionEvaluationError for a non-XML (object) context', function () {
+      const error = assert.throws(
+        () => evaluator.evaluate('//status', { status: 'available' }),
+        CriterionEvaluationError,
+      ) as unknown as CriterionEvaluationError;
+
+      assert.strictEqual(error.reason, CriterionErrorReason.InvalidXPathContext);
     });
 
-    specify('should throw CriterionError for fatally malformed XML', function () {
-      assert.throws(() => evaluator.evaluate('//status', '<a><unclosed>'), CriterionError);
+    specify('should throw CriterionEvaluationError for fatally malformed XML', function () {
+      assert.throws(
+        () => evaluator.evaluate('//status', '<a><unclosed>'),
+        CriterionEvaluationError,
+      );
     });
 
-    specify('should throw CriterionError for recoverably malformed XML', function () {
+    specify('should throw CriterionEvaluationError for recoverably malformed XML', function () {
       // an undefined entity is a recoverable error in xmldom — it does not throw
       // and would otherwise yield a degraded document evaluated silently.
-      assert.throws(() => evaluator.evaluate('//status', '<a>&foo;</a>'), CriterionError);
+      assert.throws(() => evaluator.evaluate('//status', '<a>&foo;</a>'), CriterionEvaluationError);
     });
 
     specify('should reject a JSON object that carries a numeric nodeType as non-XML', function () {
       // must not be mistaken for a parsed DOM node.
       assert.throws(
         () => evaluator.evaluate('//status', { nodeType: 3, status: 'x' }),
-        CriterionError,
+        CriterionEvaluationError,
       );
     });
   });

@@ -2,7 +2,7 @@ import { assert } from 'chai';
 
 import {
   SimpleCriterionEvaluator,
-  CriterionError,
+  CriterionEvaluationError,
   RuntimeExpressionEvaluator,
   type CriterionContextResolver,
 } from '../../src/index.ts';
@@ -54,8 +54,8 @@ describe('SimpleCriterionEvaluator', function () {
       assert.isFalse(evaluator.evaluate('$statusCode == 200', lenient));
     });
 
-    specify('should throw CriterionError for a malformed condition', function () {
-      assert.throws(() => evaluator.evaluate('$statusCode ===', resolve), CriterionError);
+    specify('should throw CriterionEvaluationError for a malformed condition', function () {
+      assert.throws(() => evaluator.evaluate('$statusCode ===', resolve), CriterionEvaluationError);
     });
   });
 });

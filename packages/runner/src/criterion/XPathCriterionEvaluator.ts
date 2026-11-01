@@ -3,7 +3,8 @@
 import fontoxpath from 'fontoxpath';
 import { DOMParser } from '@xmldom/xmldom';
 
-import CriterionError from '../errors/CriterionError.ts';
+import CriterionEvaluationError from '../errors/CriterionEvaluationError.ts';
+import CriterionErrorReason from './CriterionErrorReason.ts';
 
 const { evaluateXPathToBoolean, evaluateXPath } = fontoxpath;
 
@@ -19,7 +20,7 @@ const { evaluateXPathToBoolean, evaluateXPath } = fontoxpath;
  *
  * Only XPath 3.1 is supported (`fontoxpath`'s engine); version gating happens in
  * the facade. Per Arazzo 1.1.0, a `null` or `undefined` context fails the
- * condition. An invalid query throws {@link CriterionError}.
+ * condition. An invalid query throws {@link CriterionEvaluationError}.
  * @public
  */
 class XPathCriterionEvaluator {
@@ -28,7 +29,7 @@ class XPathCriterionEvaluator {
    * its Effective Boolean Value.
    *
    * Returns `false` when the context is `null` or `undefined`. Throws
-   * {@link CriterionError} when the context is not XML or the query is invalid.
+   * {@link CriterionEvaluationError} when the context is not XML or the query is invalid.
    */
   evaluate(condition: string, context: unknown): boolean {
     if (context === null || context === undefined) return false;
@@ -40,11 +41,11 @@ class XPathCriterionEvaluator {
         language: evaluateXPath.XPATH_3_1_LANGUAGE,
       });
     } catch (error: unknown) {
-      throw new CriterionError(`Invalid xpath criterion condition "${condition}"`, {
+      throw new CriterionEvaluationError(`Invalid xpath criterion condition "${condition}"`, {
         cause: error,
         condition,
         type: 'xpath',
-        reason: 'invalid-xpath',
+        reason: CriterionErrorReason.InvalidXPath,
       });
     }
   }
@@ -58,10 +59,10 @@ class XPathCriterionEvaluator {
     if (this.#isNode(context)) return context;
 
     if (typeof context !== 'string') {
-      throw new CriterionError('xpath criterion context is not XML', {
+      throw new CriterionEvaluationError('xpath criterion context is not XML', {
         condition,
         type: 'xpath',
-        reason: 'invalid-context',
+        reason: CriterionErrorReason.InvalidXPathContext,
       });
     }
 
@@ -77,21 +78,21 @@ class XPathCriterionEvaluator {
         },
       }).parseFromString(context, 'text/xml');
       if (parseError !== undefined) {
-        throw new CriterionError('xpath criterion context is not valid XML', {
+        throw new CriterionEvaluationError('xpath criterion context is not valid XML', {
           cause: parseError,
           condition,
           type: 'xpath',
-          reason: 'invalid-context',
+          reason: CriterionErrorReason.InvalidXPathContext,
         });
       }
       return document;
     } catch (error: unknown) {
-      if (error instanceof CriterionError) throw error;
-      throw new CriterionError('xpath criterion context is not valid XML', {
+      if (error instanceof CriterionEvaluationError) throw error;
+      throw new CriterionEvaluationError('xpath criterion context is not valid XML', {
         cause: error,
         condition,
         type: 'xpath',
-        reason: 'invalid-context',
+        reason: CriterionErrorReason.InvalidXPathContext,
       });
     }
   }

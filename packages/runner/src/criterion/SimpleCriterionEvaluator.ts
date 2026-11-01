@@ -3,7 +3,8 @@ import {
   ArazzoCriterionError,
 } from '@swaggerexpert/arazzo-criterion';
 
-import CriterionError from '../errors/CriterionError.ts';
+import CriterionEvaluationError from '../errors/CriterionEvaluationError.ts';
+import CriterionErrorReason from './CriterionErrorReason.ts';
 import type { CriterionContextResolver } from './CriterionEvaluator.ts';
 
 /**
@@ -20,7 +21,7 @@ import type { CriterionContextResolver } from './CriterionEvaluator.ts';
  * compared per the library's rules (e.g. `undefined == x` and relational
  * comparisons are false, matching the spec's "null equals only null"), so a
  * negated or disjunctive condition may still pass. A malformed condition throws
- * {@link CriterionError}.
+ * {@link CriterionEvaluationError}.
  * @public
  */
 class SimpleCriterionEvaluator {
@@ -33,11 +34,11 @@ class SimpleCriterionEvaluator {
       return evaluateSimpleCriterion(condition, { resolve });
     } catch (error: unknown) {
       if (error instanceof ArazzoCriterionError) {
-        throw new CriterionError(`Invalid simple criterion condition "${condition}"`, {
+        throw new CriterionEvaluationError(`Invalid simple criterion condition "${condition}"`, {
           cause: error,
           condition,
           type: 'simple',
-          reason: 'invalid-simple',
+          reason: CriterionErrorReason.InvalidSimple,
         });
       }
       throw error;

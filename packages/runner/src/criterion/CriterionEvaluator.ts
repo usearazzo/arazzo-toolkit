@@ -8,6 +8,8 @@ import {
 import { test as isRuntimeExpression } from '@swaggerexpert/arazzo-runtime-expression';
 
 import CriterionError from '../errors/CriterionError.ts';
+import CriterionEvaluationError from '../errors/CriterionEvaluationError.ts';
+import CriterionErrorReason from './CriterionErrorReason.ts';
 import RegexCriterionEvaluator from './RegexCriterionEvaluator.ts';
 import SimpleCriterionEvaluator from './SimpleCriterionEvaluator.ts';
 import JSONPathCriterionEvaluator from './JSONPathCriterionEvaluator.ts';
@@ -28,6 +30,10 @@ export type CriterionContextResolver = (expression: string) => unknown;
 
 /**
  * Options for the CriterionEvaluator.
+ *
+ * An injected evaluator signals a condition it cannot evaluate by throwing a
+ * {@link CriterionEvaluationError}, which fails the criterion; any other error
+ * it throws, a plain {@link CriterionError} included, propagates.
  * @public
  */
 export interface CriterionEvaluatorOptions {
@@ -59,12 +65,26 @@ export interface CriterionEvaluatorOptions {
  *   pattern to the resolved value.
  * - `jsonpath` — resolves the `context` runtime expression, then applies the
  *   JSONPath query to the resolved value (met when the query matches). Only the
- *   `rfc9535` version is supported (the spec default); an explicit other version
- *   throws.
+ *   `rfc9535` version is supported; an explicit other version throws.
  * - `xpath` — resolves the `context` runtime expression, then applies the XPath
  *   3.1 query to the resolved XML value (met by the Effective Boolean Value).
- *   Only the `xpath-31` version is supported (the spec default); an explicit
- *   other version throws.
+ *   Only the `xpath-31` version is supported; an explicit other version throws.
+ *
+ * Versions follow Arazzo 1.1.0's Expression Type Object: `rfc9535` and
+ * `xpath-31` are allowed values, and an omitted `version` defaults to them.
+ * Arazzo 1.0.x lists neither and requires `version`; this evaluator applies
+ * the 1.1.0 rule to every document, which accepts more but never evaluates a
+ * query under the wrong dialect.
+ *
+ * A condition that cannot be evaluated fails the criterion (`false`), as
+ * Arazzo 1.1.0 requires: a syntax error in the condition, a context the
+ * condition cannot apply to (non-XML data for `xpath`), or an XPath evaluation
+ * error. The type-specific evaluators report these as a
+ * {@link CriterionEvaluationError}, which this facade absorbs; any other error
+ * they raise propagates. A criterion that is malformed as written still throws: a
+ * missing `condition`, an unknown or unreadable `type`, an unsupported
+ * expression `version`, or a `context` that is missing or not a runtime
+ * expression.
  *
  * The evaluator is agnostic about how runtime expressions are resolved: the
  * caller supplies a {@link CriterionContextResolver} per evaluation, keeping
@@ -95,7 +115,7 @@ class CriterionEvaluator {
   evaluate(criterion: CriterionElement, resolve: CriterionContextResolver): boolean {
     if (!isCriterionElement(criterion)) {
       throw new CriterionError('Element is not a Criterion Object', {
-        reason: 'invalid-criterion',
+        reason: CriterionErrorReason.InvalidCriterion,
       });
     }
 
@@ -106,35 +126,42 @@ class CriterionEvaluator {
     // (e.g. an empty regex would match unconditionally), so reject it too.
     if (condition === undefined || condition === '') {
       throw new CriterionError('Criterion is missing a "condition"', {
-        reason: 'missing-condition',
+        reason: CriterionErrorReason.MissingCondition,
       });
     }
 
     const type = this.#resolveType(criterion);
     this.#requireValidContext(criterion, type);
 
-    switch (type) {
-      case 'simple':
-        return this.#simple.evaluate(condition, resolve);
-      case 'regex':
-        return this.#regex.evaluate(condition, this.#resolveContext(criterion, type, resolve));
-      case 'jsonpath':
-        // only rfc9535 is supported; it is the spec default, so an omitted
-        // version is accepted. draft-goessner has different semantics and is
-        // rejected rather than mis-evaluated.
-        this.#requireVersion(criterion, type, condition, 'rfc9535');
-        return this.#jsonpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
-      case 'xpath':
-        // only XPath 3.1 is supported; xpath-31 is the spec default, so an
-        // omitted version is accepted. Older versions are rejected.
-        this.#requireVersion(criterion, type, condition, 'xpath-31');
-        return this.#xpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
-      default:
-        throw new CriterionError(`Unknown criterion type "${type}"`, {
-          condition,
-          type,
-          reason: 'unknown-type',
-        });
+    try {
+      switch (type) {
+        case 'simple':
+          return this.#simple.evaluate(condition, resolve);
+        case 'regex':
+          return this.#regex.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+        case 'jsonpath':
+          // only rfc9535 is supported, Arazzo 1.1.0's default, so an omitted
+          // version is accepted. draft-goessner has different semantics and is
+          // rejected rather than mis-evaluated.
+          this.#requireVersion(criterion, type, condition, 'rfc9535');
+          return this.#jsonpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+        case 'xpath':
+          // only XPath 3.1 is supported; xpath-31 is Arazzo 1.1.0's default, so
+          // an omitted version is accepted. Older versions are rejected.
+          this.#requireVersion(criterion, type, condition, 'xpath-31');
+          return this.#xpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+        default:
+          throw new CriterionError(`Unknown criterion type "${type}"`, {
+            condition,
+            type,
+            reason: CriterionErrorReason.UnknownType,
+          });
+      }
+    } catch (error: unknown) {
+      // Arazzo 1.1.0: a condition that cannot be evaluated MUST evaluate to fail.
+      // The structural checks throw a plain CriterionError and still propagate.
+      if (error instanceof CriterionEvaluationError) return false;
+      throw error;
     }
   }
 
@@ -151,14 +178,16 @@ class CriterionEvaluator {
       return toValue(type.type) as string;
     }
     if (isStringElement(type)) return toValue(type) as string;
-    throw new CriterionError('Criterion has an invalid "type"', { reason: 'invalid-type' });
+    throw new CriterionError('Criterion has an invalid "type"', {
+      reason: CriterionErrorReason.InvalidType,
+    });
   }
 
   /**
    * Extracts the expression `version` from a Criterion Expression Type Object,
    * or `undefined` when no version is declared (a bare-string `type`, or a type
-   * object without a `version`) — in which case the spec default for the type
-   * applies. A `version` that is present but not a string is malformed and
+   * object without a `version`) — in which case Arazzo 1.1.0's default for the
+   * type applies. A `version` that is present but not a string is malformed and
    * throws a {@link CriterionError} rather than silently defaulting.
    */
   #resolveVersion(criterion: CriterionElement): string | undefined {
@@ -170,13 +199,13 @@ class CriterionEvaluator {
       return toValue(type.version) as string;
     }
     throw new CriterionError('Criterion has an invalid expression type "version"', {
-      reason: 'invalid-version',
+      reason: CriterionErrorReason.InvalidVersion,
     });
   }
 
   /**
    * Enforces that a versioned condition type declares only the one version this
-   * runner supports. An omitted version is accepted (it is the spec default);
+   * runner supports. An omitted version is accepted (Arazzo 1.1.0's default);
    * any other declared version throws a {@link CriterionError}.
    */
   #requireVersion(
@@ -190,7 +219,7 @@ class CriterionEvaluator {
       throw new CriterionError(`Unsupported ${type} version "${version}" (only ${supported})`, {
         condition,
         type,
-        reason: 'unsupported-version',
+        reason: CriterionErrorReason.UnsupportedVersion,
       });
     }
   }
@@ -206,7 +235,7 @@ class CriterionEvaluator {
     if (!isStringElement(context) || !isRuntimeExpression(toValue(context) as string)) {
       throw new CriterionError('Criterion has a "context" that is not a valid runtime expression', {
         type,
-        reason: 'invalid-context',
+        reason: CriterionErrorReason.InvalidContext,
       });
     }
   }
@@ -225,7 +254,7 @@ class CriterionEvaluator {
     if (!isStringElement(criterion.context)) {
       throw new CriterionError(`Criterion type "${type}" requires a "context"`, {
         type,
-        reason: 'missing-context',
+        reason: CriterionErrorReason.MissingContext,
       });
     }
     return resolve(toValue(criterion.context) as string);
