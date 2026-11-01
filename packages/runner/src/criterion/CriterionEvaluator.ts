@@ -14,6 +14,20 @@ import JSONPathCriterionEvaluator from './JSONPathCriterionEvaluator.ts';
 import XPathCriterionEvaluator from './XPathCriterionEvaluator.ts';
 
 /**
+ * The `CriterionError` reasons a condition evaluator raises for a condition it
+ * cannot evaluate. Inside the evaluator guard, `invalid-context` can only come
+ * from the xpath evaluator (non-XML data); the facade's own `invalid-context`
+ * check runs before the guard.
+ */
+const EVALUATION_ERROR_REASONS: ReadonlySet<string | undefined> = new Set([
+  'invalid-simple',
+  'invalid-regex',
+  'invalid-jsonpath',
+  'invalid-xpath',
+  'invalid-context',
+]);
+
+/**
  * Resolves a runtime expression to a value during criterion evaluation.
  *
  * Used both for a criterion's `context` (regex/jsonpath/xpath) and for the
@@ -66,11 +80,13 @@ export interface CriterionEvaluatorOptions {
  *   Only the `xpath-31` version is supported (the spec default); an explicit
  *   other version throws.
  *
- * A condition that cannot be evaluated — a syntax error in the condition, a
- * context the condition cannot apply to (non-XML data for `xpath`), or an error
- * raised while evaluating it — fails the criterion (`false`), as Arazzo 1.1.0
- * requires; the type-specific evaluators report these as a
- * {@link CriterionError}, which this facade absorbs. A criterion that is
+ * A condition that cannot be evaluated fails the criterion (`false`), as
+ * Arazzo 1.1.0 requires: a syntax error in the condition, a context the
+ * condition cannot apply to (non-XML data for `xpath`), or an XPath evaluation
+ * error. The type-specific evaluators report these as a {@link CriterionError}
+ * with an `invalid-*` reason, which this facade absorbs; any other error they
+ * raise propagates. The error is not reported yet, so an unevaluable condition
+ * looks like an unmet one. A criterion that is
  * malformed as written still throws: a missing `condition`, an unknown or
  * unreadable `type`, an unsupported expression `version`, or a `context` that
  * is missing or not a runtime expression.
@@ -154,17 +170,19 @@ class CriterionEvaluator {
   }
 
   /**
-   * Runs a condition evaluator, turning a {@link CriterionError} it throws into
-   * an unmet criterion. Per Arazzo 1.1.0, a condition that cannot be evaluated
-   * (a syntax error, an invalid context such as non-XML data for `xpath`, a
-   * runtime evaluation error) MUST evaluate to fail. The structural checks
-   * above run outside this guard, so a malformed criterion still throws.
+   * Runs a condition evaluator, turning a {@link CriterionError} it throws for
+   * an unevaluable condition into an unmet criterion: per Arazzo 1.1.0 such a
+   * condition MUST evaluate to fail. The match is on the error's `reason`, so a
+   * `CriterionError` with any other reason (e.g. from an injected evaluator)
+   * still throws, as do the structural checks, which run outside this guard.
    */
   #failOnEvaluationError(evaluate: () => boolean): boolean {
     try {
       return evaluate();
     } catch (error: unknown) {
-      if (error instanceof CriterionError) return false;
+      if (error instanceof CriterionError && EVALUATION_ERROR_REASONS.has(error.reason)) {
+        return false;
+      }
       throw error;
     }
   }

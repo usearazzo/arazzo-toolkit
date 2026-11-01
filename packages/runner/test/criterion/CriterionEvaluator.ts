@@ -4,6 +4,7 @@ import { refractCriterion, CriterionExpressionTypeElement } from '@speclynx/apid
 import {
   CriterionEvaluator,
   CriterionError,
+  RegexCriterionEvaluator,
   RuntimeExpressionEvaluator,
   type CriterionContextResolver,
 } from '../../src/index.ts';
@@ -281,6 +282,29 @@ describe('CriterionEvaluator', function () {
           }),
         failure,
       );
+    });
+
+    specify('should let a CriterionError with another reason propagate', function () {
+      // an injected evaluator's own CriterionError is not an evaluation error of
+      // the condition, so it must not be absorbed as an unmet criterion.
+      class MisconfiguredRegexEvaluator extends RegexCriterionEvaluator {
+        override evaluate(): boolean {
+          throw new CriterionError('misconfigured', { reason: 'misconfigured' });
+        }
+      }
+      const injected = new CriterionEvaluator({ regex: new MisconfiguredRegexEvaluator() });
+      const criterion = refractCriterion({
+        context: '$statusCode',
+        condition: '^200$',
+        type: 'regex',
+      });
+
+      const error = assert.throws(
+        () => injected.evaluate(criterion, resolve),
+        CriterionError,
+      ) as unknown as CriterionError;
+
+      assert.strictEqual(error.reason, 'misconfigured');
     });
   });
 
