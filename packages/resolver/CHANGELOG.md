@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.20](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.19...v1.0.1-alpha.20) (2026-11-01)
+
+**Note:** Version bump only for package @usearazzo/resolver
+
 ## [1.0.1-alpha.19](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.18...v1.0.1-alpha.19) (2026-10-31)
 
 ### Bug Fixes

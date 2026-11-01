@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.20](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.19...v1.0.1-alpha.20) (2026-11-01)
+
+### Bug Fixes
+
+- **runner:** fail a criterion that cannot be evaluated ([#301](https://github.com/usearazzo/arazzo-toolkit/issues/301)) ([efd7de6](https://github.com/usearazzo/arazzo-toolkit/commit/efd7de612de65bce741e88353c5f7a7cca5279de)), closes [#231](https://github.com/usearazzo/arazzo-toolkit/issues/231) [#120](https://github.com/usearazzo/arazzo-toolkit/issues/120) [#231](https://github.com/usearazzo/arazzo-toolkit/issues/231)
+
+### BREAKING CHANGES
+
+- **runner:** XPathCriterionEvaluator reports a non-XML context with
+  reason invalid-xpath-context instead of invalid-context, and
+  CriterionError.reason is typed as CriterionErrorReason instead of string.
+
 ## [1.0.1-alpha.19](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.18...v1.0.1-alpha.19) (2026-10-31)
 
 ### Bug Fixes
