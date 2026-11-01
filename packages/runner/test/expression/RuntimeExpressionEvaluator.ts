@@ -422,6 +422,48 @@ describe('RuntimeExpressionEvaluator', function () {
     );
   });
 
+  context('$sourceDescriptions field-name collisions', function () {
+    // an operationId or workflowId named like a Source Description Object field
+    // must resolve to the operation or workflow, not to the field.
+    let entryDoc: ArazzoDocument;
+    let evaluator: RuntimeExpressionEvaluator;
+
+    before(async function () {
+      const registry = new DocumentRegistry();
+      entryDoc = await registry.acquireEntryDocument(
+        path.join(fixturesPath, 'source-field-collision.arazzo.yaml'),
+      );
+      await registry.acquire(entryDoc.resolveSourceDescriptionURI('collisionAPI')!);
+      await registry.acquire(entryDoc.resolveSourceDescriptionURI('collisionWorkflows')!);
+      evaluator = new RuntimeExpressionEvaluator(
+        {},
+        { document: entryDoc, registry, strict: false },
+      );
+    });
+
+    specify('should resolve an operationId named url to the operation', function () {
+      const operation = evaluator.evaluate('$sourceDescriptions.collisionAPI.url') as {
+        operationId?: string;
+      };
+      assert.strictEqual(operation?.operationId, 'url');
+    });
+
+    specify('should resolve a workflowId named type to the workflow', function () {
+      const workflow = evaluator.evaluate('$sourceDescriptions.collisionWorkflows.type') as {
+        workflowId?: string;
+      };
+      assert.strictEqual(workflow?.workflowId, 'type');
+    });
+
+    specify('should still resolve non-colliding fields of the same source', function () {
+      assert.strictEqual(evaluator.evaluate('$sourceDescriptions.collisionAPI.type'), 'openapi');
+      assert.strictEqual(
+        evaluator.evaluate('$sourceDescriptions.collisionWorkflows.url'),
+        entryDoc.resolveSourceDescriptionURI('collisionWorkflows'),
+      );
+    });
+  });
+
   context('workflow step references', function () {
     // `$workflows.{workflowId}.steps.{stepId}` (Arazzo 1.1.0) locates a step as
     // authored — in the evaluator's document, or via `$sourceDescriptions` in a
