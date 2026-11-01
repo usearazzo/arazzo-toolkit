@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { assert } from 'chai';
+import { toValue } from '@speclynx/apidom-core';
 import { refractStep, type StepElement } from '@speclynx/apidom-ns-arazzo-1';
 
 import {
@@ -400,6 +401,48 @@ describe('StepExecutor', function () {
         assert.include(requests[0].url, '/pet/findByStatus');
       },
     );
+
+    specify(
+      'should fail the step, not abort it, when a successCriterion cannot be evaluated',
+      async function () {
+        const step = refractStep({
+          stepId: 'findPets',
+          operationId: 'findPetsByStatus',
+          parameters: [{ name: 'status', in: 'query', value: 'available' }],
+          successCriteria: [{ context: '$statusCode', condition: '^(200', type: 'regex' }],
+          onFailure: [{ name: 'giveUp', type: 'end' }],
+        }) as StepElement;
+        const { executor } = makeExecutor();
+
+        const result = await executor.execute(step, state());
+
+        assert.isFalse(result.successful);
+        assert.strictEqual(toValue(result.action?.name), 'giveUp');
+      },
+    );
+
+    specify('should not match an action whose criterion cannot be evaluated', async function () {
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        successCriteria: [{ condition: '$statusCode == 200' }],
+        onFailure: [
+          {
+            name: 'unevaluable',
+            type: 'end',
+            criteria: [{ context: '$response.body', condition: '//status', type: 'xpath' }],
+          },
+          { name: 'fallback', type: 'end' },
+        ],
+      }) as StepElement;
+      const { executor } = makeExecutor(notFoundResponse);
+
+      const result = await executor.execute(step, state());
+
+      assert.isFalse(result.successful);
+      assert.strictEqual(toValue(result.action?.name), 'fallback');
+    });
   });
 
   context('cancellation', function () {

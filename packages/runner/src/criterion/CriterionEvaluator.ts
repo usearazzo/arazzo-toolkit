@@ -66,6 +66,15 @@ export interface CriterionEvaluatorOptions {
  *   Only the `xpath-31` version is supported (the spec default); an explicit
  *   other version throws.
  *
+ * A condition that cannot be evaluated — a syntax error in the condition, a
+ * context the condition cannot apply to (non-XML data for `xpath`), or an error
+ * raised while evaluating it — fails the criterion (`false`), as Arazzo 1.1.0
+ * requires; the type-specific evaluators report these as a
+ * {@link CriterionError}, which this facade absorbs. A criterion that is
+ * malformed as written still throws: a missing `condition`, an unknown or
+ * unreadable `type`, an unsupported expression `version`, or a `context` that
+ * is missing or not a runtime expression.
+ *
  * The evaluator is agnostic about how runtime expressions are resolved: the
  * caller supplies a {@link CriterionContextResolver} per evaluation, keeping
  * runtime-state, document, and registry concerns in the runtime expression
@@ -115,26 +124,48 @@ class CriterionEvaluator {
 
     switch (type) {
       case 'simple':
-        return this.#simple.evaluate(condition, resolve);
-      case 'regex':
-        return this.#regex.evaluate(condition, this.#resolveContext(criterion, type, resolve));
-      case 'jsonpath':
+        return this.#failOnEvaluationError(() => this.#simple.evaluate(condition, resolve));
+      case 'regex': {
+        const context = this.#resolveContext(criterion, type, resolve);
+        return this.#failOnEvaluationError(() => this.#regex.evaluate(condition, context));
+      }
+      case 'jsonpath': {
         // only rfc9535 is supported; it is the spec default, so an omitted
         // version is accepted. draft-goessner has different semantics and is
         // rejected rather than mis-evaluated.
         this.#requireVersion(criterion, type, condition, 'rfc9535');
-        return this.#jsonpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
-      case 'xpath':
+        const context = this.#resolveContext(criterion, type, resolve);
+        return this.#failOnEvaluationError(() => this.#jsonpath.evaluate(condition, context));
+      }
+      case 'xpath': {
         // only XPath 3.1 is supported; xpath-31 is the spec default, so an
         // omitted version is accepted. Older versions are rejected.
         this.#requireVersion(criterion, type, condition, 'xpath-31');
-        return this.#xpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+        const context = this.#resolveContext(criterion, type, resolve);
+        return this.#failOnEvaluationError(() => this.#xpath.evaluate(condition, context));
+      }
       default:
         throw new CriterionError(`Unknown criterion type "${type}"`, {
           condition,
           type,
           reason: 'unknown-type',
         });
+    }
+  }
+
+  /**
+   * Runs a condition evaluator, turning a {@link CriterionError} it throws into
+   * an unmet criterion. Per Arazzo 1.1.0, a condition that cannot be evaluated
+   * (a syntax error, an invalid context such as non-XML data for `xpath`, a
+   * runtime evaluation error) MUST evaluate to fail. The structural checks
+   * above run outside this guard, so a malformed criterion still throws.
+   */
+  #failOnEvaluationError(evaluate: () => boolean): boolean {
+    try {
+      return evaluate();
+    } catch (error: unknown) {
+      if (error instanceof CriterionError) return false;
+      throw error;
     }
   }
 

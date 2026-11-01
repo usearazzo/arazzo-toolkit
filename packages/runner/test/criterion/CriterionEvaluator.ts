@@ -243,6 +243,47 @@ describe('CriterionEvaluator', function () {
     );
   });
 
+  context('evaluation errors (Arazzo 1.1.0)', function () {
+    // a condition that cannot be evaluated MUST evaluate to fail, rather than
+    // abort the step.
+    const cases = [
+      { type: 'simple', condition: '$statusCode ==' },
+      { type: 'regex', context: '$statusCode', condition: '^(200' },
+      { type: 'jsonpath', context: '$response.body', condition: '$[?' },
+      { type: 'xpath', context: '$inputs.xml', condition: '//status[' },
+      // a context the condition cannot apply to: JSON data under an xpath query.
+      { type: 'xpath', context: '$response.body', condition: '//status' },
+    ];
+
+    for (const { type, context: criterionContext, condition } of cases) {
+      specify(
+        `should fail a ${type} criterion "${condition}" on ${criterionContext ?? 'no context'}`,
+        function () {
+          const criterion = refractCriterion({
+            ...(criterionContext === undefined ? {} : { context: criterionContext }),
+            condition,
+            type,
+          });
+
+          assert.isFalse(evaluator.evaluate(criterion, resolve));
+        },
+      );
+    }
+
+    specify('should let a non-criterion error from the resolver propagate', function () {
+      const criterion = refractCriterion({ condition: '$statusCode == 200' });
+      const failure = new Error('resolver failure');
+
+      assert.throws(
+        () =>
+          evaluator.evaluate(criterion, () => {
+            throw failure;
+          }),
+        failure,
+      );
+    });
+  });
+
   context('context validation', function () {
     for (const type of ['simple', 'regex']) {
       specify(`should reject a context that is not a runtime expression (${type})`, function () {
