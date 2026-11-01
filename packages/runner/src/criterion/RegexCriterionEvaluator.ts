@@ -1,4 +1,5 @@
-import CriterionError from '../errors/CriterionError.ts';
+import CriterionEvaluationError from '../errors/CriterionEvaluationError.ts';
+import CriterionErrorReason from './CriterionErrorReason.ts';
 
 /**
  * Evaluates a `regex` Arazzo criterion condition against a resolved context value.
@@ -27,7 +28,7 @@ class RegexCriterionEvaluator {
    * Tests the resolved context value against the regular expression `condition`.
    *
    * The context is coerced to a string before matching. Returns `false` when the
-   * context is `null` or `undefined`. Throws {@link CriterionError} when the
+   * context is `null` or `undefined`. Throws {@link CriterionEvaluationError} when the
    * condition is not a valid regular expression.
    */
   evaluate(condition: string, context: unknown): boolean {
@@ -37,11 +38,11 @@ class RegexCriterionEvaluator {
     try {
       regExp = new RegExp(condition);
     } catch (error: unknown) {
-      throw new CriterionError(`Invalid regex criterion condition "${condition}"`, {
+      throw new CriterionEvaluationError(`Invalid regex criterion condition "${condition}"`, {
         cause: error,
         condition,
         type: 'regex',
-        reason: 'invalid-regex',
+        reason: CriterionErrorReason.InvalidRegex,
       });
     }
 

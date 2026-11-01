@@ -1,6 +1,6 @@
 import { assert } from 'chai';
 
-import { RegexCriterionEvaluator, CriterionError } from '../../src/index.ts';
+import { RegexCriterionEvaluator, CriterionEvaluationError } from '../../src/index.ts';
 
 describe('RegexCriterionEvaluator', function () {
   let evaluator: RegexCriterionEvaluator;
@@ -46,8 +46,8 @@ describe('RegexCriterionEvaluator', function () {
       assert.isFalse(evaluator.evaluate('^.*$', undefined));
     });
 
-    specify('should throw CriterionError for an invalid regular expression', function () {
-      assert.throws(() => evaluator.evaluate('(', 'x'), CriterionError);
+    specify('should throw CriterionEvaluationError for an invalid regular expression', function () {
+      assert.throws(() => evaluator.evaluate('(', 'x'), CriterionEvaluationError);
     });
 
     specify('should match against a non-scalar context via its JSON serialization', function () {

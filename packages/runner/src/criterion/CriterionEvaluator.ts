@@ -8,24 +8,12 @@ import {
 import { test as isRuntimeExpression } from '@swaggerexpert/arazzo-runtime-expression';
 
 import CriterionError from '../errors/CriterionError.ts';
+import CriterionEvaluationError from '../errors/CriterionEvaluationError.ts';
+import CriterionErrorReason from './CriterionErrorReason.ts';
 import RegexCriterionEvaluator from './RegexCriterionEvaluator.ts';
 import SimpleCriterionEvaluator from './SimpleCriterionEvaluator.ts';
 import JSONPathCriterionEvaluator from './JSONPathCriterionEvaluator.ts';
 import XPathCriterionEvaluator from './XPathCriterionEvaluator.ts';
-
-/**
- * The `CriterionError` reasons a condition evaluator raises for a condition it
- * cannot evaluate. Inside the evaluator guard, `invalid-context` can only come
- * from the xpath evaluator (non-XML data); the facade's own `invalid-context`
- * check runs before the guard.
- */
-const EVALUATION_ERROR_REASONS: ReadonlySet<string | undefined> = new Set([
-  'invalid-simple',
-  'invalid-regex',
-  'invalid-jsonpath',
-  'invalid-xpath',
-  'invalid-context',
-]);
 
 /**
  * Resolves a runtime expression to a value during criterion evaluation.
@@ -83,9 +71,9 @@ export interface CriterionEvaluatorOptions {
  * A condition that cannot be evaluated fails the criterion (`false`), as
  * Arazzo 1.1.0 requires: a syntax error in the condition, a context the
  * condition cannot apply to (non-XML data for `xpath`), or an XPath evaluation
- * error. The type-specific evaluators report these as a {@link CriterionError}
- * with an `invalid-*` reason, which this facade absorbs; any other error they
- * raise propagates. A criterion that is malformed as written still throws: a
+ * error. The type-specific evaluators report these as a
+ * {@link CriterionEvaluationError}, which this facade absorbs; any other error
+ * they raise propagates. A criterion that is malformed as written still throws: a
  * missing `condition`, an unknown or unreadable `type`, an unsupported
  * expression `version`, or a `context` that is missing or not a runtime
  * expression.
@@ -119,7 +107,7 @@ class CriterionEvaluator {
   evaluate(criterion: CriterionElement, resolve: CriterionContextResolver): boolean {
     if (!isCriterionElement(criterion)) {
       throw new CriterionError('Element is not a Criterion Object', {
-        reason: 'invalid-criterion',
+        reason: CriterionErrorReason.InvalidCriterion,
       });
     }
 
@@ -130,58 +118,41 @@ class CriterionEvaluator {
     // (e.g. an empty regex would match unconditionally), so reject it too.
     if (condition === undefined || condition === '') {
       throw new CriterionError('Criterion is missing a "condition"', {
-        reason: 'missing-condition',
+        reason: CriterionErrorReason.MissingCondition,
       });
     }
 
     const type = this.#resolveType(criterion);
     this.#requireValidContext(criterion, type);
 
-    switch (type) {
-      case 'simple':
-        return this.#failOnEvaluationError(() => this.#simple.evaluate(condition, resolve));
-      case 'regex': {
-        const context = this.#resolveContext(criterion, type, resolve);
-        return this.#failOnEvaluationError(() => this.#regex.evaluate(condition, context));
-      }
-      case 'jsonpath': {
-        // only rfc9535 is supported; it is the spec default, so an omitted
-        // version is accepted. draft-goessner has different semantics and is
-        // rejected rather than mis-evaluated.
-        this.#requireVersion(criterion, type, condition, 'rfc9535');
-        const context = this.#resolveContext(criterion, type, resolve);
-        return this.#failOnEvaluationError(() => this.#jsonpath.evaluate(condition, context));
-      }
-      case 'xpath': {
-        // only XPath 3.1 is supported; xpath-31 is the spec default, so an
-        // omitted version is accepted. Older versions are rejected.
-        this.#requireVersion(criterion, type, condition, 'xpath-31');
-        const context = this.#resolveContext(criterion, type, resolve);
-        return this.#failOnEvaluationError(() => this.#xpath.evaluate(condition, context));
-      }
-      default:
-        throw new CriterionError(`Unknown criterion type "${type}"`, {
-          condition,
-          type,
-          reason: 'unknown-type',
-        });
-    }
-  }
-
-  /**
-   * Runs a condition evaluator, turning a {@link CriterionError} it throws for
-   * an unevaluable condition into an unmet criterion: per Arazzo 1.1.0 such a
-   * condition MUST evaluate to fail. The match is on the error's `reason`, so a
-   * `CriterionError` with any other reason (e.g. from an injected evaluator)
-   * still throws, as do the structural checks, which run outside this guard.
-   */
-  #failOnEvaluationError(evaluate: () => boolean): boolean {
     try {
-      return evaluate();
-    } catch (error: unknown) {
-      if (error instanceof CriterionError && EVALUATION_ERROR_REASONS.has(error.reason)) {
-        return false;
+      switch (type) {
+        case 'simple':
+          return this.#simple.evaluate(condition, resolve);
+        case 'regex':
+          return this.#regex.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+        case 'jsonpath':
+          // only rfc9535 is supported; it is the spec default, so an omitted
+          // version is accepted. draft-goessner has different semantics and is
+          // rejected rather than mis-evaluated.
+          this.#requireVersion(criterion, type, condition, 'rfc9535');
+          return this.#jsonpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+        case 'xpath':
+          // only XPath 3.1 is supported; xpath-31 is the spec default, so an
+          // omitted version is accepted. Older versions are rejected.
+          this.#requireVersion(criterion, type, condition, 'xpath-31');
+          return this.#xpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+        default:
+          throw new CriterionError(`Unknown criterion type "${type}"`, {
+            condition,
+            type,
+            reason: CriterionErrorReason.UnknownType,
+          });
       }
+    } catch (error: unknown) {
+      // Arazzo 1.1.0: a condition that cannot be evaluated MUST evaluate to fail.
+      // The structural checks throw a plain CriterionError and still propagate.
+      if (error instanceof CriterionEvaluationError) return false;
       throw error;
     }
   }
@@ -199,7 +170,9 @@ class CriterionEvaluator {
       return toValue(type.type) as string;
     }
     if (isStringElement(type)) return toValue(type) as string;
-    throw new CriterionError('Criterion has an invalid "type"', { reason: 'invalid-type' });
+    throw new CriterionError('Criterion has an invalid "type"', {
+      reason: CriterionErrorReason.InvalidType,
+    });
   }
 
   /**
@@ -218,7 +191,7 @@ class CriterionEvaluator {
       return toValue(type.version) as string;
     }
     throw new CriterionError('Criterion has an invalid expression type "version"', {
-      reason: 'invalid-version',
+      reason: CriterionErrorReason.InvalidVersion,
     });
   }
 
@@ -238,7 +211,7 @@ class CriterionEvaluator {
       throw new CriterionError(`Unsupported ${type} version "${version}" (only ${supported})`, {
         condition,
         type,
-        reason: 'unsupported-version',
+        reason: CriterionErrorReason.UnsupportedVersion,
       });
     }
   }
@@ -254,7 +227,7 @@ class CriterionEvaluator {
     if (!isStringElement(context) || !isRuntimeExpression(toValue(context) as string)) {
       throw new CriterionError('Criterion has a "context" that is not a valid runtime expression', {
         type,
-        reason: 'invalid-context',
+        reason: CriterionErrorReason.InvalidContext,
       });
     }
   }
@@ -273,7 +246,7 @@ class CriterionEvaluator {
     if (!isStringElement(criterion.context)) {
       throw new CriterionError(`Criterion type "${type}" requires a "context"`, {
         type,
-        reason: 'missing-context',
+        reason: CriterionErrorReason.MissingContext,
       });
     }
     return resolve(toValue(criterion.context) as string);

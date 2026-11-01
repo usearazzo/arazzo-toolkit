@@ -1,6 +1,6 @@
 import { assert } from 'chai';
 
-import { JSONPathCriterionEvaluator, CriterionError } from '../../src/index.ts';
+import { JSONPathCriterionEvaluator, CriterionEvaluationError } from '../../src/index.ts';
 
 describe('JSONPathCriterionEvaluator', function () {
   let evaluator: JSONPathCriterionEvaluator;
@@ -35,8 +35,8 @@ describe('JSONPathCriterionEvaluator', function () {
       assert.isFalse(evaluator.evaluate('$', undefined));
     });
 
-    specify('should throw CriterionError for an invalid JSONPath query', function () {
-      assert.throws(() => evaluator.evaluate('$[[[', { a: 1 }), CriterionError);
+    specify('should throw CriterionEvaluationError for an invalid JSONPath query', function () {
+      assert.throws(() => evaluator.evaluate('$[[[', { a: 1 }), CriterionEvaluationError);
     });
   });
 });

@@ -4,6 +4,8 @@ import { refractCriterion, CriterionExpressionTypeElement } from '@speclynx/apid
 import {
   CriterionEvaluator,
   CriterionError,
+  CriterionErrorReason,
+  CriterionEvaluationError,
   RegexCriterionEvaluator,
   RuntimeExpressionEvaluator,
   type CriterionContextResolver,
@@ -284,28 +286,32 @@ describe('CriterionEvaluator', function () {
       );
     });
 
-    specify('should let a CriterionError with another reason propagate', function () {
-      // an injected evaluator's own CriterionError is not an evaluation error of
-      // the condition, so it must not be absorbed as an unmet criterion.
-      class MisconfiguredRegexEvaluator extends RegexCriterionEvaluator {
-        override evaluate(): boolean {
-          throw new CriterionError('misconfigured', { reason: 'misconfigured' });
+    specify(
+      'should let a structural CriterionError from an injected evaluator propagate',
+      function () {
+        // only a CriterionEvaluationError marks an unevaluable condition; any other
+        // CriterionError an evaluator raises is not absorbed as an unmet criterion.
+        class MisconfiguredRegexEvaluator extends RegexCriterionEvaluator {
+          override evaluate(): boolean {
+            throw new CriterionError('misconfigured', { reason: CriterionErrorReason.InvalidType });
+          }
         }
-      }
-      const injected = new CriterionEvaluator({ regex: new MisconfiguredRegexEvaluator() });
-      const criterion = refractCriterion({
-        context: '$statusCode',
-        condition: '^200$',
-        type: 'regex',
-      });
+        const injected = new CriterionEvaluator({ regex: new MisconfiguredRegexEvaluator() });
+        const criterion = refractCriterion({
+          context: '$statusCode',
+          condition: '^200$',
+          type: 'regex',
+        });
 
-      const error = assert.throws(
-        () => injected.evaluate(criterion, resolve),
-        CriterionError,
-      ) as unknown as CriterionError;
+        const error = assert.throws(
+          () => injected.evaluate(criterion, resolve),
+          CriterionError,
+        ) as unknown as CriterionError;
 
-      assert.strictEqual(error.reason, 'misconfigured');
-    });
+        assert.isFalse(error instanceof CriterionEvaluationError);
+        assert.strictEqual(error.reason, CriterionErrorReason.InvalidType);
+      },
+    );
   });
 
   context('context validation', function () {
@@ -323,7 +329,7 @@ describe('CriterionEvaluator', function () {
           /not a valid runtime expression/,
         ) as unknown as CriterionError;
 
-        assert.strictEqual(error.reason, 'invalid-context');
+        assert.strictEqual(error.reason, CriterionErrorReason.InvalidContext);
       });
     }
 
