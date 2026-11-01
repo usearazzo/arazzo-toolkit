@@ -1,0 +1,21 @@
+arazzo: "1.0.1"
+info:
+  title: Source description field-name collisions
+  version: "1.0.0"
+  summary: >-
+    Source descriptions whose referenced documents declare an operationId
+    (`url`) and a workflowId (`type`) named like Source Description Object
+    fields, so $sourceDescriptions.{name}.{reference} must prefer the
+    operation or workflow over the field.
+sourceDescriptions:
+  - name: collisionAPI
+    url: ./source-field-collision.openapi.json
+    type: openapi
+  - name: collisionWorkflows
+    url: ./source-field-collision-child.arazzo.yaml
+    type: arazzo
+workflows:
+  - workflowId: entry
+    steps:
+      - stepId: only
+        operationId: url

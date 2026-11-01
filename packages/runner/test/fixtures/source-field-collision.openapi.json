@@ -1,0 +1,19 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Source description field-name collisions",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/url": {
+      "get": {
+        "operationId": "url",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  }
+}
