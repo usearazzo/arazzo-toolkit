@@ -130,7 +130,6 @@ export { default as StepExecutor } from './executor/StepExecutor.ts';
 export type {
   StepExecutorOptions,
   StepExecutionResult,
-  StepActionSelection,
   CriterionRecord,
   ContextSource,
 } from './executor/StepExecutor.ts';

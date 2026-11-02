@@ -124,22 +124,6 @@ export interface CriterionRecord {
 }
 
 /**
- * The `onSuccess` / `onFailure` actions a step selected, with the outcome of
- * every action criterion evaluated to select them.
- * @public
- */
-export interface StepActionSelection {
-  /**
-   * Every action whose criteria matched the outcome, in list order.
-   */
-  readonly matchedActions: readonly SelectedAction[];
-  /**
-   * One record per action criterion evaluated, in list order.
-   */
-  readonly criteria: readonly CriterionRecord[];
-}
-
-/**
  * The outcome of executing a single step.
  * @public
  */
@@ -465,7 +449,10 @@ class StepExecutor {
     step: StepElement,
     successful: boolean,
     context: RuntimeExpressionContext,
-  ): StepActionSelection {
+  ): {
+    readonly matchedActions: readonly SelectedAction[];
+    readonly criteria: readonly CriterionRecord[];
+  } {
     const source = successful ? 'onSuccess' : 'onFailure';
     const criteria: CriterionRecord[] = [];
     const isCriterionMet: CriterionPredicate = (criterion, action) => {
@@ -503,12 +490,9 @@ class StepExecutor {
       if (error === undefined) return { condition, met };
       return { condition, met, error: { reason: error.reason, message: error.message } };
     } catch (error: unknown) {
-      // a condition on an HTTP exchange cannot hold in a step that calls a
-      // workflow: it made no HTTP call. The criterion fails like any other
-      // unevaluable condition: a successCriterion fails the step, which then
-      // takes its failure path, and an action criterion (actions are shared,
-      // inherited from the workflow or reused from components) does not match.
-      // The recorded error keeps the authoring mistake visible.
+      // a step that calls a workflow made no HTTP call, so a condition on one
+      // fails like any unevaluable condition; the recorded error keeps the
+      // authoring mistake visible.
       if (error instanceof RuntimeExpressionError && error.reason === 'unavailable-expression') {
         return { condition, met: false, error: { reason: error.reason, message: error.message } };
       }

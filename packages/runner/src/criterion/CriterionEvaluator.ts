@@ -151,29 +151,28 @@ class CriterionEvaluator {
     const type = this.#resolveType(criterion);
     this.#requireValidContext(criterion, type);
 
+    let met: boolean;
     try {
       switch (type) {
         case 'simple':
-          return { met: this.#simple.evaluate(condition, resolve) };
+          met = this.#simple.evaluate(condition, resolve);
+          break;
         case 'regex':
-          return {
-            met: this.#regex.evaluate(condition, this.#resolveContext(criterion, type, resolve)),
-          };
+          met = this.#regex.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+          break;
         case 'jsonpath':
           // only rfc9535 is supported, Arazzo 1.1.0's default, so an omitted
           // version is accepted. draft-goessner has different semantics and is
           // rejected rather than mis-evaluated.
           this.#requireVersion(criterion, type, condition, 'rfc9535');
-          return {
-            met: this.#jsonpath.evaluate(condition, this.#resolveContext(criterion, type, resolve)),
-          };
+          met = this.#jsonpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+          break;
         case 'xpath':
           // only XPath 3.1 is supported; xpath-31 is Arazzo 1.1.0's default, so
           // an omitted version is accepted. Older versions are rejected.
           this.#requireVersion(criterion, type, condition, 'xpath-31');
-          return {
-            met: this.#xpath.evaluate(condition, this.#resolveContext(criterion, type, resolve)),
-          };
+          met = this.#xpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+          break;
         default:
           throw new CriterionError(`Unknown criterion type "${type}"`, {
             condition,
@@ -187,6 +186,7 @@ class CriterionEvaluator {
       if (error instanceof CriterionEvaluationError) return { met: false, error };
       throw error;
     }
+    return { met };
   }
 
   /**
