@@ -521,16 +521,13 @@ class StepExecutor {
         ? record(met)
         : record(met, { reason: error.reason, message: error.message });
     } catch (error: unknown) {
-      // an action's criteria decide whether it applies to this outcome, and
-      // actions are shared — inherited from the workflow, reused from
-      // components. A condition on an HTTP exchange cannot apply to a step
-      // that calls a workflow, so the action does not match; the run does not
-      // abort over a default written for the operation steps.
-      if (
-        source !== 'successCriteria' &&
-        error instanceof RuntimeExpressionError &&
-        error.reason === 'unavailable-expression'
-      ) {
+      // a condition on an HTTP exchange cannot hold in a step that calls a
+      // workflow: it made no HTTP call. The criterion fails like any other
+      // unevaluable condition: a successCriterion fails the step, which then
+      // takes its failure path, and an action criterion (actions are shared,
+      // inherited from the workflow or reused from components) does not match.
+      // The recorded error keeps the authoring mistake visible.
+      if (error instanceof RuntimeExpressionError && error.reason === 'unavailable-expression') {
         return record(false, { reason: error.reason, message: error.message });
       }
       throw error;

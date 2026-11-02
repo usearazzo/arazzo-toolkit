@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { assert } from 'chai';
+import { toValue } from '@speclynx/apidom-core';
 
 import {
   DocumentRegistry,
@@ -930,23 +931,50 @@ describe('WorkflowExecutor composition', function () {
 
     for (const [workflowId, expression] of [
       ['calledStatusCodeCriterion', '$statusCode'],
-      ['calledResponseOutput', '$response.body'],
       ['calledRequestCriterion', '$request.header.accept'],
       ['calledUrlCriterionContext', '$url'],
     ]) {
       specify(
-        `should reject ${expression} as an authoring error (${workflowId})`,
+        `should fail a successCriterion reading ${expression} with a recorded error (${workflowId})`,
         async function () {
           const { executor } = makeExecutor();
 
-          const error = await captureExpressionError(executor.execute(workflowId));
+          const result = await executor.execute(workflowId);
 
-          assert.strictEqual(error.reason, 'unavailable-expression');
-          assert.strictEqual(error.expression, expression);
-          assert.match(error.message, /step "child"/);
-          assert.match(error.message, /workflow "fetchPet"/);
+          assert.strictEqual(result.status, 'failed');
+          assert.isFalse(result.steps[0].successful);
+          const [record] = result.steps[0].criteria;
+          assert.strictEqual(record.source, 'successCriteria');
+          assert.isFalse(record.met);
+          assert.strictEqual(record.error?.reason, 'unavailable-expression');
+          assert.include(record.error?.message, expression);
+          assert.match(record.error?.message ?? '', /step "child"/);
+          assert.match(record.error?.message ?? '', /workflow "fetchPet"/);
         },
       );
     }
+
+    specify('should take onFailure when a successCriterion reads $statusCode', async function () {
+      const { executor } = makeExecutor();
+
+      const result = await executor.execute('calledStatusCodeCriterionRecovers');
+
+      assert.strictEqual(result.status, 'ended');
+      assert.strictEqual(toValue(result.steps[0].action?.name), 'giveUp');
+    });
+
+    specify(
+      'should reject an output reading $response.body as an authoring error',
+      async function () {
+        const { executor } = makeExecutor();
+
+        const error = await captureExpressionError(executor.execute('calledResponseOutput'));
+
+        assert.strictEqual(error.reason, 'unavailable-expression');
+        assert.strictEqual(error.expression, '$response.body');
+        assert.match(error.message, /step "child"/);
+        assert.match(error.message, /workflow "fetchPet"/);
+      },
+    );
   });
 });

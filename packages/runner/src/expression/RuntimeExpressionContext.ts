@@ -77,7 +77,8 @@ export interface RuntimeExpressionCalledWorkflowContext {
  * - `calledWorkflow` marks a step that calls a workflow: such a step made no
  *   HTTP call, so `$url`, `$method`, `$statusCode`, `$request.{source}` and
  *   `$response.{source}` are authoring errors there rather than unresolved
- *   references, and `outputs` holds the called workflow's outputs
+ *   references (the step executor fails a criterion reading one and records
+ *   why), and `outputs` holds the called workflow's outputs
  *
  * The context holds only genuinely runtime state. Static, document-sourced
  * expressions — `$components.{field}.{name}` and
