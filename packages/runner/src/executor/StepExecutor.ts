@@ -145,11 +145,11 @@ export interface StepActionSelection {
   /**
    * Every action whose criteria matched the outcome, in list order.
    */
-  readonly matchedActions: SelectedAction[];
+  readonly matchedActions: readonly SelectedAction[];
   /**
    * One record per action criterion evaluated, in list order.
    */
-  readonly criteria: CriterionRecord[];
+  readonly criteria: readonly CriterionRecord[];
 }
 
 /**
