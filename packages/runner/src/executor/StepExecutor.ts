@@ -434,9 +434,10 @@ class StepExecutor {
     if (criteria === undefined) return [];
 
     // assertSuccessCriteria above guarantees every entry is a Criterion Object
-    return ([...criteria] as CriterionElement[]).map((criterion) =>
-      this.#evaluateCriterion(criterion, context, 'successCriteria'),
-    );
+    return ([...criteria] as CriterionElement[]).map((criterion) => ({
+      source: 'successCriteria',
+      ...this.#evaluateCriterion(criterion, context),
+    }));
   }
 
   /**
@@ -468,8 +469,11 @@ class StepExecutor {
     const source = successful ? 'onSuccess' : 'onFailure';
     const criteria: CriterionRecord[] = [];
     const isCriterionMet: CriterionPredicate = (criterion, action) => {
-      const name = isStringElement(action.name) ? (toValue(action.name) as string) : undefined;
-      const record = this.#evaluateCriterion(criterion, context, source, name);
+      const record: CriterionRecord = {
+        source,
+        action: toValue(action.name) as string,
+        ...this.#evaluateCriterion(criterion, context),
+      };
       criteria.push(record);
       return record.met;
     };
@@ -483,30 +487,21 @@ class StepExecutor {
   }
 
   /**
-   * Evaluates one criterion into a {@link CriterionRecord}. A condition that
-   * cannot be evaluated is unmet and records why; any other error propagates.
+   * Evaluates one criterion into the outcome part of a {@link CriterionRecord};
+   * the caller adds where it is declared. A condition that cannot be evaluated
+   * is unmet and records why; any other error propagates.
    */
   #evaluateCriterion(
     criterion: CriterionElement,
     context: RuntimeExpressionContext,
-    source: CriterionRecord['source'],
-    action?: string,
-  ): CriterionRecord {
-    const record = (met: boolean, error?: CriterionRecord['error']): CriterionRecord => ({
-      source,
-      ...(action === undefined ? {} : { action }),
-      condition: toValue(criterion.condition) as string,
-      met,
-      ...(error === undefined ? {} : { error }),
-    });
-
+  ): Omit<CriterionRecord, 'source' | 'action'> {
+    const condition = toValue(criterion.condition) as string;
     try {
       const { met, error } = this.#criterionEvaluator.evaluate(criterion, (expression) =>
         this.#evaluate(context, expression),
       );
-      return error === undefined
-        ? record(met)
-        : record(met, { reason: error.reason, message: error.message });
+      if (error === undefined) return { condition, met };
+      return { condition, met, error: { reason: error.reason, message: error.message } };
     } catch (error: unknown) {
       // a condition on an HTTP exchange cannot hold in a step that calls a
       // workflow: it made no HTTP call. The criterion fails like any other
@@ -515,7 +510,7 @@ class StepExecutor {
       // inherited from the workflow or reused from components) does not match.
       // The recorded error keeps the authoring mistake visible.
       if (error instanceof RuntimeExpressionError && error.reason === 'unavailable-expression') {
-        return record(false, { reason: error.reason, message: error.message });
+        return { condition, met: false, error: { reason: error.reason, message: error.message } };
       }
       throw error;
     }
