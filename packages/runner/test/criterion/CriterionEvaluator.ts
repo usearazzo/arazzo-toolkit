@@ -89,10 +89,10 @@ describe('CriterionEvaluator', function () {
       assert.isTrue(evaluator.evaluate(criterion, resolve).met);
     });
 
-    specify('should evaluate a false simple condition', function () {
+    specify('should evaluate a false simple condition without an error', function () {
       const criterion = refractCriterion({ condition: '$statusCode == 404' });
 
-      assert.isFalse(evaluator.evaluate(criterion, resolve).met);
+      assert.deepEqual(evaluator.evaluate(criterion, resolve), { met: false });
     });
 
     specify('should not require a context for a simple condition', function () {
@@ -296,12 +296,6 @@ describe('CriterionEvaluator', function () {
         },
       );
     }
-
-    specify('should carry no error on an evaluated criterion', function () {
-      const criterion = refractCriterion({ condition: '$statusCode == 404' });
-
-      assert.deepEqual(evaluator.evaluate(criterion, resolve), { met: false });
-    });
 
     specify('should let a non-criterion error from the resolver propagate', function () {
       const criterion = refractCriterion({ condition: '$statusCode == 200' });
