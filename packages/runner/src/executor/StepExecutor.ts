@@ -86,25 +86,6 @@ export interface StepExecutorOptions {
 }
 
 /**
- * Why a recorded criterion could not be evaluated.
- * @public
- */
-export interface CriterionRecordError {
-  /**
-   * The `reason` of the error that failed the criterion: a
-   * `CriterionErrorReason` for a condition that cannot be evaluated, or
-   * `'unavailable-expression'` for an HTTP-exchange expression in a step that
-   * calls a workflow.
-   */
-  readonly reason?: CriterionErrorReason | 'unavailable-expression';
-  /**
-   * The error message. It names the condition or expression, never request or
-   * response data.
-   */
-  readonly message: string;
-}
-
-/**
  * The outcome of one criterion a step evaluated: one of its `successCriteria`,
  * or one of the `criteria` of an `onSuccess` / `onFailure` action it
  * considered.
@@ -131,9 +112,15 @@ export interface CriterionRecord {
   readonly met: boolean;
   /**
    * Why the condition could not be evaluated — present only when it was not,
-   * in which case `met` is `false`.
+   * in which case `met` is `false`. `reason` is a `CriterionErrorReason`, or
+   * `'unavailable-expression'` for an HTTP-exchange expression in a step that
+   * calls a workflow; `message` names the condition or expression, never
+   * request or response data.
    */
-  readonly error?: CriterionRecordError;
+  readonly error?: {
+    readonly reason?: CriterionErrorReason | 'unavailable-expression';
+    readonly message: string;
+  };
 }
 
 /**
@@ -505,7 +492,7 @@ class StepExecutor {
     source: CriterionRecord['source'],
     action?: string,
   ): CriterionRecord {
-    const record = (met: boolean, error?: CriterionRecordError): CriterionRecord => ({
+    const record = (met: boolean, error?: CriterionRecord['error']): CriterionRecord => ({
       source,
       ...(action === undefined ? {} : { action }),
       condition: toValue(criterion.condition) as string,
