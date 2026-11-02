@@ -14,6 +14,7 @@ import {
   ExecutionError,
   ClientError,
   ResolverError,
+  CriterionError,
   CriterionErrorReason,
   type HTTPClient,
   type OpenAPIOperationRequest,
@@ -520,6 +521,27 @@ describe('StepExecutor', function () {
         ],
       );
       assert.match(result.criteria[0].error?.message ?? '', /\^\(200/);
+    });
+
+    specify('should throw on a malformed criterion even after an unmet one', async function () {
+      // every criterion is evaluated, so an authoring error later in the list
+      // is no longer hidden behind an earlier unmet criterion.
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        successCriteria: [
+          { condition: '$statusCode == 201' },
+          { context: '$statusCode', condition: '^200$', type: 'unknown' },
+        ],
+      }) as StepElement;
+      const { executor } = makeExecutor();
+
+      await rejects(
+        executor.execute(step, state()),
+        CriterionError as unknown as typeof ExecutionError,
+        /Unknown criterion type "unknown"/,
+      );
     });
 
     specify('should record no criteria for a step without any', async function () {
