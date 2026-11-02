@@ -90,6 +90,7 @@ export { default as CriterionEvaluator } from './criterion/CriterionEvaluator.ts
 export type {
   CriterionEvaluatorOptions,
   CriterionContextResolver,
+  CriterionOutcome,
 } from './criterion/CriterionEvaluator.ts';
 export { default as SimpleCriterionEvaluator } from './criterion/SimpleCriterionEvaluator.ts';
 export { default as RegexCriterionEvaluator } from './criterion/RegexCriterionEvaluator.ts';
@@ -129,6 +130,9 @@ export { default as StepExecutor } from './executor/StepExecutor.ts';
 export type {
   StepExecutorOptions,
   StepExecutionResult,
+  StepActionSelection,
+  CriterionRecord,
+  CriterionRecordError,
   ContextSource,
 } from './executor/StepExecutor.ts';
 export { default as OpenAPIOperationExecutor } from './executor/OpenAPIOperationExecutor.ts';

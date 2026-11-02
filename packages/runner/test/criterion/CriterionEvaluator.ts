@@ -35,7 +35,7 @@ describe('CriterionEvaluator', function () {
         type: 'regex',
       });
 
-      assert.isTrue(evaluator.evaluate(criterion, resolve));
+      assert.isTrue(evaluator.evaluate(criterion, resolve).met);
     });
 
     specify('should evaluate to false when the pattern does not match', function () {
@@ -45,7 +45,7 @@ describe('CriterionEvaluator', function () {
         type: 'regex',
       });
 
-      assert.isFalse(evaluator.evaluate(criterion, resolve));
+      assert.isFalse(evaluator.evaluate(criterion, resolve).met);
     });
 
     specify('should match against a resolved response body value', function () {
@@ -55,7 +55,7 @@ describe('CriterionEvaluator', function () {
         type: 'regex',
       });
 
-      assert.isTrue(evaluator.evaluate(criterion, resolve));
+      assert.isTrue(evaluator.evaluate(criterion, resolve).met);
     });
 
     specify('should fail when the context runtime expression is unresolvable', function () {
@@ -65,14 +65,14 @@ describe('CriterionEvaluator', function () {
         type: 'regex',
       });
 
-      assert.isFalse(evaluator.evaluate(criterion, resolve));
+      assert.isFalse(evaluator.evaluate(criterion, resolve).met);
     });
 
     specify('should read the type from a Criterion Expression Type Object', function () {
       const criterion = refractCriterion({ context: '$statusCode', condition: '^200$' });
       criterion.type = new CriterionExpressionTypeElement({ type: 'regex' });
 
-      assert.isTrue(evaluator.evaluate(criterion, resolve));
+      assert.isTrue(evaluator.evaluate(criterion, resolve).met);
     });
 
     specify('should throw when a regex criterion has no context', function () {
@@ -86,13 +86,13 @@ describe('CriterionEvaluator', function () {
     specify('should evaluate a simple condition when type is omitted', function () {
       const criterion = refractCriterion({ condition: '$statusCode == 200' });
 
-      assert.isTrue(evaluator.evaluate(criterion, resolve));
+      assert.isTrue(evaluator.evaluate(criterion, resolve).met);
     });
 
     specify('should evaluate a false simple condition', function () {
       const criterion = refractCriterion({ condition: '$statusCode == 404' });
 
-      assert.isFalse(evaluator.evaluate(criterion, resolve));
+      assert.isFalse(evaluator.evaluate(criterion, resolve).met);
     });
 
     specify('should not require a context for a simple condition', function () {
@@ -101,7 +101,7 @@ describe('CriterionEvaluator', function () {
         condition: "$response.body.status == 'available'",
       });
 
-      assert.isTrue(evaluator.evaluate(criterion, resolve));
+      assert.isTrue(evaluator.evaluate(criterion, resolve).met);
     });
   });
 
@@ -113,7 +113,7 @@ describe('CriterionEvaluator', function () {
         type: 'jsonpath',
       });
 
-      assert.isTrue(evaluator.evaluate(criterion, resolve));
+      assert.isTrue(evaluator.evaluate(criterion, resolve).met);
     });
 
     specify('should not be met when the query matches nothing', function () {
@@ -123,14 +123,14 @@ describe('CriterionEvaluator', function () {
         type: 'jsonpath',
       });
 
-      assert.isFalse(evaluator.evaluate(criterion, resolve));
+      assert.isFalse(evaluator.evaluate(criterion, resolve).met);
     });
 
     specify('should accept an explicit rfc9535 version', function () {
       const criterion = refractCriterion({ context: '$response.body', condition: '$.pets[*]' });
       criterion.type = new CriterionExpressionTypeElement({ type: 'jsonpath', version: 'rfc9535' });
 
-      assert.isTrue(evaluator.evaluate(criterion, resolve));
+      assert.isTrue(evaluator.evaluate(criterion, resolve).met);
     });
 
     specify('should throw for a non-rfc9535 jsonpath version', function () {
@@ -172,7 +172,7 @@ describe('CriterionEvaluator', function () {
         type: 'xpath',
       });
 
-      assert.isTrue(evaluator.evaluate(criterion, resolve));
+      assert.isTrue(evaluator.evaluate(criterion, resolve).met);
     });
 
     specify('should not be met when the predicate is false', function () {
@@ -182,14 +182,14 @@ describe('CriterionEvaluator', function () {
         type: 'xpath',
       });
 
-      assert.isFalse(evaluator.evaluate(criterion, resolve));
+      assert.isFalse(evaluator.evaluate(criterion, resolve).met);
     });
 
     specify('should accept an explicit xpath-31 version', function () {
       const criterion = refractCriterion({ context: '$inputs.xml', condition: '//status' });
       criterion.type = new CriterionExpressionTypeElement({ type: 'xpath', version: 'xpath-31' });
 
-      assert.isTrue(evaluator.evaluate(criterion, resolve));
+      assert.isTrue(evaluator.evaluate(criterion, resolve).met);
     });
 
     specify('should throw for a non-xpath-31 version', function () {
@@ -250,15 +250,35 @@ describe('CriterionEvaluator', function () {
     // a condition that cannot be evaluated MUST evaluate to fail, rather than
     // abort the step.
     const cases = [
-      { type: 'simple', condition: '$statusCode ==' },
-      { type: 'regex', context: '$statusCode', condition: '^(200' },
-      { type: 'jsonpath', context: '$response.body', condition: '$[?' },
-      { type: 'xpath', context: '$inputs.xml', condition: '//status[' },
+      { type: 'simple', condition: '$statusCode ==', reason: CriterionErrorReason.InvalidSimple },
+      {
+        type: 'regex',
+        context: '$statusCode',
+        condition: '^(200',
+        reason: CriterionErrorReason.InvalidRegex,
+      },
+      {
+        type: 'jsonpath',
+        context: '$response.body',
+        condition: '$[?',
+        reason: CriterionErrorReason.InvalidJSONPath,
+      },
+      {
+        type: 'xpath',
+        context: '$inputs.xml',
+        condition: '//status[',
+        reason: CriterionErrorReason.InvalidXPath,
+      },
       // a context the condition cannot apply to: JSON data under an xpath query.
-      { type: 'xpath', context: '$response.body', condition: '//status' },
+      {
+        type: 'xpath',
+        context: '$response.body',
+        condition: '//status',
+        reason: CriterionErrorReason.InvalidXPathContext,
+      },
     ];
 
-    for (const { type, context: criterionContext, condition } of cases) {
+    for (const { type, context: criterionContext, condition, reason } of cases) {
       specify(
         `should fail a ${type} criterion "${condition}" on ${criterionContext ?? 'no context'}`,
         function () {
@@ -268,10 +288,20 @@ describe('CriterionEvaluator', function () {
             type,
           });
 
-          assert.isFalse(evaluator.evaluate(criterion, resolve));
+          const outcome = evaluator.evaluate(criterion, resolve);
+
+          assert.isFalse(outcome.met);
+          assert.instanceOf(outcome.error, CriterionEvaluationError);
+          assert.strictEqual(outcome.error?.reason, reason);
         },
       );
     }
+
+    specify('should carry no error on an evaluated criterion', function () {
+      const criterion = refractCriterion({ condition: '$statusCode == 404' });
+
+      assert.deepEqual(evaluator.evaluate(criterion, resolve), { met: false });
+    });
 
     specify('should let a non-criterion error from the resolver propagate', function () {
       const criterion = refractCriterion({ condition: '$statusCode == 200' });
@@ -340,7 +370,7 @@ describe('CriterionEvaluator', function () {
         type: 'simple',
       });
 
-      assert.isTrue(evaluator.evaluate(criterion, resolve));
+      assert.isTrue(evaluator.evaluate(criterion, resolve).met);
     });
   });
 });

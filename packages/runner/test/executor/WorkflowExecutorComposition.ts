@@ -906,6 +906,14 @@ describe('WorkflowExecutor composition', function () {
       const own = await makeExecutor().executor.execute('calledMethodActionCriterion');
       assert.strictEqual(own.status, 'completed');
       assert.isUndefined(own.steps[0].action);
+      // the no-match is explained in the step record rather than silent.
+      assert.deepInclude(own.steps[0].criteria[0], {
+        source: 'onSuccess',
+        action: 'onGet',
+        condition: "$method == 'GET'",
+        met: false,
+      });
+      assert.strictEqual(own.steps[0].criteria[0].error?.reason, 'unavailable-expression');
 
       // inherited workflow-level defaults on $statusCode / $response: neither
       // the success default (`end`) nor the failure default (`retry`) matches.

@@ -17,6 +17,7 @@ import type {
 } from '../expression/RuntimeExpressionContext.ts';
 import RuntimeExpressionEvaluator from '../expression/RuntimeExpressionEvaluator.ts';
 import CriterionEvaluator from '../criterion/CriterionEvaluator.ts';
+import type CriterionErrorReason from '../criterion/CriterionErrorReason.ts';
 import OpenAPIOperationParameterResolver from '../resolver/OpenAPIOperationParameterResolver.ts';
 import RequestBodyResolver, { type ResolvedRequestBody } from '../resolver/RequestBodyResolver.ts';
 import OutputResolver from '../resolver/OutputResolver.ts';
@@ -85,6 +86,73 @@ export interface StepExecutorOptions {
 }
 
 /**
+ * Why a recorded criterion could not be evaluated.
+ * @public
+ */
+export interface CriterionRecordError {
+  /**
+   * The `reason` of the error that failed the criterion: a
+   * `CriterionErrorReason` for a condition that cannot be evaluated, or
+   * `'unavailable-expression'` for an HTTP-exchange expression in a step that
+   * calls a workflow.
+   */
+  readonly reason?: CriterionErrorReason | 'unavailable-expression';
+  /**
+   * The error message. It names the condition or expression, never request or
+   * response data.
+   */
+  readonly message: string;
+}
+
+/**
+ * The outcome of one criterion a step evaluated: one of its `successCriteria`,
+ * or one of the `criteria` of an `onSuccess` / `onFailure` action it
+ * considered.
+ * @public
+ */
+export interface CriterionRecord {
+  /**
+   * Where the criterion is declared: the step's `successCriteria`, or the
+   * `criteria` of an action in its `onSuccess` / `onFailure` list.
+   */
+  readonly source: 'successCriteria' | 'onSuccess' | 'onFailure';
+  /**
+   * The `name` of the action declaring the criterion — present only for an
+   * action criterion.
+   */
+  readonly action?: string;
+  /**
+   * The criterion's `condition`, as written.
+   */
+  readonly condition: string;
+  /**
+   * Whether the condition is met.
+   */
+  readonly met: boolean;
+  /**
+   * Why the condition could not be evaluated — present only when it was not,
+   * in which case `met` is `false`.
+   */
+  readonly error?: CriterionRecordError;
+}
+
+/**
+ * The `onSuccess` / `onFailure` actions a step selected, with the outcome of
+ * every action criterion evaluated to select them.
+ * @public
+ */
+export interface StepActionSelection {
+  /**
+   * Every action whose criteria matched the outcome, in list order.
+   */
+  readonly matchedActions: SelectedAction[];
+  /**
+   * One record per action criterion evaluated, in list order.
+   */
+  readonly criteria: CriterionRecord[];
+}
+
+/**
  * The outcome of executing a single step.
  * @public
  */
@@ -106,6 +174,11 @@ export interface StepExecutionResult {
    * matching action. Empty when none matched.
    */
   readonly matchedActions: readonly SelectedAction[];
+  /**
+   * The outcome of every criterion the step evaluated: its `successCriteria`
+   * first, then the criteria of the actions it considered, in list order.
+   */
+  readonly criteria: readonly CriterionRecord[];
 }
 
 /**
@@ -262,15 +335,24 @@ class StepExecutor {
       this.#requestContext(response),
       this.#responseContext(response),
     );
-    const successful = this.evaluateCriteria(step, postContext);
+    const successCriteria = this.evaluateCriteria(step, postContext);
+    const successful = successCriteria.every((criterion) => criterion.met);
     const outputs = this.#outputResolver.resolve(
       step.outputs,
       (expression) => this.#evaluate(postContext, expression),
       scope,
     );
-    const matchedActions = this.selectActions(step, successful, postContext);
+    const { matchedActions, criteria } = this.selectActions(step, successful, postContext);
 
-    return { stepId, response, successful, outputs, action: matchedActions[0], matchedActions };
+    return {
+      stepId,
+      response,
+      successful,
+      outputs,
+      action: matchedActions[0],
+      matchedActions,
+      criteria: [...successCriteria, ...criteria],
+    };
   }
 
   /**
@@ -347,31 +429,33 @@ class StepExecutor {
   }
 
   /**
-   * Evaluates the step's `successCriteria`; all criteria must pass. A step with
-   * no criteria succeeds on a received response. An unreadable
-   * `successCriteria` throws, see {@link StepExecutor.assertSuccessCriteria}.
+   * Evaluates the step's `successCriteria`, returning one record per criterion
+   * in list order; the step succeeds when every record is met. Every criterion
+   * is evaluated, so the records explain each unmet one, not only the first. A
+   * step with no criteria returns no records and succeeds on a received
+   * response. An unreadable `successCriteria` throws, see
+   * {@link StepExecutor.assertSuccessCriteria}.
    *
    * Public for the same reason as {@link StepExecutor.selectActions}: a step
    * targeting a `workflowId` is run by the workflow executor and never reaches
    * {@link StepExecutor.execute}, but its criteria are still the author's
    * assertion about the step and must be evaluated somewhere.
    */
-  evaluateCriteria(step: StepElement, context: RuntimeExpressionContext): boolean {
+  evaluateCriteria(step: StepElement, context: RuntimeExpressionContext): CriterionRecord[] {
     this.assertSuccessCriteria(step);
     const criteria = step.successCriteria;
-    if (criteria === undefined) return true;
+    if (criteria === undefined) return [];
 
     // assertSuccessCriteria above guarantees every entry is a Criterion Object
-    return ([...criteria] as CriterionElement[]).every((criterion) =>
-      this.#criterionEvaluator.evaluate(criterion, (expression) =>
-        this.#evaluate(context, expression),
-      ),
+    return ([...criteria] as CriterionElement[]).map((criterion) =>
+      this.#evaluateCriterion(criterion, context, 'successCriteria'),
     );
   }
 
   /**
    * Selects every matching `onSuccess` / `onFailure` action for the outcome, in
-   * list order, gating each action's criteria against the context.
+   * list order, gating each action's criteria against the context, and records
+   * the outcome of every action criterion evaluated.
    *
    * The step's own list is the whole story here: a step that declares none of
    * its own already carries the workflow-level defaults, inherited by
@@ -393,29 +477,64 @@ class StepExecutor {
     step: StepElement,
     successful: boolean,
     context: RuntimeExpressionContext,
-  ): SelectedAction[] {
-    const isCriterionMet: CriterionPredicate = (criterion) => {
-      try {
-        return this.#criterionEvaluator.evaluate(criterion, (expression) =>
-          this.#evaluate(context, expression),
-        );
-      } catch (error: unknown) {
-        // an action's criteria decide whether it applies to this outcome, and
-        // actions are shared — inherited from the workflow, reused from
-        // components. A condition on an HTTP exchange cannot apply to a step
-        // that calls a workflow, so the action does not match; the run does not
-        // abort over a default written for the operation steps.
-        if (error instanceof RuntimeExpressionError && error.reason === 'unavailable-expression') {
-          return false;
-        }
-        throw error;
-      }
+  ): StepActionSelection {
+    const source = successful ? 'onSuccess' : 'onFailure';
+    const criteria: CriterionRecord[] = [];
+    const isCriterionMet: CriterionPredicate = (criterion, action) => {
+      const name = isStringElement(action.name) ? (toValue(action.name) as string) : undefined;
+      const record = this.#evaluateCriterion(criterion, context, source, name);
+      criteria.push(record);
+      return record.met;
     };
     const scope = { stepId: toValue(step.stepId) as string };
 
-    return successful
+    const matchedActions = successful
       ? this.#actionResolver.resolveOnSuccess(step.onSuccess, isCriterionMet, scope)
       : this.#actionResolver.resolveOnFailure(step.onFailure, isCriterionMet, scope);
+
+    return { matchedActions, criteria };
+  }
+
+  /**
+   * Evaluates one criterion into a {@link CriterionRecord}. A condition that
+   * cannot be evaluated is unmet and records why; any other error propagates.
+   */
+  #evaluateCriterion(
+    criterion: CriterionElement,
+    context: RuntimeExpressionContext,
+    source: CriterionRecord['source'],
+    action?: string,
+  ): CriterionRecord {
+    const record = (met: boolean, error?: CriterionRecordError): CriterionRecord => ({
+      source,
+      ...(action === undefined ? {} : { action }),
+      condition: toValue(criterion.condition) as string,
+      met,
+      ...(error === undefined ? {} : { error }),
+    });
+
+    try {
+      const { met, error } = this.#criterionEvaluator.evaluate(criterion, (expression) =>
+        this.#evaluate(context, expression),
+      );
+      return error === undefined
+        ? record(met)
+        : record(met, { reason: error.reason, message: error.message });
+    } catch (error: unknown) {
+      // an action's criteria decide whether it applies to this outcome, and
+      // actions are shared — inherited from the workflow, reused from
+      // components. A condition on an HTTP exchange cannot apply to a step
+      // that calls a workflow, so the action does not match; the run does not
+      // abort over a default written for the operation steps.
+      if (
+        source !== 'successCriteria' &&
+        error instanceof RuntimeExpressionError &&
+        error.reason === 'unavailable-expression'
+      ) {
+        return record(false, { reason: error.reason, message: error.message });
+      }
+      throw error;
+    }
   }
 
   /**

@@ -14,6 +14,7 @@ import {
   ExecutionError,
   ClientError,
   ResolverError,
+  CriterionErrorReason,
   type HTTPClient,
   type OpenAPIOperationRequest,
 } from '../../src/index.ts';
@@ -442,6 +443,96 @@ describe('StepExecutor', function () {
 
       assert.isFalse(result.successful);
       assert.strictEqual(toValue(result.action?.name), 'fallback');
+    });
+  });
+
+  context('criterion records', function () {
+    specify(
+      'should record every successCriterion, then the action criteria by action name',
+      async function () {
+        const step = refractStep({
+          stepId: 'findPets',
+          operationId: 'findPetsByStatus',
+          parameters: [{ name: 'status', in: 'query', value: 'available' }],
+          successCriteria: [
+            { condition: '$statusCode == 201' },
+            { condition: '$statusCode == 202' },
+            { condition: '$statusCode == 200' },
+          ],
+          onFailure: [
+            {
+              name: 'onServerError',
+              type: 'end',
+              criteria: [{ condition: '$statusCode == 500' }, { condition: '$statusCode == 200' }],
+            },
+            { name: 'fallback', type: 'end' },
+          ],
+        }) as StepElement;
+        const { executor } = makeExecutor();
+
+        const result = await executor.execute(step, state());
+
+        // the first unmet criterion does not stop the others, in either list.
+        assert.deepEqual(result.criteria, [
+          { source: 'successCriteria', condition: '$statusCode == 201', met: false },
+          { source: 'successCriteria', condition: '$statusCode == 202', met: false },
+          { source: 'successCriteria', condition: '$statusCode == 200', met: true },
+          {
+            source: 'onFailure',
+            action: 'onServerError',
+            condition: '$statusCode == 500',
+            met: false,
+          },
+          {
+            source: 'onFailure',
+            action: 'onServerError',
+            condition: '$statusCode == 200',
+            met: true,
+          },
+        ]);
+        assert.strictEqual(toValue(result.action?.name), 'fallback');
+      },
+    );
+
+    specify('should record why a criterion could not be evaluated', async function () {
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        successCriteria: [{ context: '$statusCode', condition: '^(200', type: 'regex' }],
+        onFailure: [
+          {
+            name: 'onXml',
+            type: 'end',
+            criteria: [{ context: '$response.body', condition: '//status', type: 'xpath' }],
+          },
+        ],
+      }) as StepElement;
+      const { executor } = makeExecutor();
+
+      const result = await executor.execute(step, state());
+
+      assert.deepEqual(
+        result.criteria.map(({ source, met, error }) => ({ source, met, reason: error?.reason })),
+        [
+          { source: 'successCriteria', met: false, reason: CriterionErrorReason.InvalidRegex },
+          { source: 'onFailure', met: false, reason: CriterionErrorReason.InvalidXPathContext },
+        ],
+      );
+      assert.match(result.criteria[0].error?.message ?? '', /\^\(200/);
+    });
+
+    specify('should record no criteria for a step without any', async function () {
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+      }) as StepElement;
+      const { executor } = makeExecutor();
+
+      const result = await executor.execute(step, state());
+
+      assert.deepEqual(result.criteria, []);
     });
   });
 

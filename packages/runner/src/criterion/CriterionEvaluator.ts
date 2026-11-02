@@ -29,6 +29,22 @@ import XPathCriterionEvaluator from './XPathCriterionEvaluator.ts';
 export type CriterionContextResolver = (expression: string) => unknown;
 
 /**
+ * The outcome of evaluating one criterion.
+ * @public
+ */
+export interface CriterionOutcome {
+  /**
+   * Whether the condition is met. `false` when the condition cannot be
+   * evaluated, in which case {@link CriterionOutcome.error} says why.
+   */
+  readonly met: boolean;
+  /**
+   * Why the condition could not be evaluated: present only when it was not.
+   */
+  readonly error?: CriterionEvaluationError;
+}
+
+/**
  * Options for the CriterionEvaluator.
  *
  * An injected evaluator signals a condition it cannot evaluate by throwing a
@@ -56,7 +72,7 @@ export interface CriterionEvaluatorOptions {
 }
 
 /**
- * Evaluates an Arazzo Criterion Object to a boolean.
+ * Evaluates an Arazzo Criterion Object to a {@link CriterionOutcome}.
  *
  * Dispatches on the criterion's `type` (defaulting to `simple` when omitted):
  * - `simple` — evaluates the condition directly, resolving the runtime
@@ -76,12 +92,13 @@ export interface CriterionEvaluatorOptions {
  * the 1.1.0 rule to every document, which accepts more but never evaluates a
  * query under the wrong dialect.
  *
- * A condition that cannot be evaluated fails the criterion (`false`), as
+ * A condition that cannot be evaluated fails the criterion (`met: false`), as
  * Arazzo 1.1.0 requires: a syntax error in the condition, a context the
  * condition cannot apply to (non-XML data for `xpath`), or an XPath evaluation
  * error. The type-specific evaluators report these as a
- * {@link CriterionEvaluationError}, which this facade absorbs; any other error
- * they raise propagates. A criterion that is malformed as written still throws: a
+ * {@link CriterionEvaluationError}, which this facade returns as the
+ * outcome's `error` so the caller can report it; any other error they raise
+ * propagates. A criterion that is malformed as written still throws: a
  * missing `condition`, an unknown or unreadable `type`, an unsupported
  * expression `version`, or a `context` that is missing or not a runtime
  * expression.
@@ -106,13 +123,14 @@ class CriterionEvaluator {
   }
 
   /**
-   * Evaluates a criterion element, returning whether the condition is met.
+   * Evaluates a criterion element, returning whether the condition is met and,
+   * when it cannot be evaluated, why.
    *
    * `resolve` turns a runtime expression into a value: for `simple` it resolves
    * the expressions embedded in the condition; for the other types it resolves
    * the criterion's `context` expression that the condition is applied to.
    */
-  evaluate(criterion: CriterionElement, resolve: CriterionContextResolver): boolean {
+  evaluate(criterion: CriterionElement, resolve: CriterionContextResolver): CriterionOutcome {
     if (!isCriterionElement(criterion)) {
       throw new CriterionError('Element is not a Criterion Object', {
         reason: CriterionErrorReason.InvalidCriterion,
@@ -134,34 +152,46 @@ class CriterionEvaluator {
     this.#requireValidContext(criterion, type);
 
     try {
-      switch (type) {
-        case 'simple':
-          return this.#simple.evaluate(condition, resolve);
-        case 'regex':
-          return this.#regex.evaluate(condition, this.#resolveContext(criterion, type, resolve));
-        case 'jsonpath':
-          // only rfc9535 is supported, Arazzo 1.1.0's default, so an omitted
-          // version is accepted. draft-goessner has different semantics and is
-          // rejected rather than mis-evaluated.
-          this.#requireVersion(criterion, type, condition, 'rfc9535');
-          return this.#jsonpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
-        case 'xpath':
-          // only XPath 3.1 is supported; xpath-31 is Arazzo 1.1.0's default, so
-          // an omitted version is accepted. Older versions are rejected.
-          this.#requireVersion(criterion, type, condition, 'xpath-31');
-          return this.#xpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
-        default:
-          throw new CriterionError(`Unknown criterion type "${type}"`, {
-            condition,
-            type,
-            reason: CriterionErrorReason.UnknownType,
-          });
-      }
+      return { met: this.#dispatch(criterion, type, condition, resolve) };
     } catch (error: unknown) {
       // Arazzo 1.1.0: a condition that cannot be evaluated MUST evaluate to fail.
       // The structural checks throw a plain CriterionError and still propagate.
-      if (error instanceof CriterionEvaluationError) return false;
+      if (error instanceof CriterionEvaluationError) return { met: false, error };
       throw error;
+    }
+  }
+
+  /**
+   * Runs the type-specific evaluator for the criterion's `type`.
+   */
+  #dispatch(
+    criterion: CriterionElement,
+    type: string,
+    condition: string,
+    resolve: CriterionContextResolver,
+  ): boolean {
+    switch (type) {
+      case 'simple':
+        return this.#simple.evaluate(condition, resolve);
+      case 'regex':
+        return this.#regex.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+      case 'jsonpath':
+        // only rfc9535 is supported, Arazzo 1.1.0's default, so an omitted
+        // version is accepted. draft-goessner has different semantics and is
+        // rejected rather than mis-evaluated.
+        this.#requireVersion(criterion, type, condition, 'rfc9535');
+        return this.#jsonpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+      case 'xpath':
+        // only XPath 3.1 is supported; xpath-31 is Arazzo 1.1.0's default, so
+        // an omitted version is accepted. Older versions are rejected.
+        this.#requireVersion(criterion, type, condition, 'xpath-31');
+        return this.#xpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+      default:
+        throw new CriterionError(`Unknown criterion type "${type}"`, {
+          condition,
+          type,
+          reason: CriterionErrorReason.UnknownType,
+        });
     }
   }
 
