@@ -23,11 +23,12 @@ import WorkflowExecutionState from '../state/WorkflowExecutionState.ts';
 import StepExecutor, {
   STEP_TARGET_FIELDS,
   type CriterionEvaluationRecord,
+  type StepAttemptOutcome,
 } from './StepExecutor.ts';
 import ArazzoWorkflowLocatorNormalizer, {
   type ArazzoWorkflowLocator,
 } from './ArazzoWorkflowLocatorNormalizer.ts';
-import StepRetryRunner, { type StepAttemptOutcome } from './StepRetryRunner.ts';
+import StepRetryRunner from './StepRetryRunner.ts';
 import WorkflowCallStack, { type WorkflowCallVia } from './WorkflowCallStack.ts';
 import StepTransitionInterpreter, { actionTargets } from './StepTransitionInterpreter.ts';
 import type { SelectedAction } from '../action/ActionResolver.ts';

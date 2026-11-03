@@ -4,26 +4,7 @@ import { isFailureActionElement, type FailureActionElement } from '@speclynx/api
 
 import type { SelectedAction } from '../action/ActionResolver.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
-import type { CriterionEvaluationRecord } from './StepExecutor.ts';
-
-/**
- * What one attempt at a step produced.
- *
- * Both kinds of step reduce to this — an operation step (whose richer
- * `StepExecutionResult` satisfies this shape) and a sub-workflow step
- * (synthesized from the sub-run's outcome) — so the retry loop drives them
- * identically and knows nothing about either.
- * @internal
- */
-export interface StepAttemptOutcome {
-  readonly stepId: string;
-  readonly successful: boolean;
-  readonly outputs: Record<string, unknown>;
-  readonly action: SelectedAction | undefined;
-  readonly matchedActions: readonly SelectedAction[];
-  readonly successCriteria: readonly CriterionEvaluationRecord[];
-  readonly actionCriteria: readonly CriterionEvaluationRecord[];
-}
+import type { StepAttemptOutcome } from './StepExecutor.ts';
 
 /**
  * The terminal outcome of a step once its retries are settled.
