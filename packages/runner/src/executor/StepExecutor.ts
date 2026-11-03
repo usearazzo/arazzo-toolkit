@@ -91,7 +91,7 @@ export interface StepExecutorOptions {
  * considered.
  * @public
  */
-export interface CriterionRecord {
+export interface CriterionEvaluationRecord {
   /**
    * Where the criterion is declared: the step's `successCriteria`, or the
    * `criteria` of an action in its `onSuccess` / `onFailure` list.
@@ -149,7 +149,7 @@ export interface StepExecutionResult {
    * The outcome of every criterion the step evaluated: its `successCriteria`
    * first, then the criteria of the actions it considered, in list order.
    */
-  readonly criteria: readonly CriterionRecord[];
+  readonly criteria: readonly CriterionEvaluationRecord[];
 }
 
 /**
@@ -412,7 +412,10 @@ class StepExecutor {
    * {@link StepExecutor.execute}, but its criteria are still the author's
    * assertion about the step and must be evaluated somewhere.
    */
-  evaluateCriteria(step: StepElement, context: RuntimeExpressionContext): CriterionRecord[] {
+  evaluateCriteria(
+    step: StepElement,
+    context: RuntimeExpressionContext,
+  ): CriterionEvaluationRecord[] {
     this.assertSuccessCriteria(step);
     const criteria = step.successCriteria;
     if (criteria === undefined) return [];
@@ -451,12 +454,12 @@ class StepExecutor {
     context: RuntimeExpressionContext,
   ): {
     readonly matchedActions: readonly SelectedAction[];
-    readonly criteria: readonly CriterionRecord[];
+    readonly criteria: readonly CriterionEvaluationRecord[];
   } {
     const source = successful ? 'onSuccess' : 'onFailure';
-    const criteria: CriterionRecord[] = [];
+    const criteria: CriterionEvaluationRecord[] = [];
     const isCriterionMet: CriterionPredicate = (criterion, action) => {
-      const record: CriterionRecord = {
+      const record: CriterionEvaluationRecord = {
         source,
         action: toValue(action.name) as string,
         ...this.#evaluateCriterion(criterion, context),
@@ -474,14 +477,14 @@ class StepExecutor {
   }
 
   /**
-   * Evaluates one criterion into the outcome part of a {@link CriterionRecord};
+   * Evaluates one criterion into the outcome part of a {@link CriterionEvaluationRecord};
    * the caller adds where it is declared. A condition that cannot be evaluated
    * is unmet and records why; any other error propagates.
    */
   #evaluateCriterion(
     criterion: CriterionElement,
     context: RuntimeExpressionContext,
-  ): Omit<CriterionRecord, 'source' | 'action'> {
+  ): Omit<CriterionEvaluationRecord, 'source' | 'action'> {
     const condition = toValue(criterion.condition) as string;
     try {
       const { met, error } = this.#criterionEvaluator.evaluate(criterion, (expression) =>

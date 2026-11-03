@@ -20,7 +20,10 @@ import ArazzoWorkflowNormalizer from '../normalizer/ArazzoWorkflowNormalizer.ts'
 import OutputResolver from '../resolver/OutputResolver.ts';
 import WorkflowParameterResolver from '../resolver/WorkflowParameterResolver.ts';
 import WorkflowExecutionState from '../state/WorkflowExecutionState.ts';
-import StepExecutor, { STEP_TARGET_FIELDS, type CriterionRecord } from './StepExecutor.ts';
+import StepExecutor, {
+  STEP_TARGET_FIELDS,
+  type CriterionEvaluationRecord,
+} from './StepExecutor.ts';
 import ArazzoWorkflowLocatorNormalizer, {
   type ArazzoWorkflowLocator,
 } from './ArazzoWorkflowLocatorNormalizer.ts';
@@ -223,7 +226,7 @@ export interface StepRunRecord {
    * failed or which action matched; a criterion that could not be evaluated
    * carries the error.
    */
-  readonly criteria: readonly CriterionRecord[];
+  readonly criteria: readonly CriterionEvaluationRecord[];
   /**
    * The sub-workflow runs this step produced, in attempt order — present only on
    * a step targeting a `workflowId`.

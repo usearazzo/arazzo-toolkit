@@ -130,7 +130,7 @@ export { default as StepExecutor } from './executor/StepExecutor.ts';
 export type {
   StepExecutorOptions,
   StepExecutionResult,
-  CriterionRecord,
+  CriterionEvaluationRecord,
   ContextSource,
 } from './executor/StepExecutor.ts';
 export { default as OpenAPIOperationExecutor } from './executor/OpenAPIOperationExecutor.ts';

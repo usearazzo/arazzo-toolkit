@@ -4,7 +4,7 @@ import { isFailureActionElement, type FailureActionElement } from '@speclynx/api
 
 import type { SelectedAction } from '../action/ActionResolver.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
-import type { CriterionRecord } from './StepExecutor.ts';
+import type { CriterionEvaluationRecord } from './StepExecutor.ts';
 
 /**
  * What one attempt at a step produced.
@@ -21,7 +21,7 @@ export interface StepAttemptOutcome {
   readonly outputs: Record<string, unknown>;
   readonly action: SelectedAction | undefined;
   readonly matchedActions: readonly SelectedAction[];
-  readonly criteria: readonly CriterionRecord[];
+  readonly criteria: readonly CriterionEvaluationRecord[];
 }
 
 /**
