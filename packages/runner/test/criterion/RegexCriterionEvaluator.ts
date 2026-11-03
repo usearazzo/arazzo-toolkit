@@ -50,6 +50,14 @@ describe('RegexCriterionEvaluator', function () {
       assert.throws(() => evaluator.evaluate('(', 'x'), CriterionEvaluationError);
     });
 
+    specify("should name the engine's reason the pattern is invalid", function () {
+      assert.throws(
+        () => evaluator.evaluate('^(200', 'x'),
+        CriterionEvaluationError,
+        /^Invalid regex criterion condition "\^\(200": Invalid regular expression: \/\^\(200\/: Unterminated group$/,
+      );
+    });
+
     specify('should match against a non-scalar context via its JSON serialization', function () {
       assert.isTrue(evaluator.evaluate('"status":200', { status: 200 }));
       assert.isTrue(evaluator.evaluate('^\\[1,2,3\\]$', [1, 2, 3]));

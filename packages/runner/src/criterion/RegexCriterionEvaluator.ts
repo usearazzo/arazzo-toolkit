@@ -38,12 +38,17 @@ class RegexCriterionEvaluator {
     try {
       regExp = new RegExp(condition);
     } catch (error: unknown) {
-      throw new CriterionEvaluationError(`Invalid regex criterion condition "${condition}"`, {
-        cause: error,
-        condition,
-        type: 'regex',
-        reason: CriterionErrorReason.InvalidRegex,
-      });
+      // the engine has seen only the pattern, never the context, so its
+      // message is safe to surface.
+      throw new CriterionEvaluationError(
+        `Invalid regex criterion condition "${condition}": ${(error as SyntaxError).message}`,
+        {
+          cause: error,
+          condition,
+          type: 'regex',
+          reason: CriterionErrorReason.InvalidRegex,
+        },
+      );
     }
 
     return regExp.test(this.#stringify(context));

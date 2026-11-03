@@ -20,7 +20,10 @@ import ArazzoWorkflowNormalizer from '../normalizer/ArazzoWorkflowNormalizer.ts'
 import OutputResolver from '../resolver/OutputResolver.ts';
 import WorkflowParameterResolver from '../resolver/WorkflowParameterResolver.ts';
 import WorkflowExecutionState from '../state/WorkflowExecutionState.ts';
-import StepExecutor, { STEP_TARGET_FIELDS } from './StepExecutor.ts';
+import StepExecutor, {
+  STEP_TARGET_FIELDS,
+  type CriterionEvaluationRecord,
+} from './StepExecutor.ts';
 import ArazzoWorkflowLocatorNormalizer, {
   type ArazzoWorkflowLocator,
 } from './ArazzoWorkflowLocatorNormalizer.ts';
@@ -216,6 +219,17 @@ export interface StepRunRecord {
    * fractional and is unaffected by system clock changes.
    */
   readonly durationMs: number;
+  /**
+   * The outcome of each of the step's `successCriteria` in its last attempt, in
+   * list order — why the step succeeded or failed.
+   */
+  readonly successCriteria: readonly CriterionEvaluationRecord[];
+  /**
+   * The outcome of each criterion of the actions the last attempt considered —
+   * its `onSuccess` actions when it succeeded, its `onFailure` actions
+   * otherwise — in list order: why an action matched or did not.
+   */
+  readonly actionCriteria: readonly CriterionEvaluationRecord[];
   /**
    * The sub-workflow runs this step produced, in attempt order — present only on
    * a step targeting a `workflowId`.
@@ -674,6 +688,8 @@ class WorkflowExecutor {
         action,
         attempts,
         durationMs: this.#now() - stepStartedAt,
+        successCriteria: outcome.successCriteria,
+        actionCriteria: outcome.actionCriteria,
         ...(subWorkflows.length > 0 ? { subWorkflows } : {}),
         ...(retryReferences.length > 0 ? { retryReferences } : {}),
       });
@@ -1201,16 +1217,30 @@ class WorkflowExecutor {
       // apply on top — they are the author's assertion about this step, and
       // dropping them because the step happens to target a workflow would
       // silently discard it. They see the sub-run's own outputs (`{}` when it
-      // transferred) through `$outputs` and `$workflows`.
+      // transferred) through `$outputs` and `$workflows`, and are evaluated
+      // even when the sub-run failed, so the record explains them either way.
       // the criteria and actions are the *calling* step's, so they are
       // evaluated by the parent document's step executor — only the sub-run
       // itself switched documents.
       const stepExecutor = this.#stepExecutor.forDocument(document);
+      const successCriteria = stepExecutor.evaluateCriteria(step, context);
       const successful =
-        !this.#settledFailed(result) && stepExecutor.evaluateCriteria(step, context);
-      const matchedActions = stepExecutor.selectActions(step, successful, context);
+        !this.#settledFailed(result) && successCriteria.every((criterion) => criterion.met);
+      const { matchedActions, actionCriteria } = stepExecutor.selectActions(
+        step,
+        successful,
+        context,
+      );
 
-      return { stepId, successful, outputs, action: matchedActions[0], matchedActions };
+      return {
+        stepId,
+        successful,
+        outputs,
+        action: matchedActions[0],
+        matchedActions,
+        successCriteria,
+        actionCriteria,
+      };
     };
   }
 

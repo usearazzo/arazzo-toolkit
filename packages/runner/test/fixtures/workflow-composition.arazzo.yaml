@@ -720,7 +720,8 @@ workflows:
       petName: $steps.child.outputs.petName
 
   # the HTTP-only expressions describe one HTTP exchange; a step that calls a
-  # workflow made none, so each is an authoring error there.
+  # workflow made none, so each is an authoring error there: a criterion
+  # reading one fails with a recorded error, an output reading one throws.
   - workflowId: calledStatusCodeCriterion
     steps:
       - stepId: child
@@ -730,6 +731,19 @@ workflows:
             value: "7"
         successCriteria:
           - condition: $statusCode == 200
+
+  - workflowId: calledStatusCodeCriterionRecovers
+    steps:
+      - stepId: child
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "7"
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: giveUp
+            type: end
 
   - workflowId: calledResponseOutput
     steps:

@@ -14,14 +14,15 @@ import ResolverError from '../errors/ResolverError.ts';
 import type { StepScope } from '../resolver/ResolverScope.ts';
 
 /**
- * Determines whether a single criterion is met.
+ * Determines whether a single criterion of an action is met. Receives the
+ * action declaring the criterion, so a caller can attribute the outcome to it.
  *
  * Bridged to a criterion evaluator
- * (`(criterion) => criterionEvaluator.evaluate(criterion, resolve)`); an
+ * (`(criterion) => criterionEvaluator.evaluate(criterion, resolve).met`); an
  * unresolvable/failing criterion is `false`, not an error.
  * @public
  */
-export type CriterionPredicate = (criterion: CriterionElement) => boolean;
+export type CriterionPredicate = (criterion: CriterionElement, action: SelectedAction) => boolean;
 
 /**
  * The action selected for a step outcome — a Success or Failure Action element.
@@ -171,6 +172,7 @@ class ActionResolver {
       });
     }
 
+    let met = true;
     for (const criterion of criteria) {
       if (!isCriterionElement(criterion)) {
         throw new ResolverError(
@@ -178,9 +180,11 @@ class ActionResolver {
           { ...scope, target: 'criteria', reason: 'malformed-criterion' },
         );
       }
-      if (!isCriterionMet(criterion)) return false;
+      // every criterion is evaluated, not only up to the first unmet one, so
+      // a predicate that records outcomes sees the whole list.
+      if (!isCriterionMet(criterion, action)) met = false;
     }
-    return true;
+    return met;
   }
 }
 

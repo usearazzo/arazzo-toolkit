@@ -49,6 +49,32 @@ describe('XPathCriterionEvaluator', function () {
       assert.throws(() => evaluator.evaluate('//[', xml), CriterionEvaluationError);
     });
 
+    specify('should not quote context values from a dynamic error', function () {
+      // the engine's own message would be "Cannot cast SECRET to xs:integer".
+      const error = assert.throws(
+        () => evaluator.evaluate('xs:integer(//status) = 1', '<o><status>SECRET</status></o>'),
+        CriterionEvaluationError,
+      ) as unknown as CriterionEvaluationError;
+
+      assert.strictEqual(
+        error.message,
+        'Invalid xpath criterion condition "xs:integer(//status) = 1"',
+      );
+    });
+
+    specify('should not quote context values a query raises through fn:error', function () {
+      const error = assert.throws(
+        () =>
+          evaluator.evaluate(
+            "fn:error(fn:QName('http://www.w3.org/2005/xqt-errors', 'err:XPST0001'), string(//status))",
+            '<o><status>SECRET</status></o>',
+          ),
+        CriterionEvaluationError,
+      ) as unknown as CriterionEvaluationError;
+
+      assert.notInclude(error.message, 'SECRET');
+    });
+
     specify('should throw CriterionEvaluationError for a non-XML (object) context', function () {
       const error = assert.throws(
         () => evaluator.evaluate('//status', { status: 'available' }),

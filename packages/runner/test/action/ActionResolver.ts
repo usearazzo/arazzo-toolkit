@@ -60,6 +60,25 @@ describe('ActionResolver', function () {
       assert.isUndefined(resolver.resolveOnSuccess(actions, byCondition, scope)[0]);
     });
 
+    specify('should evaluate every criterion of an action, with the action', function () {
+      const actions = onSuccess({
+        name: 'a',
+        type: 'end',
+        criteria: [{ condition: 'fail' }, { condition: 'pass' }],
+      });
+      const seen: [string, string][] = [];
+      const recording: CriterionPredicate = (criterion, action) => {
+        seen.push([toValue(action.name) as string, toValue(criterion.condition) as string]);
+        return byCondition(criterion, action);
+      };
+
+      assert.isEmpty(resolver.resolveOnSuccess(actions, recording, scope));
+      assert.deepEqual(seen, [
+        ['a', 'fail'],
+        ['a', 'pass'],
+      ]);
+    });
+
     specify('should treat an action with no criteria as always matching', function () {
       const selected = resolver.resolveOnSuccess(
         onSuccess({ name: 'a', type: 'end' }),

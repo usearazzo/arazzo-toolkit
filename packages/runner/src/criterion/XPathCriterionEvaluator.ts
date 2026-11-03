@@ -41,6 +41,9 @@ class XPathCriterionEvaluator {
         language: evaluateXPath.XPATH_3_1_LANGUAGE,
       });
     } catch (error: unknown) {
+      // no engine detail: the query has run against the context, and it can
+      // put context values into its own error (a dynamic error, or fn:error
+      // with a code and description of the query's choosing).
       throw new CriterionEvaluationError(`Invalid xpath criterion condition "${condition}"`, {
         cause: error,
         condition,

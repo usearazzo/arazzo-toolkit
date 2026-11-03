@@ -37,6 +37,8 @@ describe('StepRetryRunner', function () {
           outputs: {},
           action: matchedActions[0],
           matchedActions,
+          successCriteria: [],
+          actionCriteria: [],
         };
       },
     };
