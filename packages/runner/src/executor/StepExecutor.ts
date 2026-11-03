@@ -116,8 +116,8 @@ export interface CriterionEvaluationRecord {
      */
     readonly code?: CriterionErrorReason | 'unavailable-expression';
     /**
-     * Human-readable: names the condition or expression, never request or
-     * response data.
+     * Human-readable: names the condition or expression and, for a syntax
+     * error, what is wrong with it; never request or response data.
      */
     readonly message: string;
   };

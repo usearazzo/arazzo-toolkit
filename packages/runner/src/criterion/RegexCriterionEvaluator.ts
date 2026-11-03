@@ -38,12 +38,22 @@ class RegexCriterionEvaluator {
     try {
       regExp = new RegExp(condition);
     } catch (error: unknown) {
-      throw new CriterionEvaluationError(`Invalid regex criterion condition "${condition}"`, {
-        cause: error,
-        condition,
-        type: 'regex',
-        reason: CriterionErrorReason.InvalidRegex,
-      });
+      // the engine's detail (e.g. "Unterminated group") describes the pattern
+      // only, so it is safe to surface; its `/pattern/flags:` prefix repeats
+      // the condition and is dropped.
+      const detail =
+        error instanceof SyntaxError
+          ? `: ${error.message.replace(/^Invalid regular expression: \/.*\/[a-z]*: /s, '')}`
+          : '';
+      throw new CriterionEvaluationError(
+        `Invalid regex criterion condition "${condition}"${detail}`,
+        {
+          cause: error,
+          condition,
+          type: 'regex',
+          reason: CriterionErrorReason.InvalidRegex,
+        },
+      );
     }
 
     return regExp.test(this.#stringify(context));

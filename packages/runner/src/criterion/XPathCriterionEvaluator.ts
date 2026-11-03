@@ -41,12 +41,21 @@ class XPathCriterionEvaluator {
         language: evaluateXPath.XPATH_3_1_LANGUAGE,
       });
     } catch (error: unknown) {
-      throw new CriterionEvaluationError(`Invalid xpath criterion condition "${condition}"`, {
-        cause: error,
-        condition,
-        type: 'xpath',
-        reason: CriterionErrorReason.InvalidXPath,
-      });
+      // only a static error (XPST*, raised before the query touches the
+      // context) is surfaced: a dynamic error can quote context values, e.g.
+      // "FORG0001: Cannot cast <value> to xs:integer".
+      const staticError =
+        error instanceof Error ? /XPST\d{4}: [^\n]*/.exec(error.message)?.[0] : undefined;
+      const detail = staticError === undefined ? '' : `: ${staticError}`;
+      throw new CriterionEvaluationError(
+        `Invalid xpath criterion condition "${condition}"${detail}`,
+        {
+          cause: error,
+          condition,
+          type: 'xpath',
+          reason: CriterionErrorReason.InvalidXPath,
+        },
+      );
     }
   }
 

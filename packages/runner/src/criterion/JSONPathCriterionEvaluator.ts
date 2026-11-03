@@ -30,12 +30,19 @@ class JSONPathCriterionEvaluator {
       return evaluateJSONPath(context, condition).length > 0;
     } catch (error: unknown) {
       if (error instanceof JSONPathError) {
-        throw new CriterionEvaluationError(`Invalid jsonpath criterion condition "${condition}"`, {
-          cause: error,
-          condition,
-          type: 'jsonpath',
-          reason: CriterionErrorReason.InvalidJSONPath,
-        });
+        // the parser's position detail describes the query only, never the
+        // context it was applied to.
+        const position = /Syntax error at position .*/.exec(error.message)?.[0];
+        const detail = position === undefined ? '' : `: ${position}`;
+        throw new CriterionEvaluationError(
+          `Invalid jsonpath criterion condition "${condition}"${detail}`,
+          {
+            cause: error,
+            condition,
+            type: 'jsonpath',
+            reason: CriterionErrorReason.InvalidJSONPath,
+          },
+        );
       }
       throw error;
     }

@@ -38,5 +38,13 @@ describe('JSONPathCriterionEvaluator', function () {
     specify('should throw CriterionEvaluationError for an invalid JSONPath query', function () {
       assert.throws(() => evaluator.evaluate('$[[[', { a: 1 }), CriterionEvaluationError);
     });
+
+    specify('should name the syntax error position', function () {
+      assert.throws(
+        () => evaluator.evaluate('$[?', { a: 1 }),
+        CriterionEvaluationError,
+        /^Invalid jsonpath criterion condition "\$\[\?": Syntax error at position 3, /,
+      );
+    });
   });
 });
