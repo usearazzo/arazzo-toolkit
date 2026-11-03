@@ -70,6 +70,19 @@ describe('XPathCriterionEvaluator', function () {
       );
     });
 
+    specify('should not take context text that looks like a static error code', function () {
+      const error = assert.throws(
+        () =>
+          evaluator.evaluate(
+            'xs:integer(//status) = 1',
+            '<o><status>XPST0003: SECRET</status></o>',
+          ),
+        CriterionEvaluationError,
+      ) as unknown as CriterionEvaluationError;
+
+      assert.notInclude(error.message, 'SECRET');
+    });
+
     specify('should throw CriterionEvaluationError for a non-XML (object) context', function () {
       const error = assert.throws(
         () => evaluator.evaluate('//status', { status: 'available' }),

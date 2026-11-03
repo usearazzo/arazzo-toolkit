@@ -43,9 +43,12 @@ class XPathCriterionEvaluator {
     } catch (error: unknown) {
       // only a static error (XPST*, raised before the query touches the
       // context) is surfaced: a dynamic error can quote context values, e.g.
-      // "FORG0001: Cannot cast <value> to xs:integer".
-      const staticError =
-        error instanceof Error ? /XPST\d{4}: [^\n]*/.exec(error.message)?.[0] : undefined;
+      // "FORG0001: Cannot cast <value> to xs:integer". The first error code
+      // decides: a dynamic error leads with its own code, so context text
+      // after it that merely looks like "XPST0003:" is never picked up.
+      const code =
+        error instanceof Error ? /\b[A-Z]{4}\d{4}: [^\n]*/.exec(error.message)?.[0] : undefined;
+      const staticError = code?.startsWith('XPST') ? code : undefined;
       const detail = staticError === undefined ? '' : `: ${staticError}`;
       throw new CriterionEvaluationError(
         `Invalid xpath criterion condition "${condition}"${detail}`,
