@@ -54,7 +54,7 @@ describe('RegexCriterionEvaluator', function () {
       assert.throws(
         () => evaluator.evaluate('^(200', 'x'),
         CriterionEvaluationError,
-        /^Invalid regex criterion condition "\^\(200": Unterminated group$/,
+        /^Invalid regex criterion condition "\^\(200": Invalid regular expression: \/\^\(200\/: Unterminated group$/,
       );
     });
 

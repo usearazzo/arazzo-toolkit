@@ -1,4 +1,8 @@
-import { evaluate as evaluateJSONPath, JSONPathError } from '@swaggerexpert/jsonpath';
+import {
+  evaluate as evaluateJSONPath,
+  JSONPathError,
+  JSONPathParseError,
+} from '@swaggerexpert/jsonpath';
 
 import CriterionEvaluationError from '../errors/CriterionEvaluationError.ts';
 import CriterionErrorReason from './CriterionErrorReason.ts';
@@ -30,10 +34,9 @@ class JSONPathCriterionEvaluator {
       return evaluateJSONPath(context, condition).length > 0;
     } catch (error: unknown) {
       if (error instanceof JSONPathError) {
-        // the parser's position detail describes the query only, never the
-        // context it was applied to.
-        const position = /Syntax error at position .*/.exec(error.message)?.[0];
-        const detail = position === undefined ? '' : `: ${position}`;
+        // a parse error describes the query only; an evaluation error ran
+        // against the context, so its message is not surfaced.
+        const detail = error instanceof JSONPathParseError ? `: ${error.message}` : '';
         throw new CriterionEvaluationError(
           `Invalid jsonpath criterion condition "${condition}"${detail}`,
           {

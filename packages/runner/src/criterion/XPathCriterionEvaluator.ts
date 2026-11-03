@@ -41,17 +41,8 @@ class XPathCriterionEvaluator {
         language: evaluateXPath.XPATH_3_1_LANGUAGE,
       });
     } catch (error: unknown) {
-      // only a static error (XPST*, raised before the query touches the
-      // context) is surfaced: a dynamic error can quote context values, e.g.
-      // "FORG0001: Cannot cast <value> to xs:integer". The first error code
-      // decides: a dynamic error leads with its own code, so context text
-      // after it that merely looks like "XPST0003:" is never picked up.
-      const code =
-        error instanceof Error ? /\b[A-Z]{4}\d{4}: [^\n]*/.exec(error.message)?.[0] : undefined;
-      const staticError = code?.startsWith('XPST') ? code : undefined;
-      const detail = staticError === undefined ? '' : `: ${staticError}`;
       throw new CriterionEvaluationError(
-        `Invalid xpath criterion condition "${condition}"${detail}`,
+        `Invalid xpath criterion condition "${condition}"${this.#staticErrorDetail(error)}`,
         {
           cause: error,
           condition,
@@ -60,6 +51,20 @@ class XPathCriterionEvaluator {
         },
       );
     }
+  }
+
+  /**
+   * The engine's explanation of a static error (`XPST*`) as `": <detail>"`, or
+   * `''`. A static error is raised before the query touches the context; a
+   * dynamic error can quote context values ("FORG0001: Cannot cast <value> to
+   * xs:integer"), so it is not surfaced. The message's first error code
+   * decides: a dynamic error leads with its own, so context text after it
+   * that merely looks like "XPST0003:" is never picked up.
+   */
+  #staticErrorDetail(error: unknown): string {
+    if (!(error instanceof Error)) return '';
+    const code = /\b[A-Z]{4}\d{4}: [^\n]*/.exec(error.message)?.[0];
+    return code?.startsWith('XPST') ? `: ${code}` : '';
   }
 
   /**

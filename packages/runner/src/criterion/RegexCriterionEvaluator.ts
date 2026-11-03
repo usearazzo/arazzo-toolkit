@@ -38,15 +38,10 @@ class RegexCriterionEvaluator {
     try {
       regExp = new RegExp(condition);
     } catch (error: unknown) {
-      // the engine's detail (e.g. "Unterminated group") describes the pattern
-      // only, so it is safe to surface; its `/pattern/flags:` prefix repeats
-      // the condition and is dropped.
-      const detail =
-        error instanceof SyntaxError
-          ? `: ${error.message.replace(/^Invalid regular expression: \/.*\/[a-z]*: /s, '')}`
-          : '';
+      // the engine has seen only the pattern, never the context, so its
+      // message is safe to surface.
       throw new CriterionEvaluationError(
-        `Invalid regex criterion condition "${condition}"${detail}`,
+        `Invalid regex criterion condition "${condition}": ${(error as SyntaxError).message}`,
         {
           cause: error,
           condition,
