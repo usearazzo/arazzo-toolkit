@@ -3,6 +3,25 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.21](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.20...v1.0.1-alpha.21) (2026-11-03)
+
+### Features
+
+- **runner:** record criterion outcomes in step run records ([#302](https://github.com/usearazzo/arazzo-toolkit/issues/302)) ([513516b](https://github.com/usearazzo/arazzo-toolkit/commit/513516b80fc7edecae2d3fce74a53e000a494982)), closes [#231](https://github.com/usearazzo/arazzo-toolkit/issues/231)
+
+### BREAKING CHANGES
+
+- **runner:** CriterionEvaluator.evaluate returns a CriterionOutcome
+  ({ met, error? }) instead of a boolean. StepExecutor.evaluateCriteria
+  returns CriterionEvaluationRecord[] instead of a boolean, and
+  StepExecutor.selectActions returns { matchedActions, actionCriteria }
+  instead of the action list. CriterionPredicate gains a second `action`
+  argument and is called for every criterion of an action. StepRunRecord
+  and StepExecutionResult gain required `successCriteria` and
+  `actionCriteria` fields. Any error a criterion throws other than an
+  unevaluable condition, such as a malformed criterion, now aborts the run
+  even after an earlier unmet criterion.
+
 ## [1.0.1-alpha.20](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.19...v1.0.1-alpha.20) (2026-11-01)
 
 ### Bug Fixes
