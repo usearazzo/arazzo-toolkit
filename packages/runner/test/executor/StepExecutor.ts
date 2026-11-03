@@ -474,22 +474,14 @@ describe('StepExecutor', function () {
         const result = await executor.execute(step, state());
 
         // the first unmet criterion does not stop the others, in either list.
-        assert.deepEqual(result.criteria, [
-          { source: 'successCriteria', condition: '$statusCode == 201', met: false },
-          { source: 'successCriteria', condition: '$statusCode == 202', met: false },
-          { source: 'successCriteria', condition: '$statusCode == 200', met: true },
-          {
-            source: 'onFailure',
-            action: 'onServerError',
-            condition: '$statusCode == 500',
-            met: false,
-          },
-          {
-            source: 'onFailure',
-            action: 'onServerError',
-            condition: '$statusCode == 200',
-            met: true,
-          },
+        assert.deepEqual(result.successCriteria, [
+          { condition: '$statusCode == 201', met: false },
+          { condition: '$statusCode == 202', met: false },
+          { condition: '$statusCode == 200', met: true },
+        ]);
+        assert.deepEqual(result.actionCriteria, [
+          { condition: '$statusCode == 500', met: false, actionName: 'onServerError' },
+          { condition: '$statusCode == 200', met: true, actionName: 'onServerError' },
         ]);
         assert.strictEqual(toValue(result.action?.name), 'fallback');
       },
@@ -513,14 +505,16 @@ describe('StepExecutor', function () {
 
       const result = await executor.execute(step, state());
 
-      assert.deepEqual(
-        result.criteria.map(({ source, met, error }) => ({ source, met, reason: error?.reason })),
-        [
-          { source: 'successCriteria', met: false, reason: CriterionErrorReason.InvalidRegex },
-          { source: 'onFailure', met: false, reason: CriterionErrorReason.InvalidXPathContext },
-        ],
+      assert.strictEqual(
+        result.successCriteria[0].diagnostic?.code,
+        CriterionErrorReason.InvalidRegex,
       );
-      assert.match(result.criteria[0].error?.message ?? '', /\^\(200/);
+      assert.match(result.successCriteria[0].diagnostic?.message ?? '', /\^\(200/);
+      assert.deepInclude(result.actionCriteria[0], { met: false, actionName: 'onXml' });
+      assert.strictEqual(
+        result.actionCriteria[0].diagnostic?.code,
+        CriterionErrorReason.InvalidXPathContext,
+      );
     });
 
     specify('should throw on a malformed criterion even after an unmet one', async function () {
@@ -554,7 +548,8 @@ describe('StepExecutor', function () {
 
       const result = await executor.execute(step, state());
 
-      assert.deepEqual(result.criteria, []);
+      assert.deepEqual(result.successCriteria, []);
+      assert.deepEqual(result.actionCriteria, []);
     });
   });
 

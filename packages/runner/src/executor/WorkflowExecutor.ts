@@ -220,13 +220,16 @@ export interface StepRunRecord {
    */
   readonly durationMs: number;
   /**
-   * The outcome of every criterion the last attempt evaluated — its
-   * `successCriteria` first, then the criteria of the `onSuccess` /
-   * `onFailure` actions it considered, in list order. Explains why the step
-   * failed or which action matched; a criterion that could not be evaluated
-   * carries the error.
+   * The outcome of each of the step's `successCriteria` in its last attempt, in
+   * list order — why the step succeeded or failed.
    */
-  readonly criteria: readonly CriterionEvaluationRecord[];
+  readonly successCriteria: readonly CriterionEvaluationRecord[];
+  /**
+   * The outcome of each criterion of the actions the last attempt considered —
+   * its `onSuccess` actions when it succeeded, its `onFailure` actions
+   * otherwise — in list order: why an action matched or did not.
+   */
+  readonly actionCriteria: readonly CriterionEvaluationRecord[];
   /**
    * The sub-workflow runs this step produced, in attempt order — present only on
    * a step targeting a `workflowId`.
@@ -685,7 +688,8 @@ class WorkflowExecutor {
         action,
         attempts,
         durationMs: this.#now() - stepStartedAt,
-        criteria: outcome.criteria,
+        successCriteria: outcome.successCriteria,
+        actionCriteria: outcome.actionCriteria,
         ...(subWorkflows.length > 0 ? { subWorkflows } : {}),
         ...(retryReferences.length > 0 ? { retryReferences } : {}),
       });
@@ -1222,7 +1226,11 @@ class WorkflowExecutor {
       const successCriteria = stepExecutor.evaluateCriteria(step, context);
       const successful =
         !this.#settledFailed(result) && successCriteria.every((criterion) => criterion.met);
-      const { matchedActions, criteria } = stepExecutor.selectActions(step, successful, context);
+      const { matchedActions, actionCriteria } = stepExecutor.selectActions(
+        step,
+        successful,
+        context,
+      );
 
       return {
         stepId,
@@ -1230,7 +1238,8 @@ class WorkflowExecutor {
         outputs,
         action: matchedActions[0],
         matchedActions,
-        criteria: [...successCriteria, ...criteria],
+        successCriteria,
+        actionCriteria,
       };
     };
   }

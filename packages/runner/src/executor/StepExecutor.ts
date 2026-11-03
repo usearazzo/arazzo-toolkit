@@ -87,21 +87,10 @@ export interface StepExecutorOptions {
 
 /**
  * The outcome of one criterion a step evaluated: one of its `successCriteria`,
- * or one of the `criteria` of an `onSuccess` / `onFailure` action it
- * considered.
+ * or one of the `criteria` of an action it considered.
  * @public
  */
 export interface CriterionEvaluationRecord {
-  /**
-   * Where the criterion is declared: the step's `successCriteria`, or the
-   * `criteria` of an action in its `onSuccess` / `onFailure` list.
-   */
-  readonly source: 'successCriteria' | 'onSuccess' | 'onFailure';
-  /**
-   * The `name` of the action declaring the criterion — present only for an
-   * action criterion.
-   */
-  readonly action?: string;
   /**
    * The criterion's `condition`, as written.
    */
@@ -111,14 +100,25 @@ export interface CriterionEvaluationRecord {
    */
   readonly met: boolean;
   /**
-   * Why the condition could not be evaluated — present only when it was not,
-   * in which case `met` is `false`. `reason` is a `CriterionErrorReason`, or
-   * `'unavailable-expression'` for an HTTP-exchange expression in a step that
-   * calls a workflow; `message` names the condition or expression, never
-   * request or response data.
+   * The `name` of the action declaring the criterion — present only on an
+   * action criterion.
    */
-  readonly error?: {
-    readonly reason?: CriterionErrorReason | 'unavailable-expression';
+  readonly actionName?: string;
+  /**
+   * Why the condition could not be evaluated — present only then, with `met`
+   * `false`.
+   */
+  readonly diagnostic?: {
+    /**
+     * Machine-readable: the `reason` of the error that failed the criterion, a
+     * `CriterionErrorReason` value or `'unavailable-expression'` for an
+     * HTTP-exchange expression in a step that calls a workflow.
+     */
+    readonly code?: CriterionErrorReason | 'unavailable-expression';
+    /**
+     * Human-readable: names the condition or expression, never request or
+     * response data.
+     */
     readonly message: string;
   };
 }
@@ -146,10 +146,15 @@ export interface StepExecutionResult {
    */
   readonly matchedActions: readonly SelectedAction[];
   /**
-   * The outcome of every criterion the step evaluated: its `successCriteria`
-   * first, then the criteria of the actions it considered, in list order.
+   * The outcome of each of the step's `successCriteria`, in list order.
    */
-  readonly criteria: readonly CriterionEvaluationRecord[];
+  readonly successCriteria: readonly CriterionEvaluationRecord[];
+  /**
+   * The outcome of each criterion of the actions the step considered — its
+   * `onSuccess` actions when it succeeded, its `onFailure` actions otherwise —
+   * in list order.
+   */
+  readonly actionCriteria: readonly CriterionEvaluationRecord[];
 }
 
 /**
@@ -313,7 +318,7 @@ class StepExecutor {
       (expression) => this.#evaluate(postContext, expression),
       scope,
     );
-    const { matchedActions, criteria } = this.selectActions(step, successful, postContext);
+    const { matchedActions, actionCriteria } = this.selectActions(step, successful, postContext);
 
     return {
       stepId,
@@ -322,7 +327,8 @@ class StepExecutor {
       outputs,
       action: matchedActions[0],
       matchedActions,
-      criteria: [...successCriteria, ...criteria],
+      successCriteria,
+      actionCriteria,
     };
   }
 
@@ -421,10 +427,9 @@ class StepExecutor {
     if (criteria === undefined) return [];
 
     // assertSuccessCriteria above guarantees every entry is a Criterion Object
-    return ([...criteria] as CriterionElement[]).map((criterion) => ({
-      source: 'successCriteria',
-      ...this.#evaluateCriterion(criterion, context),
-    }));
+    return ([...criteria] as CriterionElement[]).map((criterion) =>
+      this.#evaluateCriterion(criterion, context),
+    );
   }
 
   /**
@@ -454,17 +459,15 @@ class StepExecutor {
     context: RuntimeExpressionContext,
   ): {
     readonly matchedActions: readonly SelectedAction[];
-    readonly criteria: readonly CriterionEvaluationRecord[];
+    readonly actionCriteria: readonly CriterionEvaluationRecord[];
   } {
-    const source = successful ? 'onSuccess' : 'onFailure';
-    const criteria: CriterionEvaluationRecord[] = [];
+    const actionCriteria: CriterionEvaluationRecord[] = [];
     const isCriterionMet: CriterionPredicate = (criterion, action) => {
       const record: CriterionEvaluationRecord = {
-        source,
-        action: toValue(action.name) as string,
         ...this.#evaluateCriterion(criterion, context),
+        actionName: toValue(action.name) as string,
       };
-      criteria.push(record);
+      actionCriteria.push(record);
       return record.met;
     };
     const scope = { stepId: toValue(step.stepId) as string };
@@ -473,31 +476,35 @@ class StepExecutor {
       ? this.#actionResolver.resolveOnSuccess(step.onSuccess, isCriterionMet, scope)
       : this.#actionResolver.resolveOnFailure(step.onFailure, isCriterionMet, scope);
 
-    return { matchedActions, criteria };
+    return { matchedActions, actionCriteria };
   }
 
   /**
-   * Evaluates one criterion into the outcome part of a {@link CriterionEvaluationRecord};
-   * the caller adds where it is declared. A condition that cannot be evaluated
-   * is unmet and records why; any other error propagates.
+   * Evaluates one criterion into a {@link CriterionEvaluationRecord}. A
+   * condition that cannot be evaluated is unmet and records why; any other
+   * error propagates.
    */
   #evaluateCriterion(
     criterion: CriterionElement,
     context: RuntimeExpressionContext,
-  ): Omit<CriterionEvaluationRecord, 'source' | 'action'> {
+  ): CriterionEvaluationRecord {
     const condition = toValue(criterion.condition) as string;
     try {
       const { met, error } = this.#criterionEvaluator.evaluate(criterion, (expression) =>
         this.#evaluate(context, expression),
       );
       if (error === undefined) return { condition, met };
-      return { condition, met, error: { reason: error.reason, message: error.message } };
+      return { condition, met, diagnostic: { code: error.reason, message: error.message } };
     } catch (error: unknown) {
       // a step that calls a workflow made no HTTP call, so a condition on one
-      // fails like any unevaluable condition; the recorded error keeps the
+      // fails like any unevaluable condition; the diagnostic keeps the
       // authoring mistake visible.
       if (error instanceof RuntimeExpressionError && error.reason === 'unavailable-expression') {
-        return { condition, met: false, error: { reason: error.reason, message: error.message } };
+        return {
+          condition,
+          met: false,
+          diagnostic: { code: error.reason, message: error.message },
+        };
       }
       throw error;
     }

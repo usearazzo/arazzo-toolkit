@@ -21,7 +21,8 @@ export interface StepAttemptOutcome {
   readonly outputs: Record<string, unknown>;
   readonly action: SelectedAction | undefined;
   readonly matchedActions: readonly SelectedAction[];
-  readonly criteria: readonly CriterionEvaluationRecord[];
+  readonly successCriteria: readonly CriterionEvaluationRecord[];
+  readonly actionCriteria: readonly CriterionEvaluationRecord[];
 }
 
 /**

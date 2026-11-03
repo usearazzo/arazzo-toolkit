@@ -908,13 +908,12 @@ describe('WorkflowExecutor composition', function () {
       assert.strictEqual(own.status, 'completed');
       assert.isUndefined(own.steps[0].action);
       // the no-match is explained in the step record rather than silent.
-      assert.deepInclude(own.steps[0].criteria[0], {
-        source: 'onSuccess',
-        action: 'onGet',
+      assert.deepInclude(own.steps[0].actionCriteria[0], {
         condition: "$method == 'GET'",
         met: false,
+        actionName: 'onGet',
       });
-      assert.strictEqual(own.steps[0].criteria[0].error?.reason, 'unavailable-expression');
+      assert.strictEqual(own.steps[0].actionCriteria[0].diagnostic?.code, 'unavailable-expression');
 
       // inherited workflow-level defaults on $statusCode / $response: neither
       // the success default (`end`) nor the failure default (`retry`) matches.
@@ -943,13 +942,12 @@ describe('WorkflowExecutor composition', function () {
 
           assert.strictEqual(result.status, 'failed');
           assert.isFalse(result.steps[0].successful);
-          const [record] = result.steps[0].criteria;
-          assert.strictEqual(record.source, 'successCriteria');
+          const [record] = result.steps[0].successCriteria;
           assert.isFalse(record.met);
-          assert.strictEqual(record.error?.reason, 'unavailable-expression');
-          assert.include(record.error?.message, expression);
-          assert.match(record.error?.message ?? '', /step "child"/);
-          assert.match(record.error?.message ?? '', /workflow "fetchPet"/);
+          assert.strictEqual(record.diagnostic?.code, 'unavailable-expression');
+          assert.include(record.diagnostic?.message, expression);
+          assert.match(record.diagnostic?.message ?? '', /step "child"/);
+          assert.match(record.diagnostic?.message ?? '', /workflow "fetchPet"/);
         },
       );
     }
