@@ -41,30 +41,16 @@ class XPathCriterionEvaluator {
         language: evaluateXPath.XPATH_3_1_LANGUAGE,
       });
     } catch (error: unknown) {
-      throw new CriterionEvaluationError(
-        `Invalid xpath criterion condition "${condition}"${this.#staticErrorDetail(error)}`,
-        {
-          cause: error,
-          condition,
-          type: 'xpath',
-          reason: CriterionErrorReason.InvalidXPath,
-        },
-      );
+      // no engine detail: the query has run against the context, and it can
+      // put context values into its own error (a dynamic error, or fn:error
+      // with a code and description of the query's choosing).
+      throw new CriterionEvaluationError(`Invalid xpath criterion condition "${condition}"`, {
+        cause: error,
+        condition,
+        type: 'xpath',
+        reason: CriterionErrorReason.InvalidXPath,
+      });
     }
-  }
-
-  /**
-   * The engine's explanation of a static error (`XPST*`) as `": <detail>"`, or
-   * `''`. A static error is raised before the query touches the context; a
-   * dynamic error can quote context values ("FORG0001: Cannot cast <value> to
-   * xs:integer"), so it is not surfaced. The message's first error code
-   * decides: a dynamic error leads with its own, so context text after it
-   * that merely looks like "XPST0003:" is never picked up.
-   */
-  #staticErrorDetail(error: unknown): string {
-    if (!(error instanceof Error)) return '';
-    const code = /\b[A-Z]{4}\d{4}: [^\n]*/.exec(error.message)?.[0];
-    return code?.startsWith('XPST') ? `: ${code}` : '';
   }
 
   /**
