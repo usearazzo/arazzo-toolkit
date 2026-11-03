@@ -457,10 +457,7 @@ class StepExecutor {
     step: StepElement,
     successful: boolean,
     context: RuntimeExpressionContext,
-  ): {
-    readonly matchedActions: readonly SelectedAction[];
-    readonly actionCriteria: readonly CriterionEvaluationRecord[];
-  } {
+  ): Pick<StepExecutionResult, 'matchedActions' | 'actionCriteria'> {
     const actionCriteria: CriterionEvaluationRecord[] = [];
     const isCriterionMet: CriterionPredicate = (criterion, action) => {
       const record: CriterionEvaluationRecord = {
