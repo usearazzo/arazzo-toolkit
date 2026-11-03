@@ -34,8 +34,9 @@ export type CriterionContextResolver = (expression: string) => unknown;
  */
 export interface CriterionOutcome {
   /**
-   * Whether the condition is met. `false` when the condition cannot be
-   * evaluated, in which case {@link CriterionOutcome.error} says why.
+   * Whether the condition is met. `false` when it evaluates to false or cannot
+   * be evaluated; only in the latter case is {@link CriterionOutcome.error}
+   * present, saying why.
    */
   readonly met: boolean;
   /**
