@@ -1,4 +1,5 @@
-import StepRetryRunner, { type StepAttemptOutcome } from '../../src/executor/StepRetryRunner.ts';
+import StepRetryRunner from '../../src/executor/StepRetryRunner.ts';
+import type { StepAttemptOutcome } from '../../src/executor/StepExecutor.ts';
 import { ExecutionError, type SelectedAction } from '../../src/index.ts';
 import { assert } from 'chai';
 import { refractFailureAction, isFailureActionElement } from '@speclynx/apidom-ns-arazzo-1';

@@ -158,6 +158,25 @@ export interface StepExecutionResult {
 }
 
 /**
+ * What one attempt at a step produced.
+ *
+ * Both kinds of step reduce to this — an operation step (whose richer
+ * {@link StepExecutionResult} satisfies this shape) and a sub-workflow step
+ * (synthesized from the sub-run's outcome) — so the retry loop drives them
+ * identically and knows nothing about either.
+ * @internal
+ */
+export interface StepAttemptOutcome {
+  readonly stepId: string;
+  readonly successful: boolean;
+  readonly outputs: Record<string, unknown>;
+  readonly action: SelectedAction | undefined;
+  readonly matchedActions: readonly SelectedAction[];
+  readonly successCriteria: readonly CriterionEvaluationRecord[];
+  readonly actionCriteria: readonly CriterionEvaluationRecord[];
+}
+
+/**
  * Executes a single Arazzo step that invokes an OpenAPI operation.
  *
  * The pipeline locates the step's operation (`operationId` / `operationPath`),
