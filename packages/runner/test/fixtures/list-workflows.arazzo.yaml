@@ -1,0 +1,36 @@
+arazzo: "1.0.1"
+info:
+  title: List workflows
+  version: "1.0.0"
+  summary: >-
+    Workflows with and without summary and description, one whose summary is
+    not a string, and one that cannot be addressed because it has no
+    workflowId.
+sourceDescriptions:
+  - name: petstoreAPI
+    url: ./petstore.openapi.json
+    type: openapi
+workflows:
+  - workflowId: findPets
+    summary: Find pets by status
+    description: |-
+      Finds pets by status.
+
+      Returns **every** match.
+    steps:
+      - stepId: find
+        operationId: findPetsByStatus
+  - workflowId: bare
+    steps:
+      - stepId: inventory
+        operationId: getInventory
+  - summary: No workflowId
+    steps:
+      - stepId: inventory
+        operationId: getInventory
+  - workflowId: numericSummary
+    summary: 42
+    description: Summary is not a string
+    steps:
+      - stepId: inventory
+        operationId: getInventory
