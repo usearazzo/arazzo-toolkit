@@ -1103,12 +1103,6 @@ class WorkflowExecutor {
       const locator = await this.#workflowLocatorNormalizer.normalize(reference, document, {
         workflowId,
       });
-      if (!locator.document.workflowIndex.has(locator.workflowId)) {
-        throw new ExecutionError(
-          `workflow "${workflowId}" depends on "${reference}", which the Arazzo document at "${locator.document.uri}" does not define`,
-          { workflowId, reason: 'workflow-not-found' },
-        );
-      }
       refs.push({ locator, inputsKey: reference });
     }
     return refs;
@@ -1302,11 +1296,8 @@ class WorkflowExecutor {
    *
    * Shared rather than duplicated by its two callers, which otherwise repeat
    * the identical "resolve the reference, then run with no inputs" sequence.
-   * Rejects a target its document does not define with the calling `stepId`
-   * attached, unlike {@link WorkflowExecutor.#resolveWorkflow}'s own
-   * `workflow-not-found` (reached only once `#run` itself resolves the
-   * target) — which carries no caller context at all, since it is reached
-   * generically from every kind of nested call.
+   * A target its document does not define is rejected by the normalizer,
+   * attributed to the calling workflow and `stepId`.
    */
   async #runReferencedWorkflow(
     reference: string,
@@ -1320,12 +1311,6 @@ class WorkflowExecutor {
       invocation.document,
       { workflowId: invocation.workflowId, stepId },
     );
-    if (!locator.document.workflowIndex.has(locator.workflowId)) {
-      throw new ExecutionError(
-        `workflow "${locator.workflowId}" not found in Arazzo document at "${locator.document.uri}"`,
-        { workflowId: locator.workflowId, stepId, reason: 'workflow-not-found' },
-      );
-    }
     return this.#run(locator, {}, scope, invocation.callStack, via);
   }
 
@@ -1333,7 +1318,11 @@ class WorkflowExecutor {
    * Extracts and normalizes the workflow a locator names. A workflow its
    * document does not define is the executor-level `workflow-not-found`
    * authoring error, raised here rather than leaking the extractor's
-   * `ExtractionError`.
+   * `ExtractionError`. Only the root {@link WorkflowExecutor.execute} id
+   * reaches this check unvalidated — every reference position goes through
+   * the locator normalizer, which already rejects a missing workflow with
+   * the referencing context attached — so the error's `workflowId` is the
+   * missing id itself.
    */
   async #resolveWorkflow(
     locator: ArazzoWorkflowLocator,

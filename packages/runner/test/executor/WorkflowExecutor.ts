@@ -1014,7 +1014,8 @@ describe('WorkflowExecutor', function () {
         const error = await captureError(executor.execute('gotoUnknownWorkflow'));
 
         assert.strictEqual(error.reason, 'workflow-not-found');
-        assert.match(error.message, /not found/);
+        assert.strictEqual(error.workflowId, 'gotoUnknownWorkflow');
+        assert.match(error.message, /noSuchWorkflow/);
         // several steps could goto the same missing id; naming the calling
         // step (not just the missing target) is what lets an author tell
         // which one is wrong.

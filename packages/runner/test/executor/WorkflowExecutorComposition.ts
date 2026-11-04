@@ -828,6 +828,33 @@ describe('WorkflowExecutor composition', function () {
       },
     );
 
+    specify(
+      'should throw workflow-not-found, naming the calling step, for a sub-workflow step to an unknown workflow',
+      async function () {
+        const { executor, calls } = makeExecutor();
+
+        const error = await captureError(executor.execute('subWorkflowUnknown'));
+
+        assert.strictEqual(error.reason, 'workflow-not-found');
+        assert.strictEqual(error.workflowId, 'subWorkflowUnknown');
+        assert.strictEqual(error.stepId, 'call');
+        assert.match(error.message, /noSuchWorkflow/);
+        assert.strictEqual(calls.length, 0);
+      },
+    );
+
+    specify(
+      "should report a sub-workflow step's unknown target ahead of its malformed parameters",
+      async function () {
+        const { executor } = makeExecutor();
+
+        const error = await captureError(executor.execute('subWorkflowUnknownMalformedParameters'));
+
+        assert.strictEqual(error.reason, 'workflow-not-found');
+        assert.strictEqual(error.stepId, 'call');
+      },
+    );
+
     specify('should throw for a present but non-list "dependsOn"', async function () {
       const { executor } = makeExecutor();
 
