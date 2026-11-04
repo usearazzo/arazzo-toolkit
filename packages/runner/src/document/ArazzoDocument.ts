@@ -1,15 +1,44 @@
 import type { ParseResultElement } from '@usearazzo/parser';
 import { toValue } from '@speclynx/apidom-core';
+import { isStringElement } from '@speclynx/apidom-datamodel';
+import { evaluate, type JSONPointer } from '@speclynx/apidom-json-pointer';
+import type { WorkflowElement } from '@speclynx/apidom-ns-arazzo-1';
 
 import APIDocument from './APIDocument.ts';
 import type ArazzoWorkflowIndex from './ArazzoWorkflowIndex.ts';
+import type { WorkflowId } from './ArazzoWorkflowIndex.ts';
 import type ArazzoStepIndex from './ArazzoStepIndex.ts';
 import type ArazzoSourceDescriptionIndex from './ArazzoSourceDescriptionIndex.ts';
 
 /**
+ * A workflow of an Arazzo document, as listed by
+ * {@link ArazzoDocument.listWorkflows}.
+ * @public
+ */
+export interface WorkflowDescriptor {
+  /**
+   * The id `ArazzoRunner.execute` takes to run the workflow.
+   */
+  workflowId: WorkflowId;
+  /**
+   * JSON Pointer to the workflow within the document.
+   */
+  jsonPointer: JSONPointer;
+  /**
+   * Present only when the workflow has a string `summary`.
+   */
+  summary?: string;
+  /**
+   * Present only when the workflow has a string `description`, as written
+   * (CommonMark).
+   */
+  description?: string;
+}
+
+/**
  * An Arazzo document held by the document registry: the parse result together
  * with the indexes the provider built over it — a container, not a logic
- * bearer. The methods below are thin reads of the source description index.
+ * bearer. The methods below are thin reads of those indexes.
  * @public
  */
 class ArazzoDocument extends APIDocument {
@@ -51,6 +80,24 @@ class ArazzoDocument extends APIDocument {
    */
   static is(doc: APIDocument): doc is ArazzoDocument {
     return doc.type === 'arazzo';
+  }
+
+  /**
+   * The workflows of this document that can be addressed by `workflowId`, in
+   * document order. Reads this document only: source descriptions are neither
+   * loaded nor listed.
+   */
+  listWorkflows(): WorkflowDescriptor[] {
+    return [...this.workflowIndex].map(([workflowId, jsonPointer]) => {
+      const { summary, description } = evaluate<WorkflowElement>(this.parseResult.api, jsonPointer);
+
+      return {
+        workflowId,
+        jsonPointer,
+        ...(isStringElement(summary) && { summary: toValue(summary) as string }),
+        ...(isStringElement(description) && { description: toValue(description) as string }),
+      };
+    });
   }
 
   /**
