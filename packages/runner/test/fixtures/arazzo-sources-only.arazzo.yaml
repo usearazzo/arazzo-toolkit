@@ -1,0 +1,16 @@
+arazzo: "1.0.1"
+info:
+  title: Arazzo sources only
+  version: "1.0.0"
+  summary: >-
+    A document whose only source description is another Arazzo document, so a
+    plain operationId has no OpenAPI source to be found in.
+sourceDescriptions:
+  - name: childWorkflows
+    url: ./cross-document-child.arazzo.yaml
+    type: arazzo
+workflows:
+  - workflowId: plainOperation
+    steps:
+      - stepId: call
+        operationId: getInventory
