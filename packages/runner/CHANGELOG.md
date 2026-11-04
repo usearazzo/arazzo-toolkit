@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.24](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.23...v1.0.1-alpha.24) (2026-11-04)
+
+### Features
+
+- **runner:** type error reasons as static fields on error classes ([#320](https://github.com/usearazzo/arazzo-toolkit/issues/320)) ([3cdec78](https://github.com/usearazzo/arazzo-toolkit/commit/3cdec783d6fa9e54d83c3d9696ef1da1d6405bb5)), closes [#319](https://github.com/usearazzo/arazzo-toolkit/issues/319) [#78](https://github.com/usearazzo/arazzo-toolkit/issues/78)
+
+### BREAKING CHANGES
+
+- **runner:** CriterionErrorReason is now a type-only export; use the
+  CriterionError statics (CriterionError.InvalidRegex) instead of the
+  CriterionErrorReason object. The reason of ExecutionError, ResolverError
+  and RuntimeExpressionError is typed as a union of its reasons instead of
+  string, and their constructors reject reasons the class does not list.
+
 ## [1.0.1-alpha.23](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.22...v1.0.1-alpha.23) (2026-11-04)
 
 ### Bug Fixes
