@@ -1,9 +1,11 @@
 /**
- * Identifies the step a resolver is resolving for, so a thrown
- * {@link ResolverError} can say which one it came from. Every resolver that
- * only ever runs within a step's scope — {@link OpenAPIOperationParameterResolver},
+ * Identifies the step something is being resolved or located for, so a thrown
+ * error can say which one it came from. Every resolver that only ever runs
+ * within a step's scope — {@link OpenAPIOperationParameterResolver},
  * {@link WorkflowParameterResolver}, {@link RequestBodyResolver},
- * {@link ActionResolver} — takes this.
+ * {@link ActionResolver} — takes this, as does
+ * {@link OpenAPIOperationLocatorNormalizer} for the step whose operation it
+ * locates.
  * @public
  */
 export interface StepScope {
