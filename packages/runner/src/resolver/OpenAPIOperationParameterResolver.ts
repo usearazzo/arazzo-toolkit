@@ -71,7 +71,7 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
       throw new ResolverError('`parameters` is present but is not a list', {
         ...scope,
         target: 'parameters',
-        reason: 'malformed-parameters',
+        reason: ResolverError.MalformedParameters,
       });
     }
 
@@ -84,7 +84,7 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
       if (identity === undefined) {
         throw new ResolverError('Parameter has a missing or non-string name', {
           ...scope,
-          reason: 'missing-name',
+          reason: ResolverError.MissingName,
         });
       }
 
@@ -92,21 +92,21 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
       if (location === undefined) {
         throw new ResolverError(
           `Parameter "${name}" declares no location ("in"), which a step targeting an operation requires`,
-          { ...scope, target: name, reason: 'missing-location' },
+          { ...scope, target: name, reason: ResolverError.MissingLocation },
         );
       }
       if (location === null) {
         throw new ResolverError(`Parameter "${name}" has a non-string location ("in")`, {
           ...scope,
           target: name,
-          reason: 'malformed-location',
+          reason: ResolverError.MalformedLocation,
         });
       }
       if (!identity.hasDefinedLocation) {
         throw new ResolverError(
           `Parameter "${name}" has location "${location}", which is not one of ` +
             `${ParameterIdentity.LOCATIONS.join(', ')}`,
-          { ...scope, target: name, reason: 'invalid-location' },
+          { ...scope, target: name, reason: ResolverError.InvalidLocation },
         );
       }
 
@@ -120,7 +120,7 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
             : 'has a name the client reads as the delivery key of another location';
         throw new ResolverError(
           `Parameter "${name}" (in: ${location}) ${why} and cannot be delivered unambiguously`,
-          { ...scope, target: name, reason: 'ambiguous-delivery' },
+          { ...scope, target: name, reason: ResolverError.AmbiguousDelivery },
         );
       }
 

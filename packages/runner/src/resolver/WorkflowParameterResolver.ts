@@ -45,7 +45,7 @@ class WorkflowParameterResolver extends StepParameterResolver {
       throw new ResolverError('`parameters` is present but is not a list', {
         ...scope,
         target: 'parameters',
-        reason: 'malformed-parameters',
+        reason: ResolverError.MalformedParameters,
       });
     }
 

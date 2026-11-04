@@ -4,7 +4,6 @@ import {
 } from '@swaggerexpert/arazzo-criterion';
 
 import CriterionEvaluationError from '../errors/CriterionEvaluationError.ts';
-import CriterionErrorReason from './CriterionErrorReason.ts';
 import type { CriterionContextResolver } from './CriterionEvaluator.ts';
 
 /**
@@ -38,7 +37,7 @@ class SimpleCriterionEvaluator {
           cause: error,
           condition,
           type: 'simple',
-          reason: CriterionErrorReason.InvalidSimple,
+          reason: CriterionEvaluationError.InvalidSimple,
         });
       }
       throw error;

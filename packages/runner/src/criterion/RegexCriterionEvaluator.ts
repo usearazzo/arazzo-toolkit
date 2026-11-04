@@ -1,5 +1,4 @@
 import CriterionEvaluationError from '../errors/CriterionEvaluationError.ts';
-import CriterionErrorReason from './CriterionErrorReason.ts';
 
 /**
  * Evaluates a `regex` Arazzo criterion condition against a resolved context value.
@@ -46,7 +45,7 @@ class RegexCriterionEvaluator {
           cause: error,
           condition,
           type: 'regex',
-          reason: CriterionErrorReason.InvalidRegex,
+          reason: CriterionEvaluationError.InvalidRegex,
         },
       );
     }

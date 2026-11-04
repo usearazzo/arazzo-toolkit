@@ -9,6 +9,7 @@ import {
   ExecutionError,
   OpenAPIOperationLocatorNormalizer,
 } from '../../src/index.ts';
+import type { ExecutionErrorReason } from '../../src/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesPath = path.join(__dirname, '..', 'fixtures');
@@ -33,7 +34,7 @@ const captureError = async (promise: Promise<unknown>): Promise<ExecutionError> 
  * Asserts an error carries the reason and the referencing context it was
  * normalized in.
  */
-const assertRejection = (error: ExecutionError, reason: string): void => {
+const assertRejection = (error: ExecutionError, reason: ExecutionErrorReason): void => {
   assert.strictEqual(error.reason, reason);
   assert.strictEqual(error.workflowId, 'caller');
   assert.strictEqual(error.stepId, 'call');

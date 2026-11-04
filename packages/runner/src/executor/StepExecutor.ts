@@ -17,7 +17,7 @@ import type {
 } from '../expression/RuntimeExpressionContext.ts';
 import RuntimeExpressionEvaluator from '../expression/RuntimeExpressionEvaluator.ts';
 import CriterionEvaluator from '../criterion/CriterionEvaluator.ts';
-import type CriterionErrorReason from '../criterion/CriterionErrorReason.ts';
+import type { CriterionErrorReason } from '../errors/CriterionError.ts';
 import type { StepScope } from '../resolver/ResolverScope.ts';
 import OpenAPIOperationParameterResolver from '../resolver/OpenAPIOperationParameterResolver.ts';
 import RequestBodyResolver, { type ResolvedRequestBody } from '../resolver/RequestBodyResolver.ts';
@@ -112,10 +112,10 @@ export interface CriterionEvaluationRecord {
   readonly diagnostic?: {
     /**
      * Machine-readable: the `reason` of the error that failed the criterion, a
-     * `CriterionErrorReason` value or `'unavailable-expression'` for an
-     * HTTP-exchange expression in a step that calls a workflow.
+     * `CriterionErrorReason` or `RuntimeExpressionError.UnavailableExpression`
+     * for an HTTP-exchange expression in a step that calls a workflow.
      */
-    readonly code?: CriterionErrorReason | 'unavailable-expression';
+    readonly code?: CriterionErrorReason | typeof RuntimeExpressionError.UnavailableExpression;
     /**
      * Human-readable: names the condition or expression and, for a syntax
      * error, what is wrong with it; never request or response data.
@@ -244,7 +244,7 @@ class StepExecutor {
    * take precedence over it.
    *
    * A `signal` in that bag is honored here and not only at the transport: an
-   * already-aborted signal throws `reason: 'aborted'` instead of issuing a
+   * already-aborted signal throws with reason `ExecutionError.Aborted` instead of issuing a
    * request nobody is waiting for, whose wire-level cancellation would surface
    * as a transport {@link ClientError} — a request that failed on its own terms
    * — rather than as the withdrawal it is.
@@ -268,14 +268,14 @@ class StepExecutor {
     if (declaredTargets.length > 1) {
       throw new ExecutionError(
         `Step "${stepId}" declares more than one of ${STEP_TARGET_FIELDS.join(', ')} (mutually exclusive)`,
-        { ...scope, reason: 'ambiguous-target' },
+        { ...scope, reason: ExecutionError.AmbiguousTarget },
       );
     }
 
     if (isStringElement(step.workflowId)) {
       throw new ExecutionError(`Step "${stepId}" targets a workflowId; use the workflow executor`, {
         ...scope,
-        reason: 'workflow-step',
+        reason: ExecutionError.WorkflowStep,
       });
     }
 
@@ -397,7 +397,7 @@ class StepExecutor {
     }
     throw new ExecutionError(`Step "${scope.stepId}" has no operationId or operationPath`, {
       ...scope,
-      reason: 'missing-operation',
+      reason: ExecutionError.MissingOperation,
     });
   }
 
@@ -426,13 +426,13 @@ class StepExecutor {
     if (!isArrayElement(criteria)) {
       throw new ResolverError("A step's `successCriteria` is present but is not a list", {
         ...scope,
-        reason: 'malformed-criteria',
+        reason: ResolverError.MalformedCriteria,
       });
     }
     if (![...criteria].every(isCriterionElement)) {
       throw new ResolverError(
         "A step's `successCriteria` contains an entry that is not a Criterion Object",
-        { ...scope, reason: 'malformed-criterion' },
+        { ...scope, reason: ResolverError.MalformedCriterion },
       );
     }
   }
@@ -537,7 +537,10 @@ class StepExecutor {
       // a step that calls a workflow made no HTTP call, so a condition on one
       // fails like any unevaluable condition; the diagnostic keeps the
       // authoring mistake visible.
-      if (error instanceof RuntimeExpressionError && error.reason === 'unavailable-expression') {
+      if (
+        error instanceof RuntimeExpressionError &&
+        error.reason === RuntimeExpressionError.UnavailableExpression
+      ) {
         return {
           condition,
           met: false,

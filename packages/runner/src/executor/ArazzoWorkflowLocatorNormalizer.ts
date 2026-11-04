@@ -99,7 +99,11 @@ class ArazzoWorkflowLocatorNormalizer extends SourceDescriptionsLocatorNormalize
     if (!locator.document.workflowIndex.has(locator.workflowId)) {
       throw new ExecutionError(
         `workflow reference "${reference}" in workflow "${context.workflowId}" names workflow "${locator.workflowId}", which the Arazzo document at "${locator.document.uri}" does not define`,
-        { workflowId: context.workflowId, stepId: context.stepId, reason: 'workflow-not-found' },
+        {
+          workflowId: context.workflowId,
+          stepId: context.stepId,
+          reason: ExecutionError.WorkflowNotFound,
+        },
       );
     }
     return locator;
@@ -124,7 +128,7 @@ class ArazzoWorkflowLocatorNormalizer extends SourceDescriptionsLocatorNormalize
     if (parsed === undefined) {
       throw new ExecutionError(
         `workflow reference "${reference}" in workflow "${workflowId}" is not a $sourceDescriptions.{name}.{workflowId} expression`,
-        { workflowId, stepId, reason: 'invalid-workflow-reference' },
+        { workflowId, stepId, reason: ExecutionError.InvalidWorkflowReference },
       );
     }
     return {
@@ -156,7 +160,7 @@ class ArazzoWorkflowLocatorNormalizer extends SourceDescriptionsLocatorNormalize
     if (uri === undefined) {
       throw new ExecutionError(
         `workflow reference "${parsed.reference}" in workflow "${workflowId}" names source description "${parsed.sourceName}", which the Arazzo document at "${document.uri}" does not define`,
-        { workflowId, stepId, reason: 'source-description-not-found' },
+        { workflowId, stepId, reason: ExecutionError.SourceDescriptionNotFound },
       );
     }
 
@@ -164,7 +168,7 @@ class ArazzoWorkflowLocatorNormalizer extends SourceDescriptionsLocatorNormalize
     if (!ArazzoDocument.is(source)) {
       throw new ExecutionError(
         `workflow reference "${parsed.reference}" in workflow "${workflowId}" names source description "${parsed.sourceName}" at "${uri}", which is not an Arazzo document`,
-        { workflowId, stepId, reason: 'source-description-not-arazzo' },
+        { workflowId, stepId, reason: ExecutionError.SourceDescriptionNotArazzo },
       );
     }
 

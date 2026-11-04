@@ -142,7 +142,7 @@ class RuntimeExpressionEvaluator {
     if (value === undefined && this.#strict) {
       throw new RuntimeExpressionError(
         `Runtime expression "${expression}" could not be resolved against the context`,
-        { expression, reason: 'unresolved-reference' },
+        { expression, reason: RuntimeExpressionError.UnresolvedReference },
       );
     }
     return value;
@@ -188,14 +188,14 @@ class RuntimeExpressionEvaluator {
       throw new RuntimeExpressionError(`Failed to parse runtime expression "${expression}"`, {
         cause: error,
         expression,
-        reason: 'parse-error',
+        reason: RuntimeExpressionError.ParseError,
       });
     }
 
     if (!result.result.success || result.tree === undefined) {
       throw new RuntimeExpressionError(`Invalid runtime expression "${expression}"`, {
         expression,
-        reason: 'invalid-expression',
+        reason: RuntimeExpressionError.InvalidExpression,
       });
     }
 
@@ -213,7 +213,7 @@ class RuntimeExpressionEvaluator {
 
     throw new RuntimeExpressionError(
       `Runtime expression "${expression}" is not available: step "${calledWorkflow.stepId}" calls workflow "${calledWorkflow.workflowId}", not an operation, so it has no HTTP request or response`,
-      { expression, reason: 'unavailable-expression' },
+      { expression, reason: RuntimeExpressionError.UnavailableExpression },
     );
   }
 
@@ -256,7 +256,7 @@ class RuntimeExpressionEvaluator {
       default:
         throw new RuntimeExpressionError(
           `Unsupported runtime expression node "${(node as ASTNode).type}"`,
-          { expression, reason: 'unsupported-node' },
+          { expression, reason: RuntimeExpressionError.UnsupportedNode },
         );
     }
   }

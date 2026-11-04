@@ -1,10 +1,6 @@
 import { assert } from 'chai';
 
-import {
-  XPathCriterionEvaluator,
-  CriterionEvaluationError,
-  CriterionErrorReason,
-} from '../../src/index.ts';
+import { XPathCriterionEvaluator, CriterionEvaluationError } from '../../src/index.ts';
 
 describe('XPathCriterionEvaluator', function () {
   let evaluator: XPathCriterionEvaluator;
@@ -81,7 +77,7 @@ describe('XPathCriterionEvaluator', function () {
         CriterionEvaluationError,
       ) as unknown as CriterionEvaluationError;
 
-      assert.strictEqual(error.reason, CriterionErrorReason.InvalidXPathContext);
+      assert.strictEqual(error.reason, CriterionEvaluationError.InvalidXPathContext);
     });
 
     specify('should throw CriterionEvaluationError for fatally malformed XML', function () {

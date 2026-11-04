@@ -27,7 +27,7 @@ class OutputResolver extends ArazzoValueResolver {
    *
    * `scope` names the step or workflow the outputs belong to, for a thrown
    * {@link ResolverError}. An output value that is not a valid runtime
-   * expression throws with `reason: 'invalid-expression'`.
+   * expression throws with reason `ResolverError.InvalidExpression`.
    */
   resolve(
     outputs: StepOutputsElement | WorkflowOutputsElement | undefined,
@@ -42,7 +42,7 @@ class OutputResolver extends ArazzoValueResolver {
       throw new ResolverError('`outputs` is present but is not a map', {
         ...scope,
         target: 'outputs',
-        reason: 'malformed-outputs',
+        reason: ResolverError.MalformedOutputs,
       });
     }
 
@@ -53,7 +53,7 @@ class OutputResolver extends ArazzoValueResolver {
         throw new ResolverError(`Output "${name}" is not a valid runtime expression`, {
           ...scope,
           target: 'outputs',
-          reason: 'invalid-expression',
+          reason: ResolverError.InvalidExpression,
         });
       }
       // defined rather than assigned: a name like `__proto__` hits the

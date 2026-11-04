@@ -83,7 +83,7 @@ class RequestBodyResolver extends ArazzoValueResolver {
       throw new ResolverError('`requestBody` is present but is not a map', {
         ...scope,
         target: 'requestBody',
-        reason: 'malformed-request-body',
+        reason: ResolverError.MalformedRequestBody,
       });
     }
 
@@ -102,7 +102,7 @@ class RequestBodyResolver extends ArazzoValueResolver {
         throw new ResolverError('`requestBody.replacements` is present but is not a list', {
           ...scope,
           target: 'requestBody.replacements',
-          reason: 'malformed-replacements',
+          reason: ResolverError.MalformedReplacements,
         });
       }
       for (const replacement of requestBody.replacements) {
@@ -187,7 +187,11 @@ class RequestBodyResolver extends ArazzoValueResolver {
         onError: ({ text }) => {
           throw new ResolverError(
             `Invalid runtime expression "${text}" in ${this.#payloadTarget(tokens)}`,
-            { ...scope, target: this.#payloadTarget(tokens), reason: 'invalid-expression' },
+            {
+              ...scope,
+              target: this.#payloadTarget(tokens),
+              reason: ResolverError.InvalidExpression,
+            },
           );
         },
       },
@@ -213,7 +217,7 @@ class RequestBodyResolver extends ArazzoValueResolver {
     return new ResolverError(`Runtime expression "${expression}" in ${target} did not resolve`, {
       ...scope,
       target,
-      reason: 'unresolved-expression',
+      reason: ResolverError.UnresolvedExpression,
     });
   }
 
@@ -241,7 +245,7 @@ class RequestBodyResolver extends ArazzoValueResolver {
         {
           ...scope,
           target,
-          reason: 'unsupported-target',
+          reason: ResolverError.UnsupportedTarget,
         },
       );
     }
@@ -258,7 +262,7 @@ class RequestBodyResolver extends ArazzoValueResolver {
         {
           ...scope,
           target,
-          reason: 'unresolved-target',
+          reason: ResolverError.UnresolvedTarget,
         },
       );
     }
