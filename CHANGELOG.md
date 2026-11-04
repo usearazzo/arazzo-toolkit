@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.22](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.21...v1.0.1-alpha.22) (2026-11-04)
+
+### Bug Fixes
+
+- **runner:** attribute workflow-not-found to the referencing step ([#316](https://github.com/usearazzo/arazzo-toolkit/issues/316)) ([fe4340f](https://github.com/usearazzo/arazzo-toolkit/commit/fe4340f91a7dfda63fac59a94c96f463111185ef)), closes [#resolveWorkflow](https://github.com/usearazzo/arazzo-toolkit/issues/resolveWorkflow) [#dependencyRefs](https://github.com/usearazzo/arazzo-toolkit/issues/dependencyRefs) [#runReferencedWorkflow](https://github.com/usearazzo/arazzo-toolkit/issues/runReferencedWorkflow) [#resolveWorkflow](https://github.com/usearazzo/arazzo-toolkit/issues/resolveWorkflow) [#77](https://github.com/usearazzo/arazzo-toolkit/issues/77)
+
 ## [1.0.1-alpha.21](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.20...v1.0.1-alpha.21) (2026-11-03)
 
 ### Features
