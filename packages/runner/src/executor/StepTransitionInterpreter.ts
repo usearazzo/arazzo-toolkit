@@ -3,7 +3,7 @@ import { isStringElement } from '@speclynx/apidom-datamodel';
 import type { StepElement } from '@speclynx/apidom-ns-arazzo-1';
 
 import type { SelectedAction } from '../action/ActionResolver.ts';
-import ExecutionError from '../errors/ExecutionError.ts';
+import ExecutionError, { type ExecutionErrorReason } from '../errors/ExecutionError.ts';
 
 /**
  * Which of an action's mutually exclusive `stepId` / `workflowId` fields are
@@ -105,7 +105,7 @@ class StepTransitionInterpreter {
       if (hasStepId && hasWorkflowId) {
         throw new ExecutionError(
           `goto action on step "${stepId}" in workflow "${workflowId}" declares both a stepId and a workflowId (mutually exclusive)`,
-          { stepId, workflowId, reason: 'ambiguous-target' },
+          { stepId, workflowId, reason: ExecutionError.AmbiguousTarget },
         );
       }
       if (hasStepId) {
@@ -116,13 +116,13 @@ class StepTransitionInterpreter {
       }
       throw new ExecutionError(
         `goto action on step "${stepId}" in workflow "${workflowId}" has neither stepId nor workflowId`,
-        { stepId, workflowId, reason: 'goto-target-missing' },
+        { stepId, workflowId, reason: ExecutionError.GotoTargetMissing },
       );
     }
 
     throw new ExecutionError(
       `action on step "${stepId}" in workflow "${workflowId}" has unsupported type "${type}"`,
-      { stepId, workflowId, reason: 'unknown-action-type' },
+      { stepId, workflowId, reason: ExecutionError.UnknownActionType },
     );
   }
 
@@ -142,7 +142,7 @@ class StepTransitionInterpreter {
     steps: readonly StepElement[],
     stepId: string,
     workflowId: string,
-    descriptor: { readonly reason: string; readonly label: string },
+    descriptor: { readonly reason: ExecutionErrorReason; readonly label: string },
   ): number {
     const index = steps.findIndex((step) => (toValue(step.stepId) as string) === stepId);
     if (index === -1) {

@@ -96,7 +96,6 @@ export { default as SimpleCriterionEvaluator } from './criterion/SimpleCriterion
 export { default as RegexCriterionEvaluator } from './criterion/RegexCriterionEvaluator.ts';
 export { default as JSONPathCriterionEvaluator } from './criterion/JSONPathCriterionEvaluator.ts';
 export { default as XPathCriterionEvaluator } from './criterion/XPathCriterionEvaluator.ts';
-export { default as CriterionErrorReason } from './criterion/CriterionErrorReason.ts';
 
 /* Execution State */
 export { default as WorkflowExecutionState } from './state/WorkflowExecutionState.ts';
@@ -159,7 +158,11 @@ export { default as InvalidEntryDocumentError } from './errors/InvalidEntryDocum
 export { default as UnmatchedProviderError } from './errors/UnmatchedProviderError.ts';
 export { default as DocumentLoadError } from './errors/DocumentLoadError.ts';
 export { default as RuntimeExpressionError } from './errors/RuntimeExpressionError.ts';
+export type { RuntimeExpressionErrorReason } from './errors/RuntimeExpressionError.ts';
 export { default as CriterionError } from './errors/CriterionError.ts';
+export type { CriterionErrorReason } from './errors/CriterionError.ts';
 export { default as CriterionEvaluationError } from './errors/CriterionEvaluationError.ts';
 export { default as ResolverError } from './errors/ResolverError.ts';
+export type { ResolverErrorReason } from './errors/ResolverError.ts';
 export { default as ExecutionError } from './errors/ExecutionError.ts';
+export type { ExecutionErrorReason } from './errors/ExecutionError.ts';

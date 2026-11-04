@@ -573,7 +573,7 @@ class WorkflowExecutor {
 
     throw new ExecutionError(
       `execute received unknown option(s) ${unknown.join(', ')}; it takes (workflowId, { inputs, executeOptions, dependencyInputs, runDependencies, signal }) — workflow inputs go under "inputs"`,
-      { reason: 'unknown-execute-option' },
+      { reason: ExecutionError.UnknownExecuteOption },
     );
   }
 
@@ -705,7 +705,7 @@ class WorkflowExecutor {
           break;
         case 'goto':
           index = this.#interpreter.indexOfStep(steps, transition.stepId, workflowId, {
-            reason: 'goto-target-not-found',
+            reason: ExecutionError.GotoTargetNotFound,
             label: 'goto target',
           });
           break;
@@ -742,7 +742,7 @@ class WorkflowExecutor {
           const unreachable: never = transition;
           throw new ExecutionError(
             `step "${stepId}" in workflow "${workflowId}" produced an unrecognized transition ${JSON.stringify(unreachable)}`,
-            { workflowId, stepId, reason: 'unknown-transition-kind' },
+            { workflowId, stepId, reason: ExecutionError.UnknownTransitionKind },
           );
         }
       }
@@ -836,7 +836,7 @@ class WorkflowExecutor {
       {
         workflowId: invocation.workflowId,
         stepId,
-        reason: 'step-budget',
+        reason: ExecutionError.StepBudget,
         path: invocation.callStack.path,
       },
     );
@@ -932,7 +932,7 @@ class WorkflowExecutor {
       if (hasWorkflowId && hasStepId) {
         throw new ExecutionError(
           `retry action on step "${stepId}" in workflow "${workflowId}" declares both a stepId and a workflowId (mutually exclusive)`,
-          { stepId, workflowId, reason: 'ambiguous-target' },
+          { stepId, workflowId, reason: ExecutionError.AmbiguousTarget },
         );
       }
 
@@ -964,7 +964,7 @@ class WorkflowExecutor {
 
       const refStepId = toValue(action.stepId) as string;
       const refIndex = this.#interpreter.indexOfStep(steps, refStepId, workflowId, {
-        reason: 'retry-target-not-found',
+        reason: ExecutionError.RetryTargetNotFound,
         label: 'retry reference',
       });
       const refStep = steps[refIndex];
@@ -1084,7 +1084,7 @@ class WorkflowExecutor {
     if (!isArrayElement(dependsOn)) {
       throw new ExecutionError(`workflow "${workflowId}" has a non-list "dependsOn"`, {
         workflowId,
-        reason: 'malformed-dependsOn',
+        reason: ExecutionError.MalformedDependsOn,
       });
     }
 
@@ -1092,7 +1092,7 @@ class WorkflowExecutor {
       if (!isStringElement(entry)) {
         throw new ExecutionError(
           `workflow "${workflowId}" has a non-string entry at dependsOn[${index}]`,
-          { workflowId, reason: 'malformed-dependsOn' },
+          { workflowId, reason: ExecutionError.MalformedDependsOn },
         );
       }
       return toValue(entry) as string;
@@ -1284,7 +1284,7 @@ class WorkflowExecutor {
     if (conflicting.length > 0) {
       throw new ExecutionError(
         `step "${stepId}" in workflow "${workflowId}" declares a workflowId alongside ${conflicting.join(', ')} (mutually exclusive)`,
-        { stepId, workflowId, reason: 'ambiguous-target' },
+        { stepId, workflowId, reason: ExecutionError.AmbiguousTarget },
       );
     }
 
@@ -1339,7 +1339,7 @@ class WorkflowExecutor {
     if (!document.workflowIndex.has(workflowId)) {
       throw new ExecutionError(
         `workflow "${workflowId}" not found in Arazzo document at "${document.uri}"`,
-        { workflowId, reason: 'workflow-not-found' },
+        { workflowId, reason: ExecutionError.WorkflowNotFound },
       );
     }
     const workflow = await this.#normalizer.normalize(
@@ -1374,7 +1374,7 @@ class WorkflowExecutor {
     if (!isArrayElement(steps)) {
       throw new ExecutionError(`workflow "${workflowId}" has a non-list "steps"`, {
         workflowId,
-        reason: 'malformed-steps',
+        reason: ExecutionError.MalformedSteps,
       });
     }
 
@@ -1382,7 +1382,7 @@ class WorkflowExecutor {
       if (!isStepElement(step)) {
         throw new ExecutionError(
           `workflow "${workflowId}" has a non-step entry at steps[${index}]`,
-          { workflowId, reason: 'malformed-steps' },
+          { workflowId, reason: ExecutionError.MalformedSteps },
         );
       }
       return step;
@@ -1407,7 +1407,7 @@ class WorkflowExecutor {
     throw new ResolverError('`outputs` is present but is not a map', {
       workflowId,
       target: 'outputs',
-      reason: 'malformed-outputs',
+      reason: ResolverError.MalformedOutputs,
     });
   }
 

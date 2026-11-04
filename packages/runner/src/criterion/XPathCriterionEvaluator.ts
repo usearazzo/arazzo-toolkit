@@ -4,7 +4,6 @@ import fontoxpath from 'fontoxpath';
 import { DOMParser } from '@xmldom/xmldom';
 
 import CriterionEvaluationError from '../errors/CriterionEvaluationError.ts';
-import CriterionErrorReason from './CriterionErrorReason.ts';
 
 const { evaluateXPathToBoolean, evaluateXPath } = fontoxpath;
 
@@ -48,7 +47,7 @@ class XPathCriterionEvaluator {
         cause: error,
         condition,
         type: 'xpath',
-        reason: CriterionErrorReason.InvalidXPath,
+        reason: CriterionEvaluationError.InvalidXPath,
       });
     }
   }
@@ -65,7 +64,7 @@ class XPathCriterionEvaluator {
       throw new CriterionEvaluationError('xpath criterion context is not XML', {
         condition,
         type: 'xpath',
-        reason: CriterionErrorReason.InvalidXPathContext,
+        reason: CriterionEvaluationError.InvalidXPathContext,
       });
     }
 
@@ -85,7 +84,7 @@ class XPathCriterionEvaluator {
           cause: parseError,
           condition,
           type: 'xpath',
-          reason: CriterionErrorReason.InvalidXPathContext,
+          reason: CriterionEvaluationError.InvalidXPathContext,
         });
       }
       return document;
@@ -95,7 +94,7 @@ class XPathCriterionEvaluator {
         cause: error,
         condition,
         type: 'xpath',
-        reason: CriterionErrorReason.InvalidXPathContext,
+        reason: CriterionEvaluationError.InvalidXPathContext,
       });
     }
   }

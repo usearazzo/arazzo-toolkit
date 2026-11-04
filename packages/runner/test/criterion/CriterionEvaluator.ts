@@ -4,7 +4,6 @@ import { refractCriterion, CriterionExpressionTypeElement } from '@speclynx/apid
 import {
   CriterionEvaluator,
   CriterionError,
-  CriterionErrorReason,
   CriterionEvaluationError,
   RegexCriterionEvaluator,
   RuntimeExpressionEvaluator,
@@ -250,31 +249,31 @@ describe('CriterionEvaluator', function () {
     // a condition that cannot be evaluated MUST evaluate to fail, rather than
     // abort the step.
     const cases = [
-      { type: 'simple', condition: '$statusCode ==', reason: CriterionErrorReason.InvalidSimple },
+      { type: 'simple', condition: '$statusCode ==', reason: CriterionError.InvalidSimple },
       {
         type: 'regex',
         context: '$statusCode',
         condition: '^(200',
-        reason: CriterionErrorReason.InvalidRegex,
+        reason: CriterionError.InvalidRegex,
       },
       {
         type: 'jsonpath',
         context: '$response.body',
         condition: '$[?',
-        reason: CriterionErrorReason.InvalidJSONPath,
+        reason: CriterionError.InvalidJSONPath,
       },
       {
         type: 'xpath',
         context: '$inputs.xml',
         condition: '//status[',
-        reason: CriterionErrorReason.InvalidXPath,
+        reason: CriterionError.InvalidXPath,
       },
       // a context the condition cannot apply to: JSON data under an xpath query.
       {
         type: 'xpath',
         context: '$response.body',
         condition: '//status',
-        reason: CriterionErrorReason.InvalidXPathContext,
+        reason: CriterionError.InvalidXPathContext,
       },
     ];
 
@@ -317,7 +316,7 @@ describe('CriterionEvaluator', function () {
         // CriterionError an evaluator raises is not absorbed as an unmet criterion.
         class MisconfiguredRegexEvaluator extends RegexCriterionEvaluator {
           override evaluate(): boolean {
-            throw new CriterionError('misconfigured', { reason: CriterionErrorReason.InvalidType });
+            throw new CriterionError('misconfigured', { reason: CriterionError.InvalidType });
           }
         }
         const injected = new CriterionEvaluator({ regex: new MisconfiguredRegexEvaluator() });
@@ -333,7 +332,7 @@ describe('CriterionEvaluator', function () {
         ) as unknown as CriterionError;
 
         assert.isFalse(error instanceof CriterionEvaluationError);
-        assert.strictEqual(error.reason, CriterionErrorReason.InvalidType);
+        assert.strictEqual(error.reason, CriterionError.InvalidType);
       },
     );
   });
@@ -353,7 +352,7 @@ describe('CriterionEvaluator', function () {
           /not a valid runtime expression/,
         ) as unknown as CriterionError;
 
-        assert.strictEqual(error.reason, CriterionErrorReason.InvalidContext);
+        assert.strictEqual(error.reason, CriterionError.InvalidContext);
       });
     }
 

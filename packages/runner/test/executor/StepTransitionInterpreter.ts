@@ -35,7 +35,7 @@ describe('StepTransitionInterpreter', function () {
 
   // `indexOfStep`'s `descriptor` is mandatory (no goto-flavored default), so
   // every caller — including these tests — names which lookup it is.
-  const gotoDescriptor = { reason: 'goto-target-not-found', label: 'goto target' };
+  const gotoDescriptor = { reason: ExecutionError.GotoTargetNotFound, label: 'goto target' };
 
   /**
    * Runs an interpretation expected to be rejected and returns the

@@ -9,7 +9,6 @@ import { test as isRuntimeExpression } from '@swaggerexpert/arazzo-runtime-expre
 
 import CriterionError from '../errors/CriterionError.ts';
 import CriterionEvaluationError from '../errors/CriterionEvaluationError.ts';
-import CriterionErrorReason from './CriterionErrorReason.ts';
 import RegexCriterionEvaluator from './RegexCriterionEvaluator.ts';
 import SimpleCriterionEvaluator from './SimpleCriterionEvaluator.ts';
 import JSONPathCriterionEvaluator from './JSONPathCriterionEvaluator.ts';
@@ -134,7 +133,7 @@ class CriterionEvaluator {
   evaluate(criterion: CriterionElement, resolve: CriterionContextResolver): CriterionOutcome {
     if (!isCriterionElement(criterion)) {
       throw new CriterionError('Element is not a Criterion Object', {
-        reason: CriterionErrorReason.InvalidCriterion,
+        reason: CriterionError.InvalidCriterion,
       });
     }
 
@@ -145,7 +144,7 @@ class CriterionEvaluator {
     // (e.g. an empty regex would match unconditionally), so reject it too.
     if (condition === undefined || condition === '') {
       throw new CriterionError('Criterion is missing a "condition"', {
-        reason: CriterionErrorReason.MissingCondition,
+        reason: CriterionError.MissingCondition,
       });
     }
 
@@ -178,7 +177,7 @@ class CriterionEvaluator {
           throw new CriterionError(`Unknown criterion type "${type}"`, {
             condition,
             type,
-            reason: CriterionErrorReason.UnknownType,
+            reason: CriterionError.UnknownType,
           });
       }
     } catch (error: unknown) {
@@ -204,7 +203,7 @@ class CriterionEvaluator {
     }
     if (isStringElement(type)) return toValue(type) as string;
     throw new CriterionError('Criterion has an invalid "type"', {
-      reason: CriterionErrorReason.InvalidType,
+      reason: CriterionError.InvalidType,
     });
   }
 
@@ -224,7 +223,7 @@ class CriterionEvaluator {
       return toValue(type.version) as string;
     }
     throw new CriterionError('Criterion has an invalid expression type "version"', {
-      reason: CriterionErrorReason.InvalidVersion,
+      reason: CriterionError.InvalidVersion,
     });
   }
 
@@ -244,7 +243,7 @@ class CriterionEvaluator {
       throw new CriterionError(`Unsupported ${type} version "${version}" (only ${supported})`, {
         condition,
         type,
-        reason: CriterionErrorReason.UnsupportedVersion,
+        reason: CriterionError.UnsupportedVersion,
       });
     }
   }
@@ -260,7 +259,7 @@ class CriterionEvaluator {
     if (!isStringElement(context) || !isRuntimeExpression(toValue(context) as string)) {
       throw new CriterionError('Criterion has a "context" that is not a valid runtime expression', {
         type,
-        reason: CriterionErrorReason.InvalidContext,
+        reason: CriterionError.InvalidContext,
       });
     }
   }
@@ -279,7 +278,7 @@ class CriterionEvaluator {
     if (!isStringElement(criterion.context)) {
       throw new CriterionError(`Criterion type "${type}" requires a "context"`, {
         type,
-        reason: CriterionErrorReason.MissingContext,
+        reason: CriterionError.MissingContext,
       });
     }
     return resolve(toValue(criterion.context) as string);

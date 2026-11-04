@@ -6,6 +6,7 @@ import { toValue } from '@speclynx/apidom-core';
 import { refractStep, type StepElement } from '@speclynx/apidom-ns-arazzo-1';
 
 import {
+  ArazzoRunnerError,
   DocumentRegistry,
   ArazzoDocument,
   StepExecutor,
@@ -15,7 +16,6 @@ import {
   ClientError,
   ResolverError,
   CriterionError,
-  CriterionErrorReason,
   type HTTPClient,
   type OpenAPIOperationRequest,
 } from '../../src/index.ts';
@@ -44,7 +44,7 @@ const notFoundResponse = () => jsonResponse({}, { status: 404, statusText: 'Not 
  */
 const rejects = async (
   promise: Promise<unknown>,
-  errorType?: typeof ExecutionError,
+  errorType?: typeof ArazzoRunnerError,
   message?: RegExp,
 ): Promise<void> => {
   try {
@@ -505,15 +505,12 @@ describe('StepExecutor', function () {
 
       const result = await executor.execute(step, state());
 
-      assert.strictEqual(
-        result.successCriteria[0].diagnostic?.code,
-        CriterionErrorReason.InvalidRegex,
-      );
+      assert.strictEqual(result.successCriteria[0].diagnostic?.code, CriterionError.InvalidRegex);
       assert.match(result.successCriteria[0].diagnostic?.message ?? '', /\^\(200/);
       assert.deepInclude(result.actionCriteria[0], { met: false, actionName: 'onXml' });
       assert.strictEqual(
         result.actionCriteria[0].diagnostic?.code,
-        CriterionErrorReason.InvalidXPathContext,
+        CriterionError.InvalidXPathContext,
       );
     });
 
@@ -533,7 +530,7 @@ describe('StepExecutor', function () {
 
       await rejects(
         executor.execute(step, state()),
-        CriterionError as unknown as typeof ExecutionError,
+        CriterionError,
         /Unknown criterion type "unknown"/,
       );
     });

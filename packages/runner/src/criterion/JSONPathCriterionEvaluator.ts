@@ -5,7 +5,6 @@ import {
 } from '@swaggerexpert/jsonpath';
 
 import CriterionEvaluationError from '../errors/CriterionEvaluationError.ts';
-import CriterionErrorReason from './CriterionErrorReason.ts';
 
 /**
  * Evaluates a `jsonpath` Arazzo criterion condition against a resolved context value.
@@ -43,7 +42,7 @@ class JSONPathCriterionEvaluator {
             cause: error,
             condition,
             type: 'jsonpath',
-            reason: CriterionErrorReason.InvalidJSONPath,
+            reason: CriterionEvaluationError.InvalidJSONPath,
           },
         );
       }

@@ -259,7 +259,7 @@ class StepRetryRunner {
       {
         stepId: context.stepId,
         workflowId: context.workflowId,
-        reason: 'retry-reference-unsupported',
+        reason: ExecutionError.RetryReferenceUnsupported,
       },
     );
   }

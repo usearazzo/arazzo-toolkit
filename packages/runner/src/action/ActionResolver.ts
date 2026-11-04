@@ -127,7 +127,7 @@ class ActionResolver {
       throw new ResolverError(`\`${field}\` is present but is not a list`, {
         ...scope,
         target: field,
-        reason: 'malformed-actions',
+        reason: ResolverError.MalformedActions,
       });
     }
 
@@ -136,7 +136,7 @@ class ActionResolver {
       if (!isSuccessActionElement(action) && !isFailureActionElement(action)) {
         throw new ResolverError(
           `\`${field}\` contains an entry that is not a Success/Failure Action Object`,
-          { ...scope, target: field, reason: 'malformed-action-entry' },
+          { ...scope, target: field, reason: ResolverError.MalformedActionEntry },
         );
       }
       if (this.#criteriaMet(action, isCriterionMet, scope)) {
@@ -168,7 +168,7 @@ class ActionResolver {
       throw new ResolverError("An action's `criteria` is present but is not a list", {
         ...scope,
         target: 'criteria',
-        reason: 'malformed-criteria',
+        reason: ResolverError.MalformedCriteria,
       });
     }
 
@@ -177,7 +177,7 @@ class ActionResolver {
       if (!isCriterionElement(criterion)) {
         throw new ResolverError(
           "An action's `criteria` contains an entry that is not a Criterion Object",
-          { ...scope, target: 'criteria', reason: 'malformed-criterion' },
+          { ...scope, target: 'criteria', reason: ResolverError.MalformedCriterion },
         );
       }
       // every criterion is evaluated, not only up to the first unmet one, so

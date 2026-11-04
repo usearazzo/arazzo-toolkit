@@ -76,7 +76,7 @@ export const throwIfAborted = (signal: AbortSignal | undefined, context: AbortCo
   throw new ExecutionError(`run aborted before ${where}`, {
     workflowId,
     stepId,
-    reason: 'aborted',
+    reason: ExecutionError.Aborted,
     path: callStack?.path,
     cause: signal.reason,
   });

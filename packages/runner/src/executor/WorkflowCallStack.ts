@@ -110,8 +110,8 @@ class WorkflowCallStack {
       // them.
       const closingEdges = [...this.#calls.slice(repeated + 1).map((call) => call.via), via];
       const reason = closingEdges.every((edge) => edge === 'dependsOn')
-        ? 'dependsOn-cycle'
-        : 'workflow-cycle';
+        ? ExecutionError.DependsOnCycle
+        : ExecutionError.WorkflowCycle;
       throw new ExecutionError(
         `workflow "${workflowId}" is already in progress; its call chain forms a cycle (${path.join(' -> ')})`,
         { workflowId, reason, path },
@@ -123,7 +123,7 @@ class WorkflowCallStack {
         `workflow "${workflowId}" nests deeper than the limit of ${this.#maxDepth} workflows`,
         {
           workflowId,
-          reason: 'workflow-depth',
+          reason: ExecutionError.WorkflowDepth,
           path: [...this.path, this.#display(workflowId, documentURI)],
         },
       );
