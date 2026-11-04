@@ -16,6 +16,9 @@ import type ArazzoSourceDescriptionIndex from './ArazzoSourceDescriptionIndex.ts
  * @public
  */
 export interface WorkflowDescriptor {
+  /**
+   * The id `ArazzoRunner.execute` takes to run the workflow.
+   */
   workflowId: WorkflowId;
   /**
    * JSON Pointer to the workflow within the document.

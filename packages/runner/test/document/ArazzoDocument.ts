@@ -30,6 +30,11 @@ describe('ArazzoDocument', function () {
           jsonPointer: '/workflows/3',
           description: 'Summary is not a string',
         },
+        {
+          workflowId: 'objectDescription',
+          jsonPointer: '/workflows/4',
+          summary: 'Description is not a string',
+        },
       ]);
     });
   });

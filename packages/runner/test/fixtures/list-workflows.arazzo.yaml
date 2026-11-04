@@ -3,9 +3,9 @@ info:
   title: List workflows
   version: "1.0.0"
   summary: >-
-    Workflows with and without summary and description, one whose summary is
-    not a string, and one that cannot be addressed because it has no
-    workflowId.
+    Workflows with and without summary and description, ones whose summary or
+    description is not a string, and one that cannot be addressed because it
+    has no workflowId.
 sourceDescriptions:
   - name: petstoreAPI
     url: ./petstore.openapi.json
@@ -31,6 +31,13 @@ workflows:
   - workflowId: numericSummary
     summary: 42
     description: Summary is not a string
+    steps:
+      - stepId: inventory
+        operationId: getInventory
+  - workflowId: objectDescription
+    summary: Description is not a string
+    description:
+      text: not a string
     steps:
       - stepId: inventory
         operationId: getInventory
