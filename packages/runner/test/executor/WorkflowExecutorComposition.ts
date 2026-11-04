@@ -772,6 +772,8 @@ describe('WorkflowExecutor composition', function () {
       const error = await captureError(executor.execute('ambiguousStep'));
 
       assert.strictEqual(error.reason, 'ambiguous-target');
+      assert.strictEqual(error.workflowId, 'ambiguousStep');
+      assert.strictEqual(error.stepId, 'both');
     });
 
     specify('should reject malformed steps before running prerequisites', async function () {
@@ -883,6 +885,21 @@ describe('WorkflowExecutor composition', function () {
       assert.strictEqual(error.stepId, 'call');
       assert.strictEqual(calls.length, 0);
     });
+
+    specify(
+      "should name the workflow on a sub-workflow step's malformed actions",
+      async function () {
+        // the calling step's actions are selected by the step executor, which
+        // must be told the workflow it runs in.
+        const { executor } = makeExecutor();
+
+        const error = await captureResolverError(executor.execute('subWorkflowMalformedActions'));
+
+        assert.strictEqual(error.reason, 'malformed-actions');
+        assert.strictEqual(error.workflowId, 'subWorkflowMalformedActions');
+        assert.strictEqual(error.stepId, 'call');
+      },
+    );
 
     specify('should throw for a present but non-list "dependsOn"', async function () {
       const { executor } = makeExecutor();

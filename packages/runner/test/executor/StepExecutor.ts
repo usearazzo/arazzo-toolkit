@@ -902,4 +902,150 @@ describe('StepExecutor', function () {
       },
     );
   });
+
+  context('workflow attribution', function () {
+    /**
+     * Runs a promise expected to reject and returns what it rejected with.
+     */
+    const caught = async (promise: Promise<unknown>): Promise<ExecutionError | ResolverError> => {
+      try {
+        await promise;
+      } catch (error) {
+        return error as ExecutionError | ResolverError;
+      }
+      return assert.fail('expected promise to reject, but it resolved');
+    };
+
+    specify('should name the workflow on a missing-operation error', async function () {
+      const { executor } = makeExecutor();
+      const step = refractStep({ stepId: 's' }) as StepElement;
+
+      const error = await caught(executor.execute(step, state(), {}, 'wf'));
+
+      assert.instanceOf(error, ExecutionError);
+      assert.strictEqual(error.reason, 'missing-operation');
+      assert.strictEqual(error.workflowId, 'wf');
+      assert.strictEqual(error.stepId, 's');
+    });
+
+    specify('should not invent a workflow when none is given', async function () {
+      const { executor } = makeExecutor();
+      const step = refractStep({ stepId: 's' }) as StepElement;
+
+      const error = await caught(executor.execute(step, state()));
+
+      assert.strictEqual(error.reason, 'missing-operation');
+      assert.isUndefined(error.workflowId);
+      assert.strictEqual(error.stepId, 's');
+    });
+
+    specify('should name the workflow on an unknown operationId', async function () {
+      const { executor, requests } = makeExecutor();
+      const step = refractStep({ stepId: 's', operationId: 'noSuchOperation' }) as StepElement;
+
+      const error = await caught(executor.execute(step, state(), {}, 'wf'));
+
+      assert.instanceOf(error, ExecutionError);
+      assert.strictEqual(error.reason, 'operation-not-found');
+      assert.strictEqual(error.workflowId, 'wf');
+      assert.strictEqual(error.stepId, 's');
+      assert.lengthOf(requests, 0);
+    });
+
+    specify('should name the workflow on an operationPath that locates nothing', async function () {
+      const { executor, requests } = makeExecutor();
+      const step = refractStep({
+        stepId: 's',
+        operationPath: '{$sourceDescriptions.petstoreAPI.url}#/paths/~1nope/get',
+      }) as StepElement;
+
+      const error = await caught(executor.execute(step, state(), {}, 'wf'));
+
+      assert.instanceOf(error, ExecutionError);
+      assert.strictEqual(error.reason, 'operation-not-found');
+      assert.strictEqual(error.workflowId, 'wf');
+      assert.strictEqual(error.stepId, 's');
+      assert.lengthOf(requests, 0);
+    });
+
+    specify('should name the workflow on an abort before the request', async function () {
+      const { executor, requests } = makeExecutor();
+      const step = refractStep({ stepId: 's', operationId: 'findPetsByStatus' }) as StepElement;
+      const controller = new AbortController();
+      controller.abort();
+
+      const error = await caught(
+        executor.execute(step, state(), { signal: controller.signal }, 'wf'),
+      );
+
+      assert.instanceOf(error, ExecutionError);
+      assert.strictEqual(error.reason, 'aborted');
+      assert.strictEqual(error.workflowId, 'wf');
+      assert.strictEqual(error.stepId, 's');
+      assert.lengthOf(requests, 0);
+    });
+
+    specify('should name the workflow on a malformed requestBody', async function () {
+      const { executor } = makeExecutor();
+      const step = refractStep({
+        stepId: 's',
+        operationId: 'findPetsByStatus',
+        requestBody: 'not-a-map',
+      }) as StepElement;
+
+      const error = await caught(executor.execute(step, state(), {}, 'wf'));
+
+      assert.instanceOf(error, ResolverError);
+      assert.strictEqual(error.reason, 'malformed-request-body');
+      assert.strictEqual(error.workflowId, 'wf');
+      assert.strictEqual(error.stepId, 's');
+    });
+
+    specify('should name the workflow on malformed outputs', async function () {
+      const { executor } = makeExecutor();
+      const step = refractStep({
+        stepId: 's',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        outputs: 'not-a-map',
+      }) as StepElement;
+
+      const error = await caught(executor.execute(step, state(), {}, 'wf'));
+
+      assert.instanceOf(error, ResolverError);
+      assert.strictEqual(error.reason, 'malformed-outputs');
+      assert.strictEqual(error.workflowId, 'wf');
+      assert.strictEqual(error.stepId, 's');
+    });
+
+    specify('should name the workflow from evaluateCriteria', function () {
+      const { executor } = makeExecutor();
+      const step = refractStep({ stepId: 's', successCriteria: 'not-a-list' }) as StepElement;
+
+      try {
+        executor.evaluateCriteria(step, {}, 'wf');
+        assert.fail('expected evaluateCriteria to throw');
+      } catch (error) {
+        assert.instanceOf(error, ResolverError);
+        assert.strictEqual((error as ResolverError).reason, 'malformed-criteria');
+        assert.strictEqual((error as ResolverError).workflowId, 'wf');
+        assert.strictEqual((error as ResolverError).stepId, 's');
+      }
+    });
+
+    specify('should name the workflow from selectActions', function () {
+      const { executor } = makeExecutor();
+      const step = refractStep({ stepId: 's', onSuccess: 'not-a-list' }) as StepElement;
+
+      try {
+        executor.selectActions(step, true, {}, 'wf');
+        assert.fail('expected selectActions to throw');
+      } catch (error) {
+        assert.instanceOf(error, ResolverError);
+        assert.strictEqual((error as ResolverError).reason, 'malformed-actions');
+        assert.strictEqual((error as ResolverError).workflowId, 'wf');
+        assert.strictEqual((error as ResolverError).stepId, 's');
+      }
+    });
+  });
 });

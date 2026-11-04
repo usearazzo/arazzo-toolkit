@@ -213,6 +213,19 @@ describe('OpenAPIOperationLocatorNormalizer', function () {
       );
     });
 
+    specify('should carry no scope when none is given', async function () {
+      const error = await captureError(
+        normalizer.normalizeOperationPath(
+          '{$sourceDescriptions.petstoreAPI.url}#/paths/~1nope/get',
+          entry,
+        ),
+      );
+
+      assert.strictEqual(error.reason, 'operation-not-found');
+      assert.isUndefined(error.workflowId);
+      assert.isUndefined(error.stepId);
+    });
+
     specify('should reject a pointer that locates no operation', async function () {
       const error = await captureError(
         normalizer.normalizeOperationPath(
