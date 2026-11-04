@@ -912,3 +912,22 @@ workflows:
       - stepId: call
         workflowId: noSuchWorkflow
         parameters: not-a-list
+
+  # a sub-workflow step whose parameters are present but not a list, calling a
+  # workflow that does exist.
+  - workflowId: subWorkflowMalformedParameters
+    steps:
+      - stepId: call
+        workflowId: fetchPet
+        parameters: not-a-list
+
+  # a step calling a workflow that exists, whose onSuccess is present but not a
+  # list: the calling step's actions are selected after the sub-run.
+  - workflowId: subWorkflowMalformedActions
+    steps:
+      - stepId: call
+        workflowId: fetchPet
+        parameters:
+          - name: petId
+            value: "7"
+        onSuccess: not-a-list
