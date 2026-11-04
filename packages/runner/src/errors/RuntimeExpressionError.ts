@@ -2,7 +2,14 @@ import type { ApiDOMErrorOptions } from '@speclynx/apidom-error';
 
 import ArazzoRunnerError from './ArazzoRunnerError.ts';
 
-/** @public */
+/**
+ * Carries a `reason`, one of the class's static reason fields.
+ *
+ * Every static on this class is a reason: {@link RuntimeExpressionErrorReason}
+ * is derived from the class's own statics, so a non-reason static would join
+ * the union.
+ * @public
+ */
 class RuntimeExpressionError extends ArazzoRunnerError {
   /** The expression is not a valid runtime expression. */
   static readonly InvalidExpression = 'invalid-expression' as const;

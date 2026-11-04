@@ -51,8 +51,8 @@ export const readAbortSignal = (options: Record<string, unknown>): AbortSignal |
 };
 
 /**
- * Throws `reason: 'aborted'` when the caller has cancelled the run, and does
- * nothing otherwise.
+ * Throws with reason `ExecutionError.Aborted` when the caller has cancelled
+ * the run, and does nothing otherwise.
  *
  * Cancellation throws rather than resolving as a `failed` result because it is
  * not a workflow outcome: nothing was judged by `successCriteria`, no failure

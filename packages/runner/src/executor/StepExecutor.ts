@@ -244,7 +244,7 @@ class StepExecutor {
    * take precedence over it.
    *
    * A `signal` in that bag is honored here and not only at the transport: an
-   * already-aborted signal throws `reason: 'aborted'` instead of issuing a
+   * already-aborted signal throws with reason `ExecutionError.Aborted` instead of issuing a
    * request nobody is waiting for, whose wire-level cancellation would surface
    * as a transport {@link ClientError} — a request that failed on its own terms
    * — rather than as the withdrawal it is.

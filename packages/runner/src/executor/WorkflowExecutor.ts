@@ -72,9 +72,9 @@ export interface WorkflowExecutorOptions {
   readonly maxSteps?: number;
   /**
    * Upper bound on how deeply workflows may nest — a workflow entered while
-   * this many are already in progress throws `reason: 'workflow-depth'`.
+   * this many are already in progress throws with reason `ExecutionError.WorkflowDepth`.
    * Bounds *legitimate* (acyclic) nesting; a genuine cycle is caught earlier and
-   * separately by `reason: 'workflow-cycle'`. Defaults to 32.
+   * separately by reason `ExecutionError.WorkflowCycle`. Defaults to 32.
    *
    * The count includes the workflow `execute` was called with, so `1` permits
    * that workflow and forbids all nesting; a value below 1 leaves no room for
@@ -150,7 +150,7 @@ export interface WorkflowExecuteOptions {
    * `retryAfter` waits between attempts, so an aborted run stops at the next
    * boundary rather than working its way to the end of the workflow.
    *
-   * An aborted run throws {@link ExecutionError} with `reason: 'aborted'`,
+   * An aborted run throws {@link ExecutionError} with reason `ExecutionError.Aborted`,
    * naming the boundary it stopped at and carrying the signal's own `reason` as
    * the error's `cause`. It does not resolve as a `failed` result: cancellation
    * is not something the steps did, and the steps that never ran were not

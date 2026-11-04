@@ -2,7 +2,14 @@ import type { ApiDOMErrorOptions } from '@speclynx/apidom-error';
 
 import ArazzoRunnerError from './ArazzoRunnerError.ts';
 
-/** @public */
+/**
+ * Carries a `reason`, one of the class's static reason fields.
+ *
+ * Every static on this class is a reason: {@link CriterionErrorReason} is
+ * derived from the class's own statics, so a non-reason static would join the
+ * union.
+ * @public
+ */
 class CriterionError extends ArazzoRunnerError {
   /** The element is not a Criterion Object. */
   static readonly InvalidCriterion = 'invalid-criterion' as const;

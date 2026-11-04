@@ -27,7 +27,7 @@ class OutputResolver extends ArazzoValueResolver {
    *
    * `scope` names the step or workflow the outputs belong to, for a thrown
    * {@link ResolverError}. An output value that is not a valid runtime
-   * expression throws with `reason: 'invalid-expression'`.
+   * expression throws with reason `ResolverError.InvalidExpression`.
    */
   resolve(
     outputs: StepOutputsElement | WorkflowOutputsElement | undefined,

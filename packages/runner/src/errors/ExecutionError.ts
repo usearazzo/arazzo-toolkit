@@ -2,7 +2,14 @@ import type { ApiDOMErrorOptions } from '@speclynx/apidom-error';
 
 import ArazzoRunnerError from './ArazzoRunnerError.ts';
 
-/** @public */
+/**
+ * Carries a `reason`, one of the class's static reason fields.
+ *
+ * Every static on this class is a reason: {@link ExecutionErrorReason} is
+ * derived from the class's own statics, so a non-reason static would join the
+ * union.
+ * @public
+ */
 class ExecutionError extends ArazzoRunnerError {
   /** The run was cancelled through its `AbortSignal`; the signal's reason is the `cause`. */
   static readonly Aborted = 'aborted' as const;
