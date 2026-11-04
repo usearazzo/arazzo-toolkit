@@ -539,6 +539,9 @@ describe('WorkflowExecutor composition', function () {
       const error = await captureError(executor.execute('dependsOnLateUnknown'));
 
       assert.strictEqual(error.reason, 'workflow-not-found');
+      assert.strictEqual(error.workflowId, 'dependsOnLateUnknown');
+      assert.isUndefined(error.stepId);
+      assert.match(error.message, /noSuchWorkflow/);
       assert.strictEqual(calls.length, 0);
     });
 

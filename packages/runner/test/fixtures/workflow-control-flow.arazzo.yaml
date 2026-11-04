@@ -487,6 +487,19 @@ workflows:
             retryLimit: 2
             stepId: nonexistent
 
+  # the retry references a workflowId this document does not define.
+  - workflowId: retryWorkflowReferenceMissing
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: badRef
+            type: retry
+            retryLimit: 2
+            workflowId: noSuchWorkflow
+
   # run to completion by a retry's workflowId reference, before the retried
   # step's own next attempt.
   - workflowId: repairFlow

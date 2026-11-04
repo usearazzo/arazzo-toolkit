@@ -670,7 +670,12 @@ describe('WorkflowExecutor', function () {
     specify('should throw workflow-not-found for an unknown workflowId', async function () {
       const { executor } = makeExecutor();
 
-      await rejects(executor.execute('noSuchWorkflow'), ExecutionError, /not found/);
+      const error = await captureError(executor.execute('noSuchWorkflow'));
+
+      assert.strictEqual(error.reason, 'workflow-not-found');
+      // no referencing workflow exists at the root, so the missing id is the one named.
+      assert.strictEqual(error.workflowId, 'noSuchWorkflow');
+      assert.isUndefined(error.stepId);
     });
 
     specify(
@@ -1172,6 +1177,20 @@ describe('WorkflowExecutor', function () {
         assert.strictEqual(error.stepId, 'nonexistent');
         assert.strictEqual(error.workflowId, 'retryReferenceTargetMissing');
         assert.match(error.message, /retry reference step "nonexistent" not found/);
+      },
+    );
+
+    specify(
+      'should throw workflow-not-found, naming the calling step, for a workflowId reference to an unknown workflow',
+      async function () {
+        const { executor } = makeExecutor(serverErrorResponse);
+
+        const error = await captureError(executor.execute('retryWorkflowReferenceMissing'));
+
+        assert.strictEqual(error.reason, 'workflow-not-found');
+        assert.strictEqual(error.workflowId, 'retryWorkflowReferenceMissing');
+        assert.strictEqual(error.stepId, 'doomed');
+        assert.match(error.message, /noSuchWorkflow/);
       },
     );
 
