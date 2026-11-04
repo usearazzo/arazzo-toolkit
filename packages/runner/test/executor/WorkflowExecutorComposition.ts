@@ -854,6 +854,21 @@ describe('WorkflowExecutor composition', function () {
         const error = await captureError(executor.execute('subWorkflowUnknownMalformedParameters'));
 
         assert.strictEqual(error.reason, 'workflow-not-found');
+        assert.strictEqual(error.workflowId, 'subWorkflowUnknownMalformedParameters');
+        assert.strictEqual(error.stepId, 'call');
+      },
+    );
+
+    specify(
+      "should report a sub-workflow step's unknown target ahead of the depth limit",
+      async function () {
+        // a limit of 1 admits only the root, so entering any sub-workflow would
+        // exceed it; the missing target is reported instead.
+        const { executor } = makeExecutor(okResponse, { maxWorkflowDepth: 1 });
+
+        const error = await captureError(executor.execute('subWorkflowUnknown'));
+
+        assert.strictEqual(error.reason, 'workflow-not-found');
         assert.strictEqual(error.stepId, 'call');
       },
     );

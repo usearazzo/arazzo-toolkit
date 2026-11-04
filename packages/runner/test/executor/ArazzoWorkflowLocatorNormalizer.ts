@@ -69,7 +69,7 @@ describe('ArazzoWorkflowLocatorNormalizer', function () {
       assert.strictEqual(error.reason, 'workflow-not-found');
       assert.strictEqual(error.workflowId, 'caller');
       assert.strictEqual(error.stepId, 'call');
-      assert.match(error.message, /noSuchWorkflow/);
+      assert.match(error.message, /workflow reference "noSuchWorkflow" in workflow "caller"/);
     },
   );
 

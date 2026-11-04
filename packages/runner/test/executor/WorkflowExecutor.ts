@@ -676,6 +676,10 @@ describe('WorkflowExecutor', function () {
       // no referencing workflow exists at the root, so the missing id is the one named.
       assert.strictEqual(error.workflowId, 'noSuchWorkflow');
       assert.isUndefined(error.stepId);
+      assert.match(
+        error.message,
+        /^workflow "noSuchWorkflow" not found in Arazzo document at ".*workflow-control-flow\.arazzo\.yaml"$/,
+      );
     });
 
     specify(
