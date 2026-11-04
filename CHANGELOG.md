@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.23](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.22...v1.0.1-alpha.23) (2026-11-04)
+
+### Bug Fixes
+
+- **runner:** align operation reference errors and name the workflow ([#318](https://github.com/usearazzo/arazzo-toolkit/issues/318)) ([308e386](https://github.com/usearazzo/arazzo-toolkit/commit/308e3860074d145983410c4d891471147bb2c3a7)), closes [#317](https://github.com/usearazzo/arazzo-toolkit/issues/317)
+
 ## [1.0.1-alpha.22](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.21...v1.0.1-alpha.22) (2026-11-04)
 
 ### Bug Fixes
