@@ -460,7 +460,10 @@ describe('WorkflowExecutor cross-document references', function () {
       const error = await captureError(executor.execute('unknownForeignWorkflow'));
 
       assert.strictEqual(error.reason, 'workflow-not-found');
-      assert.strictEqual(error.workflowId, 'noSuchWorkflow');
+      // attributed to the step making the reference; the missing id is in the message.
+      assert.strictEqual(error.workflowId, 'unknownForeignWorkflow');
+      assert.strictEqual(error.stepId, 'only');
+      assert.match(error.message, /noSuchWorkflow/);
       // the message names the document searched — the child, not the entry.
       assert.match(error.message, /cross-document-child\.arazzo\.yaml/);
     });

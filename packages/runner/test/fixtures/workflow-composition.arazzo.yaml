@@ -898,3 +898,17 @@ workflows:
           - name: petId
             value: "7"
         successCriteria: $statusCode == 200
+
+  # a sub-workflow step naming a workflowId this document does not define.
+  - workflowId: subWorkflowUnknown
+    steps:
+      - stepId: call
+        workflowId: noSuchWorkflow
+
+  # the same missing target on a step whose parameters are also malformed: the
+  # missing target is reported, since the reference is resolved first.
+  - workflowId: subWorkflowUnknownMalformedParameters
+    steps:
+      - stepId: call
+        workflowId: noSuchWorkflow
+        parameters: not-a-list

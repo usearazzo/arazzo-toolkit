@@ -539,6 +539,9 @@ describe('WorkflowExecutor composition', function () {
       const error = await captureError(executor.execute('dependsOnLateUnknown'));
 
       assert.strictEqual(error.reason, 'workflow-not-found');
+      assert.strictEqual(error.workflowId, 'dependsOnLateUnknown');
+      assert.isUndefined(error.stepId);
+      assert.match(error.message, /noSuchWorkflow/);
       assert.strictEqual(calls.length, 0);
     });
 
@@ -825,6 +828,48 @@ describe('WorkflowExecutor composition', function () {
         assert.strictEqual(error.workflowId, 'scalarCriteriaOnCallingStep');
         assert.strictEqual(error.stepId, 'child');
         assert.strictEqual(calls.length, 0);
+      },
+    );
+
+    specify(
+      'should throw workflow-not-found, naming the calling step, for a sub-workflow step to an unknown workflow',
+      async function () {
+        const { executor, calls } = makeExecutor();
+
+        const error = await captureError(executor.execute('subWorkflowUnknown'));
+
+        assert.strictEqual(error.reason, 'workflow-not-found');
+        assert.strictEqual(error.workflowId, 'subWorkflowUnknown');
+        assert.strictEqual(error.stepId, 'call');
+        assert.match(error.message, /noSuchWorkflow/);
+        assert.strictEqual(calls.length, 0);
+      },
+    );
+
+    specify(
+      "should report a sub-workflow step's unknown target ahead of its malformed parameters",
+      async function () {
+        const { executor } = makeExecutor();
+
+        const error = await captureError(executor.execute('subWorkflowUnknownMalformedParameters'));
+
+        assert.strictEqual(error.reason, 'workflow-not-found');
+        assert.strictEqual(error.workflowId, 'subWorkflowUnknownMalformedParameters');
+        assert.strictEqual(error.stepId, 'call');
+      },
+    );
+
+    specify(
+      "should report a sub-workflow step's unknown target ahead of the depth limit",
+      async function () {
+        // a limit of 1 admits only the root, so entering any sub-workflow would
+        // exceed it; the missing target is reported instead.
+        const { executor } = makeExecutor(okResponse, { maxWorkflowDepth: 1 });
+
+        const error = await captureError(executor.execute('subWorkflowUnknown'));
+
+        assert.strictEqual(error.reason, 'workflow-not-found');
+        assert.strictEqual(error.stepId, 'call');
       },
     );
 

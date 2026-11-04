@@ -69,11 +69,12 @@ export interface WorkflowReferenceContext {
  * The `type` declared on a source description is not trusted (it may be
  * absent or wrong); a source is classified by what it actually parses to,
  * the same convention the OpenAPI operation locator follows. Source
- * documents are acquired from the registry on demand. Whether the resolved
- * document *defines* the workflow is deliberately left to the caller, which
- * owns the timing of that check (eager for a `dependsOn` list validated
- * before any prerequisite runs, lazy for a sub-workflow step resolved per
- * attempt).
+ * documents are acquired from the registry on demand. A reference to a
+ * workflow the resolved document does not define is rejected here, so every
+ * returned locator names an existing workflow; a caller controls when that
+ * check happens by when it normalizes (eagerly for a `dependsOn` list
+ * validated before any prerequisite runs, lazily for a sub-workflow step
+ * resolved on its first attempt).
  * @public
  */
 class ArazzoWorkflowLocatorNormalizer extends SourceDescriptionsLocatorNormalizer {
@@ -81,14 +82,27 @@ class ArazzoWorkflowLocatorNormalizer extends SourceDescriptionsLocatorNormalize
    * Resolves a reference — a plain workflowId or a
    * `$sourceDescriptions.{name}.{workflowId}` expression, as written — to the
    * canonical locator: the Arazzo document that owns the target workflow,
-   * and the bare id within it.
+   * and the bare id within it. Rejects a workflow that document does not
+   * define as `workflow-not-found`, attributed to the referencing context
+   * like every other error raised here.
    */
   async normalize(
     reference: string,
     document: ArazzoDocument,
     context: WorkflowReferenceContext,
   ): Promise<ArazzoWorkflowLocator> {
-    return this.#resolve(this.#parseReference(reference, context), document, context);
+    const locator = await this.#resolve(
+      this.#parseReference(reference, context),
+      document,
+      context,
+    );
+    if (!locator.document.workflowIndex.has(locator.workflowId)) {
+      throw new ExecutionError(
+        `workflow reference "${reference}" in workflow "${context.workflowId}" names workflow "${locator.workflowId}", which the Arazzo document at "${locator.document.uri}" does not define`,
+        { workflowId: context.workflowId, stepId: context.stepId, reason: 'workflow-not-found' },
+      );
+    }
+    return locator;
   }
 
   /**
