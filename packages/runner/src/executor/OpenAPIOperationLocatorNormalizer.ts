@@ -36,7 +36,7 @@ export interface OpenAPIOperationLocator {
  *   `$sourceDescriptions.{name}.{operationId}`. Per the Arazzo Specification, a
  *   plain name is only valid when a single (non-arazzo) source description is
  *   defined; multiple sources require the expression form. A plain name is
- *   therefore resolved against the first source description that has it.
+ *   therefore looked up in the first OpenAPI source description only.
  * - `operationPath` embeds a `{$sourceDescriptions.{name}.url}` runtime
  *   expression followed by a JSON Pointer to the operation.
  *
@@ -61,8 +61,8 @@ class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormali
    * Normalizes a plain or expression `operationId` to a canonical locator.
    *
    * A whole runtime expression (`$sourceDescriptions.{name}.{operationId}`) is
-   * resolved against its named source; a plain name is resolved against the
-   * first source description that has it.
+   * resolved against its named source; a plain name is looked up in the first
+   * OpenAPI source description only.
    */
   async normalizeOperationId(
     operationId: string,
@@ -104,10 +104,9 @@ class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormali
         parsed !== undefined &&
         document.resolveSourceDescriptionURI(parsed.sourceName) === undefined
       ) {
-        throw this.#error(
+        throw new ExecutionError(
           `operationPath "${operationPath}" names source description "${parsed.sourceName}", which the Arazzo document at "${document.uri}" does not define`,
-          'source-description-not-found',
-          scope,
+          { ...scope, reason: 'source-description-not-found' },
         );
       }
     }
@@ -120,28 +119,25 @@ class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormali
 
     const documentURI = url.sanitize(url.stripHash(uriReference));
     if (documentURI === '') {
-      throw this.#error(
+      throw new ExecutionError(
         `operationPath "${operationPath}" does not resolve to a source description URL`,
-        'invalid-operation-reference',
-        scope,
+        { ...scope, reason: 'invalid-operation-reference' },
       );
     }
 
     const jsonPointer = URIFragmentIdentifier.fromURIReference(uriReference);
     if (!testJSONPointer(jsonPointer)) {
-      throw this.#error(
-        `operationPath "${operationPath}" has an invalid JSON Pointer`,
-        'invalid-operation-reference',
-        scope,
-      );
+      throw new ExecutionError(`operationPath "${operationPath}" has an invalid JSON Pointer`, {
+        ...scope,
+        reason: 'invalid-operation-reference',
+      });
     }
 
     const source = await this.registry.acquire(documentURI);
     if (!OpenAPIDocument.is(source)) {
-      throw this.#error(
+      throw new ExecutionError(
         `operationPath "${operationPath}" references "${documentURI}", which is not an OpenAPI document`,
-        'source-description-not-openapi',
-        scope,
+        { ...scope, reason: 'source-description-not-openapi' },
       );
     }
 
@@ -150,32 +146,13 @@ class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormali
     try {
       this.#extractor.extractByPointer(source, jsonPointer);
     } catch (error: unknown) {
-      throw this.#error(
+      throw new ExecutionError(
         `operationPath "${operationPath}" does not locate an operation in the OpenAPI document at "${source.uri}"`,
-        'operation-not-found',
-        scope,
-        error,
+        { cause: error, ...scope, reason: 'operation-not-found' },
       );
     }
 
     return { document: source, jsonPointer };
-  }
-
-  /**
-   * Builds the error every unresolvable reference throws, attributed to the
-   * referencing step.
-   */
-  #error(
-    message: string,
-    reason: string,
-    scope: StepScope | undefined,
-    cause?: unknown,
-  ): ExecutionError {
-    return new ExecutionError(message, {
-      ...(cause === undefined ? {} : { cause }),
-      ...scope,
-      reason,
-    });
   }
 
   async #resolveSourced(
@@ -185,20 +162,18 @@ class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormali
   ): Promise<OpenAPIOperationLocator> {
     const parsed = this.parseSourceDescriptionsExpression(expression);
     if (parsed === undefined) {
-      throw this.#error(
+      throw new ExecutionError(
         `operationId "${expression}" is not a $sourceDescriptions.{name}.{operationId} expression`,
-        'invalid-operation-reference',
-        scope,
+        { ...scope, reason: 'invalid-operation-reference' },
       );
     }
     const { sourceName, reference: operationId } = parsed;
     const openapiDocument = await this.#sourceDocument(sourceName, document, scope);
     const jsonPointer = openapiDocument.operationIndex.get(operationId);
     if (jsonPointer === undefined) {
-      throw this.#error(
+      throw new ExecutionError(
         `Operation "${operationId}" not found in source description "${sourceName}" at "${openapiDocument.uri}"`,
-        'operation-not-found',
-        scope,
+        { ...scope, reason: 'operation-not-found' },
       );
     }
     return { document: openapiDocument, jsonPointer };
@@ -227,10 +202,9 @@ class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormali
 
       const jsonPointer = source.operationIndex.get(operationId);
       if (jsonPointer === undefined) {
-        throw this.#error(
+        throw new ExecutionError(
           `Operation "${operationId}" not found in source description at "${source.uri}"`,
-          'operation-not-found',
-          scope,
+          { ...scope, reason: 'operation-not-found' },
         );
       }
       return { document: source, jsonPointer };
@@ -238,10 +212,9 @@ class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormali
 
     // no source was named, so this is not a missing source description: there
     // is simply no OpenAPI document for the operation to be in.
-    throw this.#error(
+    throw new ExecutionError(
       `Operation "${operationId}" not found: the Arazzo document at "${document.uri}" has no OpenAPI source description`,
-      'operation-not-found',
-      scope,
+      { ...scope, reason: 'operation-not-found' },
     );
   }
 
@@ -255,18 +228,16 @@ class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormali
   ): Promise<OpenAPIDocument> {
     const uri = document.resolveSourceDescriptionURI(sourceName);
     if (uri === undefined) {
-      throw this.#error(
+      throw new ExecutionError(
         `Source description "${sourceName}" not found in the Arazzo document at "${document.uri}"`,
-        'source-description-not-found',
-        scope,
+        { ...scope, reason: 'source-description-not-found' },
       );
     }
     const source = await this.registry.acquire(uri);
     if (!OpenAPIDocument.is(source)) {
-      throw this.#error(
+      throw new ExecutionError(
         `Source description "${sourceName}" at "${uri}" is not an OpenAPI document`,
-        'source-description-not-openapi',
-        scope,
+        { ...scope, reason: 'source-description-not-openapi' },
       );
     }
     return source;
