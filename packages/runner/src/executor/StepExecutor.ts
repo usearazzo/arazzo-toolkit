@@ -18,6 +18,7 @@ import type {
 import RuntimeExpressionEvaluator from '../expression/RuntimeExpressionEvaluator.ts';
 import CriterionEvaluator from '../criterion/CriterionEvaluator.ts';
 import type CriterionErrorReason from '../criterion/CriterionErrorReason.ts';
+import type { StepScope } from '../resolver/ResolverScope.ts';
 import OpenAPIOperationParameterResolver from '../resolver/OpenAPIOperationParameterResolver.ts';
 import RequestBodyResolver, { type ResolvedRequestBody } from '../resolver/RequestBodyResolver.ts';
 import OutputResolver from '../resolver/OutputResolver.ts';
@@ -247,13 +248,19 @@ class StepExecutor {
    * request nobody is waiting for, whose wire-level cancellation would surface
    * as a transport {@link ClientError} — a request that failed on its own terms
    * — rather than as the withdrawal it is.
+   *
+   * `workflowId` names the workflow the step belongs to; every error raised
+   * here then carries it alongside the `stepId`, since step ids are only
+   * unique within a workflow. The workflow executor always passes it.
    */
   async execute(
     step: StepElement,
     state: ContextSource,
     executeOptions: Record<string, unknown> = {},
+    workflowId?: string,
   ): Promise<StepExecutionResult> {
     const stepId = toValue(step.stepId) as string;
+    const scope = { ...(workflowId === undefined ? {} : { workflowId }), stepId };
 
     // a step's target fields are mutually exclusive; declaring more than one is
     // malformed and has no defined resolution.
@@ -261,28 +268,27 @@ class StepExecutor {
     if (declaredTargets.length > 1) {
       throw new ExecutionError(
         `Step "${stepId}" declares more than one of ${STEP_TARGET_FIELDS.join(', ')} (mutually exclusive)`,
-        { stepId, reason: 'ambiguous-target' },
+        { ...scope, reason: 'ambiguous-target' },
       );
     }
 
     if (isStringElement(step.workflowId)) {
       throw new ExecutionError(`Step "${stepId}" targets a workflowId; use the workflow executor`, {
-        stepId,
+        ...scope,
         reason: 'workflow-step',
       });
     }
 
-    this.assertSuccessCriteria(step);
+    this.assertSuccessCriteria(step, workflowId);
 
     // locate which operation the step invokes — reduced to a (document, JSON
     // Pointer) locator that the operation executor extracts, normalizes,
     // assembles into a standalone doc, and runs.
-    const locator = await this.#locateOperation(step, stepId);
+    const locator = await this.#locateOperation(step, scope);
 
     // resolve parameters and request body against the pre-request context.
     // keyed by '{in}.{name}' rather than bare name, so two parameters that
     // legally differ only in their location each reach their own place.
-    const scope = { stepId };
     const preContext = state.toContext();
     const parameters = this.#parameterResolver.resolve(
       step.parameters,
@@ -301,7 +307,7 @@ class StepExecutor {
     // live side effect. The signal stays in the bag, so a request already in
     // flight is aborted by the transport as before.
     const signal = readAbortSignal(executeOptions);
-    throwIfAborted(signal, { stepId });
+    throwIfAborted(signal, scope);
 
     // the Arazzo-derived parameters and request body are spread after the opaque
     // executeOptions bag so they take precedence over it. the operation executor
@@ -320,7 +326,7 @@ class StepExecutor {
       // cancelled, it did not: reporting it as the abort keeps one error shape
       // whether the run was withdrawn between two steps or mid-flight, and keeps
       // the whole feature from reading differently per transport.
-      throwIfAborted(signal, { stepId });
+      throwIfAborted(signal, scope);
       throw error;
     }
 
@@ -330,14 +336,19 @@ class StepExecutor {
       this.#requestContext(response),
       this.#responseContext(response),
     );
-    const successCriteria = this.evaluateCriteria(step, postContext);
+    const successCriteria = this.evaluateCriteria(step, postContext, workflowId);
     const successful = successCriteria.every((criterion) => criterion.met);
     const outputs = this.#outputResolver.resolve(
       step.outputs,
       (expression) => this.#evaluate(postContext, expression),
       scope,
     );
-    const { matchedActions, actionCriteria } = this.selectActions(step, successful, postContext);
+    const { matchedActions, actionCriteria } = this.selectActions(
+      step,
+      successful,
+      postContext,
+      workflowId,
+    );
 
     return {
       stepId,
@@ -369,21 +380,23 @@ class StepExecutor {
       : { requestBody: requestBody.payload, requestContentType: requestBody.contentType };
   }
 
-  async #locateOperation(step: StepElement, stepId: string): Promise<OpenAPIOperationLocator> {
+  async #locateOperation(step: StepElement, scope: StepScope): Promise<OpenAPIOperationLocator> {
     if (isStringElement(step.operationId)) {
       return this.#locatorNormalizer.normalizeOperationId(
         toValue(step.operationId) as string,
         this.#document,
+        scope,
       );
     }
     if (isStringElement(step.operationPath)) {
       return this.#locatorNormalizer.normalizeOperationPath(
         toValue(step.operationPath) as string,
         this.#document,
+        scope,
       );
     }
-    throw new ExecutionError(`Step "${stepId}" has no operationId or operationPath`, {
-      stepId,
+    throw new ExecutionError(`Step "${scope.stepId}" has no operationId or operationPath`, {
+      ...scope,
       reason: 'missing-operation',
     });
   }
@@ -435,13 +448,16 @@ class StepExecutor {
    * Public for the same reason as {@link StepExecutor.selectActions}: a step
    * targeting a `workflowId` is run by the workflow executor and never reaches
    * {@link StepExecutor.execute}, but its criteria are still the author's
-   * assertion about the step and must be evaluated somewhere.
+   * assertion about the step and must be evaluated somewhere. `workflowId`
+   * names the step's workflow on a thrown error, as for
+   * {@link StepExecutor.execute}.
    */
   evaluateCriteria(
     step: StepElement,
     context: RuntimeExpressionContext,
+    workflowId?: string,
   ): CriterionEvaluationRecord[] {
-    this.assertSuccessCriteria(step);
+    this.assertSuccessCriteria(step, workflowId);
     const criteria = step.successCriteria;
     if (criteria === undefined) return [];
 
@@ -471,11 +487,14 @@ class StepExecutor {
    * it runs itself and which therefore never reaches
    * {@link StepExecutor.execute}. Both callers reach the criteria evaluator and
    * the expression context through this one method rather than wiring their own.
+   * `workflowId` names the step's workflow on a thrown error, as for
+   * {@link StepExecutor.execute}.
    */
   selectActions(
     step: StepElement,
     successful: boolean,
     context: RuntimeExpressionContext,
+    workflowId?: string,
   ): Pick<StepExecutionResult, 'matchedActions' | 'actionCriteria'> {
     const actionCriteria: CriterionEvaluationRecord[] = [];
     const isCriterionMet: CriterionPredicate = (criterion, action) => {
@@ -486,7 +505,10 @@ class StepExecutor {
       actionCriteria.push(record);
       return record.met;
     };
-    const scope = { stepId: toValue(step.stepId) as string };
+    const scope = {
+      ...(workflowId === undefined ? {} : { workflowId }),
+      stepId: toValue(step.stepId) as string,
+    };
 
     const matchedActions = successful
       ? this.#actionResolver.resolveOnSuccess(step.onSuccess, isCriterionMet, scope)

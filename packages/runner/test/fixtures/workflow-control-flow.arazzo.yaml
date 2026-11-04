@@ -889,3 +889,16 @@ workflows:
       - stepId: broken
         operationId: getInventory
         onSuccess: not-a-list
+
+  # an operation step naming an operationId its OpenAPI source does not define.
+  - workflowId: unknownOperation
+    steps:
+      - stepId: call
+        operationId: noSuchOperation
+
+  # an operation step whose parameters are present but not a list.
+  - workflowId: malformedParametersOnOperationStep
+    steps:
+      - stepId: call
+        operationId: getInventory
+        parameters: not-a-list

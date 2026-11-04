@@ -1334,8 +1334,45 @@ describe('WorkflowExecutor', function () {
       assert.strictEqual((caught as ResolverError).reason, 'malformed-actions');
       // names the step the malformed onSuccess belongs to, not just the field.
       assert.strictEqual((caught as ResolverError).stepId, 'broken');
+      assert.strictEqual((caught as ResolverError).workflowId, 'malformedStepOnSuccess');
       // the message names the key its author actually wrote, not both candidates.
       assert.match((caught as Error).message, /`onSuccess` is present but is not a list/);
+    });
+
+    specify(
+      'should throw operation-not-found, naming the workflow and step, for an unknown operationId',
+      async function () {
+        const { executor, calls } = makeExecutor();
+
+        const error = await captureError(executor.execute('unknownOperation'));
+
+        assert.strictEqual(error.reason, 'operation-not-found');
+        // step ids are only unique within a workflow, so both are named.
+        assert.strictEqual(error.workflowId, 'unknownOperation');
+        assert.strictEqual(error.stepId, 'call');
+        assert.match(error.message, /noSuchOperation/);
+        assert.strictEqual(calls.length, 0);
+      },
+    );
+
+    specify("should name the workflow on an operation step's resolver error", async function () {
+      const { executor, calls } = makeExecutor();
+
+      let caught: unknown;
+      try {
+        await executor.execute('malformedParametersOnOperationStep');
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.instanceOf(caught, ResolverError);
+      assert.strictEqual((caught as ResolverError).reason, 'malformed-parameters');
+      assert.strictEqual(
+        (caught as ResolverError).workflowId,
+        'malformedParametersOnOperationStep',
+      );
+      assert.strictEqual((caught as ResolverError).stepId, 'call');
+      assert.strictEqual(calls.length, 0);
     });
   });
 });

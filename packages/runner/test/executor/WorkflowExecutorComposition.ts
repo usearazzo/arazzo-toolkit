@@ -873,6 +873,17 @@ describe('WorkflowExecutor composition', function () {
       },
     );
 
+    specify("should name the workflow on a sub-workflow step's resolver error", async function () {
+      const { executor, calls } = makeExecutor();
+
+      const error = await captureResolverError(executor.execute('subWorkflowMalformedParameters'));
+
+      assert.strictEqual(error.reason, 'malformed-parameters');
+      assert.strictEqual(error.workflowId, 'subWorkflowMalformedParameters');
+      assert.strictEqual(error.stepId, 'call');
+      assert.strictEqual(calls.length, 0);
+    });
+
     specify('should throw for a present but non-list "dependsOn"', async function () {
       const { executor } = makeExecutor();
 

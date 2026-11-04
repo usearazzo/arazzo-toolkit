@@ -1134,11 +1134,13 @@ class WorkflowExecutor {
     const { workflowId, document, state, callStack } = invocation;
     if (!isStringElement(step.workflowId)) {
       return () =>
-        this.#stepExecutor.forDocument(document).execute(step, state, scope.executeOptions);
+        this.#stepExecutor
+          .forDocument(document)
+          .execute(step, state, scope.executeOptions, workflowId);
     }
 
     const reference = this.#subWorkflowReference(step, stepId, workflowId);
-    const stepScope = { stepId };
+    const stepScope = { workflowId, stepId };
     // the reference resolves to the same locator on every attempt, so it is
     // resolved once for the whole retry chain, on the first attempt; that
     // same first-attempt moment — before this call has written anything —
@@ -1218,13 +1220,14 @@ class WorkflowExecutor {
       // evaluated by the parent document's step executor — only the sub-run
       // itself switched documents.
       const stepExecutor = this.#stepExecutor.forDocument(document);
-      const successCriteria = stepExecutor.evaluateCriteria(step, context);
+      const successCriteria = stepExecutor.evaluateCriteria(step, context, workflowId);
       const successful =
         !this.#settledFailed(result) && successCriteria.every((criterion) => criterion.met);
       const { matchedActions, actionCriteria } = stepExecutor.selectActions(
         step,
         successful,
         context,
+        workflowId,
       );
 
       return {

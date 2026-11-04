@@ -7,6 +7,11 @@
  * @public
  */
 export interface StepScope {
+  /**
+   * The workflow the step belongs to, when the caller knows it: step ids are
+   * only unique within a workflow.
+   */
+  readonly workflowId?: string;
   readonly stepId: string;
 }
 
