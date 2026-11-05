@@ -114,8 +114,6 @@ const result = await runner.execute('authenticateAndOrderPet', {
 
 To see what a document offers before running it, `runner.document.listWorkflows()` returns a `WorkflowDescriptor` for each workflow `execute` accepts, in document order: its `workflowId`, its `jsonPointer` in the document and, when the document gives them as strings, its `summary` and `description`. It reads the entry document only; source descriptions are not loaded.
 
-A document that declares the same `workflowId` or `operationId` more than once is invalid, but the runner still loads it and the first occurrence wins: `execute` runs, and `listWorkflows` lists, the first workflow of a duplicated `workflowId`, and a step's `operationId` calls the first operation that declares it (reach any other with `operationPath`).
-
 To add credentials, pass a `requestInterceptor`:
 
 ```js
