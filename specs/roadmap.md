@@ -134,8 +134,8 @@ Phases are intentionally small — each one is a shippable, independently review
 **Priority:** Medium–High
 
 - Success and failure action `parameters` feed `goto` and `retry` workflow targets (#115), closing the input gap #62 records for 1.0.x.
-- Criterion evaluation errors fail the criterion instead of aborting the step (#120).
-- Version-tag both behaviors so 1.0.x documents keep their current semantics.
+- Criterion evaluation errors fail the criterion instead of aborting the step (#120) — already shipped by #301, with criterion diagnostics in step run records by #302; nothing left in this phase.
+- No version tagging: per #119 the runner runs every 1.x document by the latest minor's rules, so action `parameters` are honored wherever a document has them, and the validator flags them in a 1.0.x document.
 
 ## Phase 13 — API freeze and beta channel
 
