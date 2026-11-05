@@ -9,6 +9,13 @@ import OpenAPIDocumentRegistryProvider from '../../../src/registry/providers/Ope
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturePath = path.join(__dirname, '..', '..', 'fixtures', 'petstore.openapi.json');
+const duplicateFixturePath = path.join(
+  __dirname,
+  '..',
+  '..',
+  'fixtures',
+  'duplicate-operation-id.openapi.json',
+);
 
 describe('OpenAPIDocumentRegistryProvider', function () {
   context('provide', function () {
@@ -25,6 +32,19 @@ describe('OpenAPIDocumentRegistryProvider', function () {
       const json = toJSON(doc.parseResult.api!);
 
       assert.isString(json);
+    });
+
+    specify('should index the first operation of a duplicated operationId', async function () {
+      const provider = new OpenAPIDocumentRegistryProvider();
+      const doc = await provider.provide(duplicateFixturePath);
+
+      assert.deepStrictEqual(
+        [...doc.operationIndex],
+        [
+          ['getPet', '/paths/~1pet~1first/get'],
+          ['getInventory', '/paths/~1store~1inventory/get'],
+        ],
+      );
     });
   });
 });
