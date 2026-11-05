@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.25](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.24...v1.0.1-alpha.25) (2026-11-04)
+
+### Features
+
+- **runner:** list the workflows of an Arazzo document ([#321](https://github.com/usearazzo/arazzo-toolkit/issues/321)) ([93a2fc9](https://github.com/usearazzo/arazzo-toolkit/commit/93a2fc9738d095fab25bb5ba7afffe791ed4eb20)), closes [#83](https://github.com/usearazzo/arazzo-toolkit/issues/83)
+
 ## [1.0.1-alpha.24](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.23...v1.0.1-alpha.24) (2026-11-04)
 
 ### Features
