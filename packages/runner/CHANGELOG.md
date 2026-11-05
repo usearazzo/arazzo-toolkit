@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.26](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.25...v1.0.1-alpha.26) (2026-11-05)
+
+### Bug Fixes
+
+- **runner:** resolve duplicate workflow and operation ids first-wins ([#324](https://github.com/usearazzo/arazzo-toolkit/issues/324)) ([0f5072c](https://github.com/usearazzo/arazzo-toolkit/commit/0f5072c8c60f4d9b030c58f409675f0c2e677762)), closes [#322](https://github.com/usearazzo/arazzo-toolkit/issues/322)
+
 ## [1.0.1-alpha.25](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.24...v1.0.1-alpha.25) (2026-11-04)
 
 ### Features

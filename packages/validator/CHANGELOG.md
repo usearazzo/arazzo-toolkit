@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.26](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.25...v1.0.1-alpha.26) (2026-11-05)
+
+**Note:** Version bump only for package @usearazzo/validator
+
 ## [1.0.1-alpha.25](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.24...v1.0.1-alpha.25) (2026-11-04)
 
 **Note:** Version bump only for package @usearazzo/validator
