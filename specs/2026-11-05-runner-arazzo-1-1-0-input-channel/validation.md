@@ -49,10 +49,11 @@ Both exit 0. The full runner suite passes, including the existing `transfer to a
 
 ```
 cd packages/runner && npm run typescript:check-types
-cd packages/runner && npm run typescript:declaration 2>&1 | grep -c "Warning:"
+cd packages/runner && npm run typescript:declaration > "${TMPDIR:-/tmp}/runner-declaration.log" 2>&1
+grep -c "Warning:" "${TMPDIR:-/tmp}/runner-declaration.log" || true
 ```
 
-The first command exits 0. The second prints the same count as on `main`, taken before the change; `api-extractor run -l` exits 0 even with warnings, so exit 0 alone proves nothing. `ResolverError.ActionParameterLocation` and `StepExecutionResult.actionContext` appear in `packages/runner/types/` with their TSDoc.
+The first two commands exit 0. That includes the declaration build, so a failed `tsc` or `api-extractor` run fails the check rather than hiding behind a pipe. The `grep` prints the same warning count as on `main`, taken the same way before the change. `api-extractor run -l` exits 0 even with warnings, so exit 0 alone does not prove the count; `|| true` keeps a zero count from reading as a failure. `ResolverError.ActionParameterLocation` and `StepExecutionResult.actionContext` appear in `packages/runner/types/` with their TSDoc.
 
 ### 5. Lint
 
