@@ -1,0 +1,16 @@
+arazzo: "1.0.1"
+info:
+  title: Duplicate operationId
+  version: "1.0.0"
+  summary: >-
+    Calls an operationId its source description declares twice; the first
+    occurrence wins.
+sourceDescriptions:
+  - name: duplicateAPI
+    url: ./duplicate-operation-id.openapi.json
+    type: openapi
+workflows:
+  - workflowId: getPet
+    steps:
+      - stepId: getPet
+        operationId: getPet

@@ -53,6 +53,7 @@ export const providerOptionsOverride: OpenAPIDocumentRegistryProviderOptions = {
  * Provides OpenAPIDocument instances for the DocumentRegistry.
  *
  * Parses, dereferences, and builds an OperationIndex for OpenAPI documents.
+ * The first operation of a duplicated operationId wins.
  * @public
  */
 class OpenAPIDocumentRegistryProvider extends DocumentRegistryProvider {
@@ -112,6 +113,7 @@ class OpenAPIDocumentRegistryProvider extends DocumentRegistryProvider {
 
         if (typeof operationId !== 'string') return path.skip();
         if (operationId === '') return path.skip();
+        if (index.has(operationId)) return path.skip();
 
         index.set(operationId, path.formatPath('jsonpointer'));
 

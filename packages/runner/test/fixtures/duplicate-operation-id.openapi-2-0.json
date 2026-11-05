@@ -1,0 +1,31 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Duplicate operationId",
+    "description": "An invalid document declaring the operationId `getPet` twice, with a different operation in between; the first occurrence wins.",
+    "version": "1.0.0"
+  },
+  "host": "petstore.example.com",
+  "basePath": "/api/v3",
+  "schemes": ["https"],
+  "paths": {
+    "/pet/first": {
+      "get": {
+        "operationId": "getPet",
+        "responses": { "200": { "description": "first" } }
+      }
+    },
+    "/store/inventory": {
+      "get": {
+        "operationId": "getInventory",
+        "responses": { "200": { "description": "inventory" } }
+      }
+    },
+    "/pet/second": {
+      "get": {
+        "operationId": "getPet",
+        "responses": { "200": { "description": "second" } }
+      }
+    }
+  }
+}

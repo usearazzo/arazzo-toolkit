@@ -84,8 +84,9 @@ class ArazzoDocument extends APIDocument {
 
   /**
    * The workflows of this document that can be addressed by `workflowId`, in
-   * document order. Reads this document only: source descriptions are neither
-   * loaded nor listed.
+   * document order. A duplicated `workflowId` is listed once, for its first
+   * workflow. Reads this document only: source descriptions are neither loaded
+   * nor listed.
    */
   listWorkflows(): WorkflowDescriptor[] {
     return [...this.workflowIndex].map(([workflowId, jsonPointer]) => {

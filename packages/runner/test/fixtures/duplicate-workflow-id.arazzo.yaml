@@ -1,0 +1,26 @@
+arazzo: "1.0.1"
+info:
+  title: Duplicate workflowId
+  version: "1.0.0"
+  summary: >-
+    An invalid document declaring the workflowId `a` twice, with a different
+    workflow in between; the first occurrence wins.
+sourceDescriptions:
+  - name: petstoreAPI
+    url: ./petstore.openapi.json
+    type: openapi
+workflows:
+  - workflowId: a
+    summary: first
+    steps:
+      - stepId: inventory
+        operationId: getInventory
+  - workflowId: b
+    steps:
+      - stepId: inventory
+        operationId: getInventory
+  - workflowId: a
+    summary: second
+    steps:
+      - stepId: findPets
+        operationId: findPetsByStatus
