@@ -15,6 +15,13 @@ const fixturePath = path.join(
   'fixtures',
   'petstore-order-workflow.arazzo.yaml',
 );
+const duplicateFixturePath = path.join(
+  __dirname,
+  '..',
+  '..',
+  'fixtures',
+  'duplicate-workflow-id.arazzo.yaml',
+);
 
 describe('ArazzoDocumentRegistryProvider', function () {
   context('provide', function () {
@@ -32,5 +39,21 @@ describe('ArazzoDocumentRegistryProvider', function () {
 
       assert.isString(json);
     });
+
+    specify(
+      'should index the steps of the first workflow of a duplicated workflowId',
+      async function () {
+        const provider = new ArazzoDocumentRegistryProvider();
+        const doc = await provider.provide(duplicateFixturePath);
+
+        assert.deepStrictEqual(
+          [...doc.stepIndex].map(([workflowId, steps]) => [workflowId, [...steps]]),
+          [
+            ['a', [['inventory', '/workflows/0/steps/0']]],
+            ['b', [['inventory', '/workflows/1/steps/0']]],
+          ],
+        );
+      },
+    );
   });
 });
