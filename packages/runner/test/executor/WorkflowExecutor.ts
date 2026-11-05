@@ -260,6 +260,49 @@ describe('WorkflowExecutor', function () {
     });
   });
 
+  context('duplicate stepIds', function () {
+    specify('should run every step and read $steps from the most recent run', async function () {
+      const { executor, calls } = makeExecutor();
+
+      const result = await executor.execute('duplicateStepIds');
+
+      assert.strictEqual(result.status, 'completed');
+      assert.deepEqual(
+        result.steps.map((step) => step.stepId),
+        ['s', 'reader', 's'],
+      );
+      assert.strictEqual(calls.length, 3);
+      assert.deepEqual(result.outputs, {
+        readerSaw: '/api/v3/store/inventory',
+        last: '/api/v3/pet/7',
+      });
+    });
+
+    specify('should goto the first step of a duplicated stepId', async function () {
+      const { executor, calls } = makeExecutor();
+
+      const result = await executor.execute('duplicateStepIdGoto');
+
+      assert.strictEqual(result.status, 'ended');
+      assert.deepEqual(
+        result.steps.map((step) => step.stepId),
+        ['start', 's'],
+      );
+      assert.strictEqual(calls.length, 2);
+      assert.include(calls[1].url, '/pet/1');
+    });
+
+    specify('should let a later duplicate without outputs empty $steps', async function () {
+      const { executor } = makeExecutor();
+
+      const result = await executor.execute('duplicateStepIdWithoutOutputs');
+
+      assert.strictEqual(result.status, 'completed');
+      assert.lengthOf(result.steps, 2);
+      assert.isUndefined(result.outputs.url);
+    });
+  });
+
   context('stop conditions', function () {
     specify('should stop early on an end action with status "ended"', async function () {
       const { executor, calls } = makeExecutor();
