@@ -902,3 +902,66 @@ workflows:
       - stepId: call
         operationId: getInventory
         parameters: not-a-list
+
+  # two steps share the stepId `s` (an invalid document the runner still runs).
+  # Both run in list order; `$steps.s` holds the most recent run, so `reader`
+  # sees the first `s` and the workflow outputs see the second.
+  - workflowId: duplicateStepIds
+    steps:
+      - stepId: s
+        operationId: getInventory
+        outputs:
+          url: $url
+      - stepId: reader
+        operationId: getInventory
+        outputs:
+          saw: $steps.s.outputs.url
+      - stepId: s
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: 7
+        outputs:
+          url: $url
+    outputs:
+      readerSaw: $steps.reader.outputs.saw
+      last: $steps.s.outputs.url
+
+  # a goto naming a duplicated stepId jumps to the first step that declares it.
+  - workflowId: duplicateStepIdGoto
+    steps:
+      - stepId: start
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            stepId: s
+      - stepId: s
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: 1
+        onSuccess:
+          - name: done
+            type: end
+      - stepId: s
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: 2
+
+  # a later duplicate that declares no outputs still records its run, so
+  # `$steps.s.outputs` is empty afterwards rather than the first step's.
+  - workflowId: duplicateStepIdWithoutOutputs
+    steps:
+      - stepId: s
+        operationId: getInventory
+        outputs:
+          url: $url
+      - stepId: s
+        operationId: getInventory
+    outputs:
+      url: $steps.s.outputs.url

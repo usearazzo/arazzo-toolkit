@@ -47,7 +47,9 @@ class WorkflowExecutionState {
 
   /**
    * Records the resolved outputs of a completed step, read via
-   * `$steps.{stepId}.outputs.{name}`.
+   * `$steps.{stepId}.outputs.{name}`. Every run records, so a step run again
+   * (a `goto` back, a retry) or a later step sharing its `stepId` replaces
+   * the earlier outputs, even with none.
    */
   setStepOutputs(stepId: string, outputs: Record<string, unknown>): void {
     this.#steps.set(stepId, outputs);
