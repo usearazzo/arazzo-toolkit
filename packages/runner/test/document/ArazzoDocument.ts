@@ -7,6 +7,12 @@ import { DocumentRegistry, type ArazzoDocument } from '../../src/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturePath = path.join(__dirname, '..', 'fixtures', 'list-workflows.arazzo.yaml');
+const duplicateFixturePath = path.join(
+  __dirname,
+  '..',
+  'fixtures',
+  'duplicate-workflow-id.arazzo.yaml',
+);
 
 describe('ArazzoDocument', function () {
   let document: ArazzoDocument;
@@ -35,6 +41,15 @@ describe('ArazzoDocument', function () {
           jsonPointer: '/workflows/4',
           summary: 'Description is not a string',
         },
+      ]);
+    });
+
+    specify('should list the first workflow of a duplicated workflowId', async function () {
+      const duplicate = await new DocumentRegistry().acquireEntryDocument(duplicateFixturePath);
+
+      assert.deepStrictEqual(duplicate.listWorkflows(), [
+        { workflowId: 'a', jsonPointer: '/workflows/0', summary: 'first' },
+        { workflowId: 'b', jsonPointer: '/workflows/1' },
       ]);
     });
   });

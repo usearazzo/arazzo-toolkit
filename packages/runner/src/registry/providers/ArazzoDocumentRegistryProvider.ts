@@ -110,7 +110,8 @@ class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
    * A source description's canonical URI is resolved here too — against the
    * document's base URI, into the exact form the document registry keys on —
    * so every consumer works with a ready-to-use, non-relative URI. The first
-   * element of a duplicated source description name wins.
+   * element of a duplicated source description name wins, and so does the
+   * first workflow of a duplicated workflowId.
    */
   #buildIndexes(
     uri: string,
@@ -131,6 +132,7 @@ class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
 
         if (typeof workflowId !== 'string') return path.skip();
         if (workflowId === '') return path.skip();
+        if (workflowIndex.has(workflowId)) return path.skip();
 
         const workflowPointer = path.formatPath('jsonpointer');
         workflowIndex.set(workflowId, workflowPointer);

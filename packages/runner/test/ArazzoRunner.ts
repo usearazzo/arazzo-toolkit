@@ -19,6 +19,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesPath = path.join(__dirname, 'fixtures');
 const entryPath = path.join(fixturesPath, 'workflow-control-flow.arazzo.yaml');
 const compositionPath = path.join(fixturesPath, 'workflow-composition.arazzo.yaml');
+const duplicatePath = path.join(fixturesPath, 'duplicate-workflow-id.arazzo.yaml');
 
 /**
  * A stub transport answering every request with the same pet (or, with
@@ -176,6 +177,21 @@ describe('ArazzoRunner', function () {
   });
 
   context('execute', function () {
+    specify('should run the first workflow of a duplicated workflowId', async function () {
+      const calls: OpenAPIOperationRequest[] = [];
+      const runner = await ArazzoRunner.load(duplicatePath, { httpClient: makeHTTPClient(calls) });
+
+      const result = await runner.execute('a');
+
+      assert.strictEqual(result.status, 'completed');
+      assert.deepEqual(
+        result.steps.map((step) => step.stepId),
+        ['inventory'],
+      );
+      assert.strictEqual(calls.length, 1);
+      assert.include(calls[0].url, '/store/inventory');
+    });
+
     specify('should run a workflow through the given transport', async function () {
       const calls: OpenAPIOperationRequest[] = [];
       const runner = await ArazzoRunner.load(entryPath, { httpClient: makeHTTPClient(calls) });
