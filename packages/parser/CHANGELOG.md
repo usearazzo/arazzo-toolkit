@@ -3,6 +3,23 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.27](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.26...v1.0.1-alpha.27) (2026-11-08)
+
+### Bug Fixes
+
+- **validator:** handle nested Arazzo sources and in on action params ([#336](https://github.com/usearazzo/arazzo-toolkit/issues/336)) ([b984d15](https://github.com/usearazzo/arazzo-toolkit/commit/b984d157ea67e8ffde1951475820af3c73c38bf5)), closes [speclynx/apidom#769](https://github.com/speclynx/apidom/issues/769) [speclynx/api-languageservice#106](https://github.com/speclynx/api-languageservice/issues/106) [#197](https://github.com/usearazzo/arazzo-toolkit/issues/197) [#115](https://github.com/usearazzo/arazzo-toolkit/issues/115)
+
+### Features
+
+- **runner:** pass action parameters to referenced workflows ([#334](https://github.com/usearazzo/arazzo-toolkit/issues/334)) ([a65eb68](https://github.com/usearazzo/arazzo-toolkit/commit/a65eb68166575fed1a20c8c69f410556ff896dcc)), closes [speclynx/apidom#751](https://github.com/speclynx/apidom/issues/751) [#115](https://github.com/usearazzo/arazzo-toolkit/issues/115) [#62](https://github.com/usearazzo/arazzo-toolkit/issues/62)
+
+### BREAKING CHANGES
+
+- **runner:** StepExecutionResult gains a required `actionContext`
+  field, so a StepExecutionResult built outside StepExecutor.execute (a
+  stub or an override returning the previous shape) no longer type-checks
+  until it supplies one.
+
 ## [1.0.1-alpha.26](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.25...v1.0.1-alpha.26) (2026-11-05)
 
 **Note:** Version bump only for package @usearazzo/parser
