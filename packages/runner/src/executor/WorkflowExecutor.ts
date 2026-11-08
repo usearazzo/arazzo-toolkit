@@ -1,10 +1,13 @@
 import { toValue } from '@speclynx/apidom-core';
 import { isArrayElement, isObjectElement, isStringElement } from '@speclynx/apidom-datamodel';
 import {
+  isParameterElement,
   isStepElement,
   type WorkflowElement,
   type StepElement,
   type FailureActionElement,
+  type FailureActionParametersElement,
+  type SuccessActionParametersElement,
 } from '@speclynx/apidom-ns-arazzo-1';
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
@@ -724,6 +727,7 @@ class WorkflowExecutor {
             invocation,
             scope,
             'goto',
+            this.#actionInputs(action?.parameters, outcome, invocation, stepId),
           );
           runOutcome = { kind: 'transferred', transferredTo };
           break stepLoop;
@@ -890,16 +894,16 @@ class WorkflowExecutor {
    *   for entering the reference itself, matching the "1 for the step itself
    *   plus whatever its sub-run spends" convention a sub-workflow step
    *   already follows (without it, a reference to a workflow with few or no
-   *   steps of its own would cost nothing to fire). It runs with no inputs:
-   *   the specification gives a retry reference no input-mapping mechanism
-   *   of its own (the same gap `dependsOn` has), and `{}` is the only
-   *   spec-honest fallback — see issue `#62`. Its outputs are recorded via
-   *   `state.setWorkflow`, which *is* "context transfers back" — but its
-   *   `inputs` are preserved rather than overwritten with `{}` when this
-   *   workflowId was already recorded (by an earlier `dependsOn` prerequisite
-   *   or sub-workflow step sharing the id): this call's own lack of a real
-   *   inputs value must not erase one a different, better-informed caller
-   *   already gave.
+   *   steps of its own would cost nothing to fire). Its inputs are the
+   *   action's `parameters` (`#115`), resolved again on every firing
+   *   against the attempt that fired it — `{}` without them. Its outputs are
+   *   recorded via `state.setWorkflow`, which *is* "context transfers back",
+   *   together with the inputs it ran with when the action carries
+   *   `parameters`. Without them, the recorded `inputs` are preserved rather
+   *   than overwritten with `{}` when this workflowId was already recorded
+   *   (by an earlier `dependsOn` prerequisite or sub-workflow step sharing
+   *   the id): this call's own lack of a real inputs value must not erase one
+   *   a different, better-informed caller already gave.
    * - a `stepId` reference must name a step of the current workflow (checked
    *   lazily, at fire time, via the same lookup a `goto` target uses) and
    *   runs as one more attempt at that step, through
@@ -922,10 +926,10 @@ class WorkflowExecutor {
     invocation: WorkflowInvocation,
     scope: RunScope,
     retryReferences: RetryReferenceRecord[],
-  ): (action: FailureActionElement) => Promise<void> {
+  ): (action: FailureActionElement, outcome: StepAttemptOutcome) => Promise<void> {
     const { workflowId, state, callStack } = invocation;
 
-    return async (action: FailureActionElement): Promise<void> => {
+    return async (action: FailureActionElement, outcome: StepAttemptOutcome): Promise<void> => {
       throwIfAborted(scope.signal, { workflowId, stepId, callStack });
 
       const { hasStepId, hasWorkflowId } = actionTargets(action);
@@ -938,6 +942,9 @@ class WorkflowExecutor {
 
       if (hasWorkflowId) {
         const reference = toValue(action.workflowId) as string;
+        // resolved before the budget is charged, so an authoring error in them
+        // costs no budget unit.
+        const inputs = this.#actionInputs(action.parameters, outcome, invocation, stepId);
         this.#chargeBudget(scope, invocation, stepId);
         const result = await this.#runReferencedWorkflow(
           reference,
@@ -945,12 +952,13 @@ class WorkflowExecutor {
           invocation,
           scope,
           'retry',
+          inputs,
         );
         // the result's workflowId is the bare id the reference resolved to —
         // the key run state is recorded under, whichever document owns it.
         const refId = result.workflowId;
         state.setWorkflow(refId, {
-          inputs: state.getWorkflow(refId)?.inputs ?? {},
+          inputs: action.hasKey('parameters') ? inputs : (state.getWorkflow(refId)?.inputs ?? {}),
           outputs: result.outputs,
         });
         retryReferences.push({
@@ -970,17 +978,17 @@ class WorkflowExecutor {
       const refStep = steps[refIndex];
 
       const refSubWorkflows: WorkflowExecutionResult[] = [];
-      const outcome = await this.#chargedAttempt(
+      const refOutcome = await this.#chargedAttempt(
         this.#stepAttempt(refStep, refStepId, invocation, scope, refSubWorkflows),
         invocation,
         scope,
         refStepId,
       )();
-      state.setStepOutputs(outcome.stepId, outcome.outputs);
+      state.setStepOutputs(refOutcome.stepId, refOutcome.outputs);
       retryReferences.push({
         kind: 'step',
         id: refStepId,
-        successful: outcome.successful,
+        successful: refOutcome.successful,
         ...(refSubWorkflows.length > 0 ? { subWorkflow: refSubWorkflows[0] } : {}),
       });
     };
@@ -1295,11 +1303,11 @@ class WorkflowExecutor {
   /**
    * Runs a workflow an action references directly — a retry's `workflowId`
    * reference or a goto's transfer, plain id or cross-document expression —
-   * with `{}` inputs, since neither has an input-mapping mechanism of its own
-   * (issue `#62`).
+   * with the inputs its action's `parameters` resolved to (`#115`), `{}`
+   * without them.
    *
    * Shared rather than duplicated by its two callers, which otherwise repeat
-   * the identical "resolve the reference, then run with no inputs" sequence.
+   * the identical "resolve the reference, then run it" sequence.
    * A target its document does not define is rejected by the normalizer,
    * attributed to the calling workflow and `stepId`.
    */
@@ -1309,13 +1317,57 @@ class WorkflowExecutor {
     invocation: WorkflowInvocation,
     scope: RunScope,
     via: WorkflowCallVia,
+    inputs: Record<string, unknown>,
   ): Promise<WorkflowExecutionResult> {
     const locator = await this.#workflowLocatorNormalizer.normalize(
       reference,
       invocation.document,
       { workflowId: invocation.workflowId, stepId },
     );
-    return this.#run(locator, {}, scope, invocation.callStack, via);
+    return this.#run(locator, inputs, scope, invocation.callStack, via);
+  }
+
+  /**
+   * The inputs a `goto` / `retry` action naming a `workflowId` passes its
+   * target: the action's own `parameters`, mapped by name and resolved against
+   * the context of the attempt that fired it — `$statusCode`, `$response.*`
+   * and the rest of that step outcome, plus the outputs it just produced.
+   * Resolved against the calling invocation's document, so its `$components`
+   * apply, never the target's. No `parameters` gives `{}`.
+   *
+   * An `in` written inline is an authoring error the specification states
+   * outright ("The `in` field MUST NOT be used"), raised only once the action
+   * fires. One that arrives through a `$components.parameters` Reusable Object
+   * is not: a shared component carries `in` for the operation steps that use
+   * it, and the dereferencer marks the transcluded copy with `ref-fields`.
+   */
+  #actionInputs(
+    parameters: SuccessActionParametersElement | FailureActionParametersElement | undefined,
+    outcome: StepAttemptOutcome,
+    invocation: WorkflowInvocation,
+    stepId: string,
+  ): Record<string, unknown> {
+    const { workflowId, document } = invocation;
+    const scope = { workflowId, stepId };
+    if (isArrayElement(parameters)) {
+      const inline = [...parameters].find(
+        (parameter) =>
+          isParameterElement(parameter) &&
+          parameter.hasKey('in') &&
+          !parameter.meta.hasKey('ref-fields'),
+      );
+      if (inline !== undefined) {
+        throw new ResolverError(
+          `An action parameter of step "${stepId}" in workflow "${workflowId}" declares an \`in\`; parameters of an action naming a workflowId map to its inputs by name`,
+          { ...scope, target: 'parameters', reason: ResolverError.ActionParameterLocation },
+        );
+      }
+    }
+    return this.#parameterResolver.resolve(
+      parameters,
+      (expression) => this.#evaluate(outcome.actionContext, expression, document),
+      scope,
+    );
   }
 
   /**
