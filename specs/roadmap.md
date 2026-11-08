@@ -127,7 +127,7 @@ Phases are intentionally small — each one is a shippable, independently review
 - Implement the command surface agreed in #84 with exit codes suited to CI; workflow enumeration (#83) lands in the runner first if the CLI needs it.
 - Replace the root README CLI placeholder; add the package to `release.yml`.
 
-## Phase 12 — Runner Arazzo 1.1.0 input channel and criterion semantics
+## Phase 12 — Runner Arazzo 1.1.0 input channel and criterion semantics ✅
 
 **Goal:** the two 1.1.0 items that change observable behavior the most land first after publish.  
 **Depends on:** Phase 5  

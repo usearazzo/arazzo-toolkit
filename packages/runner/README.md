@@ -25,7 +25,7 @@ It loads the workflow and the OpenAPI documents its source descriptions point at
 Use it to test an API flow end to end in CI, to drive a workflow from your own service, or to let an agent run a workflow instead of improvising the calls. It handles:
 
 - **Steps.** Parameters and request bodies resolved from runtime expressions, `successCriteria` evaluated (`simple`, `regex`, `jsonpath`, `xpath`), `outputs` resolved from the response.
-- **Control flow.** `goto`, `retry` (with `retryLimit`, `retryAfter`, and references), and `end`, as the specification defines them, with workflow-level default actions and parameters.
+- **Control flow.** `goto`, `retry` (with `retryLimit`, `retryAfter`, and references), and `end`, as the specification defines them, with workflow-level default actions and parameters, and action `parameters` as the inputs of a `goto` or `retry` workflow target.
 - **Composition.** Sub-workflow steps, `dependsOn` prerequisites, one-way transfer to another workflow, and workflows in other Arazzo documents.
 - **Your HTTP stack.** Global `fetch` by default, or any client you plug in. Credentials go in through a request interceptor, since Arazzo is auth-agnostic.
 
