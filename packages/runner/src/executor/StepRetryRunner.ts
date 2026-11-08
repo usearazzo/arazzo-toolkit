@@ -67,8 +67,16 @@ export interface StepRetryRunContext {
    * below instead of a silently ignored reference. A caller that supplies it
    * is trusted to run the right thing; a throw from it ends the step, the
    * same as a throw from `attempt`.
+   *
+   * `outcome` is the attempt that just failed and fired the action: by the
+   * time the reference runs, after the `retryAfter` wait, it is the only place
+   * that attempt's {@link StepAttemptOutcome.actionContext} survives, and the
+   * action's `parameters` resolve against it.
    */
-  readonly runReference?: (action: FailureActionElement) => Promise<void>;
+  readonly runReference?: (
+    action: FailureActionElement,
+    outcome: StepAttemptOutcome,
+  ) => Promise<void>;
 }
 
 /**
@@ -198,7 +206,7 @@ class StepRetryRunner {
         // zero/negative/NaN value.
         const delayMs = this.#retryAfterMs(action);
         if (delayMs > 0) await this.#sleep(delayMs, context.signal);
-        if (runReference !== undefined) await runReference(action);
+        if (runReference !== undefined) await runReference(action, outcome);
         fired = true;
         break;
       }

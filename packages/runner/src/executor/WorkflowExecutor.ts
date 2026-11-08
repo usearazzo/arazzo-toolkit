@@ -1238,6 +1238,7 @@ class WorkflowExecutor {
         matchedActions,
         successCriteria,
         actionCriteria,
+        actionContext: stepExecutor.actionContext(context, stepId, outputs),
       };
     };
   }

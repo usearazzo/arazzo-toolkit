@@ -156,6 +156,18 @@ export interface StepExecutionResult {
    * in list order.
    */
   readonly actionCriteria: readonly CriterionEvaluationRecord[];
+  /**
+   * The runtime-expression context the step's actions are taken in: the
+   * context its action `criteria` were evaluated against, with
+   * `$steps.{stepId}.outputs` holding the outputs this attempt just resolved.
+   *
+   * An action's `parameters` resolve against it, so a `goto` or `retry` naming
+   * a `workflowId` passes values read from this step's response, request and
+   * fresh outputs. The overlay matters because run state is written only once
+   * a step's retry chain settles, so mid-chain it may still hold an earlier
+   * run's outputs.
+   */
+  readonly actionContext: RuntimeExpressionContext;
 }
 
 /**
@@ -175,6 +187,10 @@ export interface StepAttemptOutcome {
   readonly matchedActions: readonly SelectedAction[];
   readonly successCriteria: readonly CriterionEvaluationRecord[];
   readonly actionCriteria: readonly CriterionEvaluationRecord[];
+  /**
+   * See {@link StepExecutionResult.actionContext}.
+   */
+  readonly actionContext: RuntimeExpressionContext;
 }
 
 /**
@@ -359,6 +375,7 @@ class StepExecutor {
       matchedActions,
       successCriteria,
       actionCriteria,
+      actionContext: this.actionContext(postContext, stepId, outputs),
     };
   }
 
@@ -515,6 +532,24 @@ class StepExecutor {
       : this.#actionResolver.resolveOnFailure(step.onFailure, isCriterionMet, scope);
 
     return { matchedActions, actionCriteria };
+  }
+
+  /**
+   * The context a step's actions are taken in — see
+   * {@link StepExecutionResult.actionContext}: `context` with
+   * `$steps.{stepId}.outputs` replaced by the outputs the attempt just
+   * resolved, as a fresh object, so run state is never written.
+   *
+   * Public for the same reason as {@link StepExecutor.selectActions}: the
+   * workflow executor builds this context for a step targeting a
+   * `workflowId`, which never reaches {@link StepExecutor.execute}.
+   */
+  actionContext(
+    context: RuntimeExpressionContext,
+    stepId: string,
+    outputs: Record<string, unknown>,
+  ): RuntimeExpressionContext {
+    return { ...context, steps: { ...context.steps, [stepId]: { outputs } } };
   }
 
   /**
