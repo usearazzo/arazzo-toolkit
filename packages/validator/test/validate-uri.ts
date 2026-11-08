@@ -120,4 +120,62 @@ describe('validateURI', function () {
       assert.lengthOf(errors, 0);
     });
   });
+
+  context('given an Arazzo document whose Arazzo source descriptions nest', function () {
+    // an Arazzo source description inside an Arazzo source description: the
+    // language service froze the nested parse result twice and threw
+    // (speclynx/apidom#769), so these assert that diagnostics come back at all
+    specify('should return no errors for a chain', async function () {
+      const filePath = path.join(fixturesPath, 'cross-document', 'chain-a.arazzo.yaml');
+      const diagnostics = await validateURI(filePath);
+      const errors = diagnostics.filter((d) => d.severity === DiagnosticSeverity.Error);
+      assert.lengthOf(errors, 0);
+    });
+
+    specify('should return no errors for a cycle', async function () {
+      const filePath = path.join(fixturesPath, 'cross-document', 'cycle-a.arazzo.yaml');
+      const diagnostics = await validateURI(filePath);
+      const errors = diagnostics.filter((d) => d.severity === DiagnosticSeverity.Error);
+      assert.lengthOf(errors, 0);
+    });
+  });
+
+  context('given an Arazzo 1.1.0 document with an in on action parameters', function () {
+    // codes of `successAction` / `failureAction` `parameters--no-in`
+    const noInCodes = [9070702, 9081002];
+
+    specify(
+      'should report an inline in on a success and a failure action parameter',
+      async function () {
+        const filePath = path.join(fixturesPath, 'action-parameter-in.arazzo.yaml');
+        const diagnostics = await validateURI(filePath);
+        const noIn = diagnostics.filter((d) => noInCodes.includes(d.code as number));
+        assert.sameMembers(
+          noIn.map((d) => d.code),
+          noInCodes,
+        );
+        assert.isTrue(noIn.every((d) => d.severity === DiagnosticSeverity.Error));
+      },
+    );
+
+    specify(
+      'should not report a $components.parameters reference whose component has an in',
+      async function () {
+        const filePath = path.join(fixturesPath, 'action-parameter-in.arazzo.yaml');
+        const lines = fs.readFileSync(filePath, 'utf8').split('\n');
+        const referenceLine = lines.findIndex((line) =>
+          line.includes('- reference: $components.parameters.sharedStatus'),
+        );
+        const diagnostics = await validateURI(filePath);
+        const onReference = diagnostics.filter(
+          (d) =>
+            noInCodes.includes(d.code as number) &&
+            d.range.start.line >= referenceLine - 4 &&
+            d.range.start.line <= referenceLine,
+        );
+        assert.notEqual(referenceLine, -1);
+        assert.lengthOf(onReference, 0);
+      },
+    );
+  });
 });
