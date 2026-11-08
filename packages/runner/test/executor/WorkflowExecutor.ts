@@ -1644,6 +1644,24 @@ describe('WorkflowExecutor', function () {
     );
 
     specify(
+      "should resolve a step calling a workflow's action parameters against its $outputs and fresh outputs",
+      async function () {
+        // `call` runs twice: "Rex" loops back to it, "Fido" transfers. State
+        // still holds the first run's petName ("Rex") when the transfer fires.
+        const { executor, calls } = makeActionExecutor([
+          { status: 200, statusText: 'OK', body: { id: 7, name: 'Rex' } },
+          { status: 200, statusText: 'OK', body: { id: 8, name: 'Fido' } },
+        ]);
+
+        const result = await executor.execute('subWorkflowFreshOutputs');
+
+        assert.strictEqual(calls.length, 2);
+        assert.strictEqual(result.status, 'transferred');
+        assert.deepInclude(result.transferredTo!.outputs, { name: 'Fido', status: 'Fido' });
+      },
+    );
+
+    specify(
       'should throw unavailable-expression for $statusCode in an action parameter of a step calling a workflow',
       async function () {
         const { executor } = makeActionExecutor();

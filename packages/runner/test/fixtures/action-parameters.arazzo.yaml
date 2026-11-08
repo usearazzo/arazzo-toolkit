@@ -359,6 +359,46 @@ workflows:
             type: goto
             workflowId: echoTarget
 
+  # the workflow `subWorkflowFreshOutputs` calls; its output is the name
+  # in the response, which the stub varies per call.
+  - workflowId: fetchName
+    steps:
+      - stepId: fetch
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: "7"
+        outputs:
+          name: $response.body#/name
+    outputs:
+      name: $steps.fetch.outputs.name
+
+  # the step-calling-a-workflow twin of `freshOutputs`: `call` runs twice,
+  # looping back on "Rex" and transferring on "Fido". State still holds the
+  # first run's outputs when the transfer fires, so both values must come
+  # from the attempt itself, through `$outputs` and `$steps.call.outputs`.
+  - workflowId: subWorkflowFreshOutputs
+    steps:
+      - stepId: call
+        workflowId: fetchName
+        outputs:
+          petName: $outputs.name
+        onSuccess:
+          - name: again
+            type: goto
+            stepId: call
+            criteria:
+              - condition: $outputs.name == 'Rex'
+          - name: jump
+            type: goto
+            workflowId: echoTarget
+            parameters:
+              - name: name
+                value: $outputs.name
+              - name: status
+                value: $steps.call.outputs.petName
+
   # a step calling a workflow made no HTTP call, so `$statusCode` in its
   # action's parameters is an authoring error.
   - workflowId: subWorkflowStatusCode
