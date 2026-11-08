@@ -1,0 +1,50 @@
+arazzo: 1.1.0
+info:
+  title: Action parameter in
+  version: 1.0.0
+sourceDescriptions:
+  - name: petstoreAPI
+    url: ./petstore.openapi.json
+    type: openapi
+components:
+  parameters:
+    sharedStatus:
+      name: status
+      in: query
+      value: available
+workflows:
+  - workflowId: target
+    inputs:
+      type: object
+      properties:
+        status:
+          type: string
+    steps:
+      - stepId: inventory
+        operationId: getInventory
+  - workflowId: caller
+    steps:
+      - stepId: inventory
+        operationId: getInventory
+        onSuccess:
+          - name: inlineIn
+            type: goto
+            workflowId: target
+            parameters:
+              - name: status
+                in: query
+                value: available
+          - name: reusable
+            type: goto
+            workflowId: target
+            parameters:
+              - reference: $components.parameters.sharedStatus
+        onFailure:
+          - name: inlineIn
+            type: retry
+            retryLimit: 1
+            workflowId: target
+            parameters:
+              - name: status
+                in: header
+                value: available

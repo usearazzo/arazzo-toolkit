@@ -1,0 +1,13 @@
+arazzo: 1.0.1
+info:
+  title: Chain C
+  version: 1.0.0
+sourceDescriptions:
+  - name: petstoreAPI
+    url: ../petstore.openapi.json
+    type: openapi
+workflows:
+  - workflowId: chainC
+    steps:
+      - stepId: inventory
+        operationId: $sourceDescriptions.petstoreAPI.getInventory

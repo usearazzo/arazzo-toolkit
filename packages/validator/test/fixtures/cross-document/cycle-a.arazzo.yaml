@@ -1,0 +1,16 @@
+arazzo: 1.0.1
+info:
+  title: Cycle A
+  version: 1.0.0
+sourceDescriptions:
+  - name: petstoreAPI
+    url: ../petstore.openapi.json
+    type: openapi
+  - name: cycleB
+    url: ./cycle-b.arazzo.yaml
+    type: arazzo
+workflows:
+  - workflowId: cycleA
+    steps:
+      - stepId: inventory
+        operationId: $sourceDescriptions.petstoreAPI.getInventory
