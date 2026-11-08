@@ -14,7 +14,8 @@ class ResolverError extends ArazzoRunnerError {
   /**
    * A parameter of a Success / Failure Action declares an `in` inline, which
    * the Arazzo Specification forbids; one inherited from a
-   * `$components.parameters` Reusable Object maps by name instead.
+   * `$components.parameters` Reusable Object maps by name instead. Thrown
+   * before the workflow's first request.
    */
   static readonly ActionParameterLocation = 'action-parameter-location' as const;
   /** A parameter cannot be delivered unambiguously at its location. */

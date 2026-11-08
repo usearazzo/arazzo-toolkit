@@ -1546,38 +1546,61 @@ describe('WorkflowExecutor', function () {
     });
 
     specify(
-      'should throw malformed-parameters for a non-list action parameters',
+      'should throw malformed-parameters for a non-list action parameters before the first request',
       async function () {
-        const { executor } = makeActionExecutor();
+        const { executor, calls } = makeActionExecutor();
 
         const error = await captureTyped(executor.execute('nonListParameters'), ResolverError);
 
         assert.strictEqual(error.reason, 'malformed-parameters');
         assert.strictEqual(error.workflowId, 'nonListParameters');
         assert.strictEqual(error.stepId, 'only');
+        assert.strictEqual(error.target, 'parameters');
+        assert.strictEqual(calls.length, 0);
       },
     );
 
     specify(
-      'should throw action-parameter-location for an inline in only when the action fires',
+      'should throw action-parameter-location for an inline in before the first request',
       async function () {
-        const { executor: firing } = makeActionExecutor();
+        const { executor, calls } = makeActionExecutor();
 
-        const error = await captureTyped(firing.execute('inlineIn'), ResolverError);
+        const error = await captureTyped(executor.execute('inlineIn'), ResolverError);
 
         assert.strictEqual(error.reason, 'action-parameter-location');
         assert.strictEqual(error.workflowId, 'inlineIn');
         assert.strictEqual(error.stepId, 'only');
         assert.strictEqual(error.target, 'parameters');
+        assert.strictEqual(calls.length, 0);
+      },
+    );
 
-        // the action's criteria do not match a 404, so it never fires.
-        const { executor: quiet } = makeActionExecutor([
-          { status: 404, statusText: 'Not Found', body: {} },
-        ]);
+    specify(
+      'should throw action-parameter-location for an inline in on an action without a workflowId',
+      async function () {
+        const { executor, calls } = makeActionExecutor();
 
-        const result = await quiet.execute('inlineIn');
+        const error = await captureTyped(executor.execute('inlineInOnEnd'), ResolverError);
 
-        assert.strictEqual(result.status, 'completed');
+        assert.strictEqual(error.reason, 'action-parameter-location');
+        assert.strictEqual(calls.length, 0);
+      },
+    );
+
+    specify(
+      'should throw action-parameter-location for an inline in on a workflow-level action every step overrides',
+      async function () {
+        const { executor, calls } = makeActionExecutor();
+
+        const error = await captureTyped(
+          executor.execute('inlineInOnOverriddenWorkflowAction'),
+          ResolverError,
+        );
+
+        assert.strictEqual(error.reason, 'action-parameter-location');
+        assert.strictEqual(error.workflowId, 'inlineInOnOverriddenWorkflowAction');
+        assert.isUndefined(error.stepId);
+        assert.strictEqual(calls.length, 0);
       },
     );
 
