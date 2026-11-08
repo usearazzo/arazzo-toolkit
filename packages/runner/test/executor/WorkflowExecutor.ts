@@ -11,10 +11,12 @@ import {
   OpenAPIOperationExecutor,
   ExecutionError,
   ResolverError,
+  RuntimeExpressionError,
   settledResult,
   type HTTPClient,
   type OpenAPIOperationRequest,
   type WorkflowExecuteOptions,
+  type WorkflowExecutionResult,
 } from '../../src/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -990,9 +992,8 @@ describe('WorkflowExecutor', function () {
           ['first', 'second'],
         );
         assert.strictEqual(target.outputs.name, 'Rex');
-        // a goto's transfer carries no parameters, so the target runs with {}
-        // inputs — the same gap issue #62 already documents for retry
-        // references.
+        // this goto declares no parameters, so the target runs with {}
+        // inputs.
         assert.isUndefined(target.outputs.echoedStatus);
         // the target has no transfer of its own.
         assert.isUndefined(target.transferredTo);
@@ -1355,6 +1356,322 @@ describe('WorkflowExecutor', function () {
         assert.strictEqual(calls.length, 4);
         assert.strictEqual(result.steps[1].attempts, 2); // call: initial + 1 retry
         assert.strictEqual(result.outputs.echoed, 'B');
+      },
+    );
+  });
+
+  context('action parameters', function () {
+    let actionRegistry: DocumentRegistry;
+    let actionEntry: ArazzoDocument;
+
+    before(async function () {
+      actionRegistry = new DocumentRegistry();
+      actionEntry = await actionRegistry.acquireEntryDocument(
+        path.join(fixturesPath, 'action-parameters.arazzo.yaml'),
+      );
+    });
+
+    /**
+     * A workflow executor over the action-parameters fixture whose transport
+     * returns `responses` in sequence, the last one repeating.
+     */
+    const makeActionExecutor = (
+      responses: readonly CannedResponse[] = [okResponse],
+    ): { executor: WorkflowExecutor; calls: OpenAPIOperationRequest[] } => {
+      const calls: OpenAPIOperationRequest[] = [];
+      const httpClient: HTTPClient = async (request) => {
+        const canned = responses[Math.min(calls.length, responses.length - 1)];
+        calls.push(request);
+        return new Response(JSON.stringify(canned.body), {
+          status: canned.status,
+          statusText: canned.statusText,
+          headers: { 'content-type': 'application/json' },
+        });
+      };
+      const executor = new WorkflowExecutor({
+        document: actionEntry,
+        registry: actionRegistry,
+        stepExecutor: new StepExecutor({
+          document: actionEntry,
+          registry: actionRegistry,
+          operationExecutor: new OpenAPIOperationExecutor({ httpClient }),
+        }),
+        sleep: async () => {},
+      });
+      return { executor, calls };
+    };
+
+    /**
+     * Runs a promise expected to reject with `errorType` and returns the error.
+     */
+    const captureTyped = async <T extends Error>(
+      promise: Promise<unknown>,
+      errorType: new (message?: string) => T,
+    ): Promise<T> => {
+      let caught: unknown;
+      try {
+        await promise;
+      } catch (error) {
+        caught = error;
+      }
+      assert.instanceOf(caught, errorType);
+      return caught as T;
+    };
+
+    /**
+     * What a run did, for comparing two runs: its status and each step's trace.
+     */
+    const trace = (
+      result: WorkflowExecutionResult,
+    ): { status: string; steps: { stepId: string; attempts: number; successful: boolean }[] } => ({
+      status: result.status,
+      steps: result.steps.map(({ stepId, attempts, successful }) => ({
+        stepId,
+        attempts,
+        successful,
+      })),
+    });
+
+    specify(
+      "should pass a goto action's parameters to the transfer target as inputs",
+      async function () {
+        const { executor } = makeActionExecutor();
+
+        const result = await executor.execute('gotoWithParameters', {
+          inputs: { status: 'available' },
+        });
+
+        assert.strictEqual(result.status, 'transferred');
+        const target = result.transferredTo!;
+        assert.strictEqual(target.workflowId, 'echoTarget');
+        assert.strictEqual(target.outputs.status, 'available');
+        assert.strictEqual(target.outputs.literal, 'hello');
+      },
+    );
+
+    specify(
+      "should resolve action parameters against the step's response and its own fresh outputs",
+      async function () {
+        // fetch runs twice: id 7 loops back to it, id 8 transfers. State still
+        // holds the first run's petId (7) when the transfer fires.
+        const { executor, calls } = makeActionExecutor([
+          { status: 200, statusText: 'OK', body: { id: 7, name: 'Rex' } },
+          { status: 201, statusText: 'Created', body: { id: 8, name: 'Fido' } },
+        ]);
+
+        const result = await executor.execute('freshOutputs', { inputs: { status: 'sold' } });
+
+        assert.strictEqual(calls.length, 2);
+        assert.strictEqual(result.status, 'transferred');
+        assert.deepInclude(result.transferredTo!.outputs, {
+          code: 201,
+          name: 'Fido',
+          status: 'sold',
+          id: 8,
+        });
+      },
+    );
+
+    specify(
+      "should resolve a retry reference's parameters again on every firing",
+      async function () {
+        const { executor } = makeActionExecutor([
+          { status: 500, statusText: 'Internal Server Error', body: { name: 'A' } },
+          { status: 503, statusText: 'Service Unavailable', body: { name: 'B' } },
+          okResponse,
+        ]);
+
+        const result = await executor.execute('retryReferenceWithParameters');
+
+        assert.strictEqual(result.status, 'completed');
+        assert.strictEqual(result.steps[0].attempts, 3);
+        assert.deepEqual(
+          result.steps[0].retryReferences?.map((reference) => reference.subWorkflow?.outputs),
+          [
+            { code: 500, name: 'A' },
+            { code: 503, name: 'B' },
+          ],
+        );
+      },
+    );
+
+    specify(
+      "should record a retry reference's resolved inputs under $workflows",
+      async function () {
+        const { executor } = makeActionExecutor([
+          { status: 500, statusText: 'Internal Server Error', body: { name: 'A' } },
+          { status: 503, statusText: 'Service Unavailable', body: { name: 'B' } },
+          okResponse,
+        ]);
+
+        const result = await executor.execute('retryReferenceWithParameters');
+
+        // the last firing's inputs.
+        assert.deepEqual(result.outputs, { recordedCode: 503, recordedName: 'B' });
+      },
+    );
+
+    specify(
+      'should keep earlier recorded inputs for a retry reference without parameters',
+      async function () {
+        const { executor } = makeActionExecutor([serverErrorResponse, okResponse]);
+
+        const result = await executor.execute('retryReferenceWithoutParameters');
+
+        assert.strictEqual(result.status, 'completed');
+        assert.strictEqual(result.steps[1].retryReferences?.length, 1);
+        assert.strictEqual(result.outputs.recordedCode, 1);
+      },
+    );
+
+    specify('should map duplicate action parameter names first-wins', async function () {
+      const { executor } = makeActionExecutor();
+
+      const result = await executor.execute('duplicateNames');
+
+      assert.strictEqual(result.transferredTo?.outputs.status, 'first');
+    });
+
+    specify('should resolve parameters: [] to empty inputs', async function () {
+      const { executor } = makeActionExecutor([serverErrorResponse, okResponse]);
+
+      const result = await executor.execute('retryReferenceEmptyParameters');
+
+      assert.strictEqual(result.status, 'completed');
+      const repair = result.steps[1].retryReferences?.[0].subWorkflow;
+      assert.isUndefined(repair?.outputs.code);
+      assert.isUndefined(repair?.outputs.name);
+      // `seed` recorded { code: 1 }; the reference ran with {} and recorded it.
+      assert.isUndefined(result.outputs.recordedCode);
+    });
+
+    specify(
+      'should throw malformed-parameters for a non-list action parameters',
+      async function () {
+        const { executor } = makeActionExecutor();
+
+        const error = await captureTyped(executor.execute('nonListParameters'), ResolverError);
+
+        assert.strictEqual(error.reason, 'malformed-parameters');
+        assert.strictEqual(error.workflowId, 'nonListParameters');
+        assert.strictEqual(error.stepId, 'only');
+      },
+    );
+
+    specify(
+      'should throw action-parameter-location for an inline in only when the action fires',
+      async function () {
+        const { executor: firing } = makeActionExecutor();
+
+        const error = await captureTyped(firing.execute('inlineIn'), ResolverError);
+
+        assert.strictEqual(error.reason, 'action-parameter-location');
+        assert.strictEqual(error.workflowId, 'inlineIn');
+        assert.strictEqual(error.stepId, 'only');
+        assert.strictEqual(error.target, 'parameters');
+
+        // the action's criteria do not match a 404, so it never fires.
+        const { executor: quiet } = makeActionExecutor([
+          { status: 404, statusText: 'Not Found', body: {} },
+        ]);
+
+        const result = await quiet.execute('inlineIn');
+
+        assert.strictEqual(result.status, 'completed');
+      },
+    );
+
+    specify(
+      'should map a reusable parameter carrying in by name with its value override',
+      async function () {
+        const { executor } = makeActionExecutor();
+
+        const result = await executor.execute('reusableWithIn');
+
+        assert.strictEqual(result.transferredTo?.outputs.status, 'from-override');
+      },
+    );
+
+    specify('should resolve a reusable parameter nested in a components action', async function () {
+      const { executor } = makeActionExecutor();
+
+      const result = await executor.execute('reusableInComponentsAction');
+
+      assert.strictEqual(result.status, 'transferred');
+      assert.strictEqual(result.transferredTo?.outputs.status, 'from-components-action');
+    });
+
+    specify('should ignore parameters on an action without a workflowId', async function () {
+      const { executor } = makeActionExecutor([serverErrorResponse]);
+
+      for (const [withParameters, plain] of [
+        ['endWithParameters', 'endPlain'],
+        ['gotoStepWithParameters', 'gotoStepPlain'],
+        ['retryStepWithParameters', 'retryStepPlain'],
+      ]) {
+        assert.deepEqual(
+          trace(await executor.execute(withParameters)),
+          trace(await executor.execute(plain)),
+          withParameters,
+        );
+      }
+    });
+
+    specify(
+      'should not resolve the parameters of an action that matched but did not fire',
+      async function () {
+        const { executor } = makeActionExecutor();
+
+        const result = await executor.execute('matchedNotFired');
+
+        assert.strictEqual(result.transferredTo?.outputs.status, 'taken');
+      },
+    );
+
+    specify(
+      'should run a workflowId action without parameters with empty inputs',
+      async function () {
+        const { executor } = makeActionExecutor();
+
+        const result = await executor.execute('gotoWithoutParameters', {
+          inputs: { status: 'available' },
+        });
+
+        assert.strictEqual(result.status, 'transferred');
+        // the caller's own `$inputs.status` is not forwarded.
+        assert.isUndefined(result.transferredTo?.outputs.status);
+      },
+    );
+
+    specify(
+      "should resolve a step calling a workflow's action parameters against its $outputs and fresh outputs",
+      async function () {
+        // `call` runs twice: "Rex" loops back to it, "Fido" transfers. State
+        // still holds the first run's petName ("Rex") when the transfer fires.
+        const { executor, calls } = makeActionExecutor([
+          { status: 200, statusText: 'OK', body: { id: 7, name: 'Rex' } },
+          { status: 200, statusText: 'OK', body: { id: 8, name: 'Fido' } },
+        ]);
+
+        const result = await executor.execute('subWorkflowFreshOutputs');
+
+        assert.strictEqual(calls.length, 2);
+        assert.strictEqual(result.status, 'transferred');
+        assert.deepInclude(result.transferredTo!.outputs, { name: 'Fido', status: 'Fido' });
+      },
+    );
+
+    specify(
+      'should throw unavailable-expression for $statusCode in an action parameter of a step calling a workflow',
+      async function () {
+        const { executor } = makeActionExecutor();
+
+        const error = await captureTyped(
+          executor.execute('subWorkflowStatusCode'),
+          RuntimeExpressionError,
+        );
+
+        assert.strictEqual(error.reason, 'unavailable-expression');
       },
     );
   });

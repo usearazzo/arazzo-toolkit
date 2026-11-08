@@ -11,6 +11,12 @@ import ArazzoRunnerError from './ArazzoRunnerError.ts';
  * @public
  */
 class ResolverError extends ArazzoRunnerError {
+  /**
+   * A parameter of a Success / Failure Action declares an `in` inline, which
+   * the Arazzo Specification forbids; one inherited from a
+   * `$components.parameters` Reusable Object maps by name instead.
+   */
+  static readonly ActionParameterLocation = 'action-parameter-location' as const;
   /** A parameter cannot be delivered unambiguously at its location. */
   static readonly AmbiguousDelivery = 'ambiguous-delivery' as const;
   /** An output or a request body payload holds a value that is not a valid runtime expression. */

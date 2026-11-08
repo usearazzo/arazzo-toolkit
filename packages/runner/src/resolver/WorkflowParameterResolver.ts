@@ -1,6 +1,11 @@
 import { toValue } from '@speclynx/apidom-core';
 import { isArrayElement } from '@speclynx/apidom-datamodel';
-import { isParameterElement, type StepParametersElement } from '@speclynx/apidom-ns-arazzo-1';
+import {
+  isParameterElement,
+  type FailureActionParametersElement,
+  type StepParametersElement,
+  type SuccessActionParametersElement,
+} from '@speclynx/apidom-ns-arazzo-1';
 
 import ResolverError from '../errors/ResolverError.ts';
 import StepParameterResolver from './StepParameterResolver.ts';
@@ -9,7 +14,8 @@ import type { StepScope } from './ResolverScope.ts';
 
 /**
  * Resolves the `parameters` of a step targeting a `workflowId` into the
- * sub-workflow's inputs.
+ * sub-workflow's inputs — or those of a `goto` / `retry` action naming a
+ * `workflowId` into its target's.
  *
  * Values follow the family-wide literal-vs-expression rule of
  * {@link ArazzoValueResolver}. Keys are bare parameter names: per the
@@ -33,7 +39,11 @@ class WorkflowParameterResolver extends StepParameterResolver {
    * `scope` names the step in a thrown {@link ResolverError}.
    */
   resolve(
-    parameters: StepParametersElement | undefined,
+    parameters:
+      | StepParametersElement
+      | SuccessActionParametersElement
+      | FailureActionParametersElement
+      | undefined,
     resolve: RuntimeExpressionResolver,
     scope: StepScope,
   ): Record<string, unknown> {

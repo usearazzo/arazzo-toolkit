@@ -31,6 +31,8 @@ describe('StepRetryRunner', function () {
       attempt: async (): Promise<StepAttemptOutcome> => {
         const outcome = outcomes[Math.min(state.calls, outcomes.length - 1)];
         state.calls += 1;
+        // tags the attempt, so a test can tell which outcome reached runReference
+        const attemptNumber = state.calls;
         const matchedActions = outcome.matchedActions ?? [];
         return {
           stepId: runContext.stepId,
@@ -40,6 +42,7 @@ describe('StepRetryRunner', function () {
           matchedActions,
           successCriteria: [],
           actionCriteria: [],
+          actionContext: { inputs: { attemptNumber } },
         };
       },
     };
@@ -323,11 +326,13 @@ describe('StepRetryRunner', function () {
         { successful: true },
       ]);
       const referenced: SelectedAction[] = [];
+      const outcomes: StepAttemptOutcome[] = [];
 
       const result = await runner.run(target.attempt, {
         ...runContext,
-        runReference: async (action) => {
+        runReference: async (action, outcome) => {
           referenced.push(action);
+          outcomes.push(outcome);
         },
       });
 
@@ -337,6 +342,11 @@ describe('StepRetryRunner', function () {
       assert.strictEqual(referenced.length, 2);
       assert.strictEqual(referenced[0], retry[0]);
       assert.strictEqual(referenced[1], retry[0]);
+      // each firing gets the attempt that just failed and fired it.
+      assert.deepEqual(
+        outcomes.map((outcome) => outcome.actionContext.inputs),
+        [{ attemptNumber: 1 }, { attemptNumber: 2 }],
+      );
     });
 
     specify(

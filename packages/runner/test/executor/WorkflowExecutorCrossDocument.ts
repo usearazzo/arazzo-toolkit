@@ -408,6 +408,42 @@ describe('WorkflowExecutor cross-document references', function () {
     );
   });
 
+  context('action parameters across documents', function () {
+    specify(
+      "should resolve a cross-document action target's parameters against the calling document",
+      async function () {
+        // the calling document holds the `$components.parameters` the action
+        // references; the child document defines no components at all.
+        const actionRegistry = new DocumentRegistry();
+        const actionEntry = await actionRegistry.acquireEntryDocument(
+          path.join(fixturesPath, 'action-parameters.arazzo.yaml'),
+        );
+        const httpClient: HTTPClient = async () =>
+          new Response(JSON.stringify(okResponse.body), {
+            status: okResponse.status,
+            statusText: okResponse.statusText,
+            headers: { 'content-type': 'application/json' },
+          });
+        const executor = new WorkflowExecutor({
+          document: actionEntry,
+          registry: actionRegistry,
+          stepExecutor: new StepExecutor({
+            document: actionEntry,
+            registry: actionRegistry,
+            operationExecutor: new OpenAPIOperationExecutor({ httpClient }),
+          }),
+          sleep: async () => {},
+        });
+
+        const result = await executor.execute('crossDocumentGoto');
+
+        assert.strictEqual(result.status, 'transferred');
+        assert.strictEqual(result.transferredTo?.workflowId, 'childSetup');
+        assert.strictEqual(result.transferredTo?.outputs.echo, 'from-calling-document');
+      },
+    );
+  });
+
   context('cycles and depth across documents', function () {
     specify('should detect a cycle closed across the document boundary', async function () {
       const { executor } = makeExecutor();

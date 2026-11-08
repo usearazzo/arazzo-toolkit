@@ -1,0 +1,427 @@
+arazzo: "1.1.0"
+info:
+  title: Action parameters test workflows
+  version: "1.0.0"
+  summary: >-
+    Workflows exercising Arazzo 1.1.0 Success / Failure Action `parameters`
+    (#115): a `goto` or `retry` action naming a `workflowId` passes its
+    parameters to that workflow as inputs, resolved against the step outcome
+    the action responds to.
+sourceDescriptions:
+  - name: petstoreAPI
+    url: ./petstore.openapi.json
+    type: openapi
+  - name: childWorkflows
+    url: ./cross-document-child.arazzo.yaml
+    type: arazzo
+components:
+  parameters:
+    # carries an `in`, as a parameter shared with operation steps must; used
+    # by an action it maps to an input by name.
+    sharedStatus:
+      name: status
+      in: query
+      value: from-component
+    # the value the cross-document target receives must come from this
+    # document's components — the child document defines none.
+    sharedToken:
+      name: token
+      in: header
+      value: from-calling-document
+  successActions:
+    sharedJump:
+      name: sharedJump
+      type: goto
+      workflowId: echoTarget
+      parameters:
+        - reference: $components.parameters.sharedStatus
+          value: from-components-action
+workflows:
+  # the target of every goto transfer: no steps, so its outputs are exactly
+  # the inputs it received.
+  - workflowId: echoTarget
+    steps: []
+    outputs:
+      status: $inputs.status
+      code: $inputs.code
+      name: $inputs.name
+      id: $inputs.id
+      literal: $inputs.literal
+
+  # the target of every retry reference; echoes its inputs the same way.
+  - workflowId: repairEcho
+    steps: []
+    outputs:
+      code: $inputs.code
+      name: $inputs.name
+
+  # a goto transfer passing literal and `$inputs` values.
+  - workflowId: gotoWithParameters
+    inputs:
+      type: object
+      properties:
+        status:
+          type: string
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: echoTarget
+            parameters:
+              - name: status
+                value: $inputs.status
+              - name: literal
+                value: hello
+
+  # `fetch` runs twice: the first response (id 7) loops back to it, the
+  # second (id 8) transfers. State still holds the first run's outputs when
+  # the transfer fires, so `id` must come from the attempt itself.
+  - workflowId: freshOutputs
+    inputs:
+      type: object
+      properties:
+        status:
+          type: string
+    steps:
+      - stepId: fetch
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: "7"
+        outputs:
+          petId: $response.body#/id
+        onSuccess:
+          - name: again
+            type: goto
+            stepId: fetch
+            criteria:
+              - condition: $response.body#/id == 7
+          - name: jump
+            type: goto
+            workflowId: echoTarget
+            parameters:
+              - name: code
+                value: $statusCode
+              - name: name
+                value: $response.body#/name
+              - name: status
+                value: $inputs.status
+              - name: id
+                value: $steps.fetch.outputs.petId
+
+  # a retry reference whose parameters read the failed attempt's response.
+  - workflowId: retryReferenceWithParameters
+    steps:
+      - stepId: call
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: "7"
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: repair
+            type: retry
+            retryLimit: 2
+            workflowId: repairEcho
+            parameters:
+              - name: code
+                value: $statusCode
+              - name: name
+                value: $response.body#/name
+    outputs:
+      recordedCode: $workflows.repairEcho.inputs.code
+      recordedName: $workflows.repairEcho.inputs.name
+
+  # `seed` records inputs for repairEcho; a retry reference without
+  # parameters must not erase them.
+  - workflowId: retryReferenceWithoutParameters
+    steps:
+      - stepId: seed
+        workflowId: repairEcho
+        parameters:
+          - name: code
+            value: 1
+      - stepId: call
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: repair
+            type: retry
+            retryLimit: 1
+            workflowId: repairEcho
+    outputs:
+      recordedCode: $workflows.repairEcho.inputs.code
+
+  # the same, with `parameters: []`: present, so the recorded inputs become
+  # the empty inputs the reference actually ran with.
+  - workflowId: retryReferenceEmptyParameters
+    steps:
+      - stepId: seed
+        workflowId: repairEcho
+        parameters:
+          - name: code
+            value: 1
+      - stepId: call
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: repair
+            type: retry
+            retryLimit: 1
+            workflowId: repairEcho
+            parameters: []
+    outputs:
+      recordedCode: $workflows.repairEcho.inputs.code
+
+  - workflowId: duplicateNames
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: echoTarget
+            parameters:
+              - name: status
+                value: first
+              - name: status
+                value: second
+
+  - workflowId: nonListParameters
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: echoTarget
+            parameters: oops
+
+  # no successCriteria, so a non-200 response completes the run without the
+  # action ever firing.
+  - workflowId: inlineIn
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: echoTarget
+            criteria:
+              - condition: $statusCode == 200
+            parameters:
+              - name: status
+                in: query
+                value: inline
+
+  - workflowId: reusableWithIn
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: echoTarget
+            parameters:
+              - reference: $components.parameters.sharedStatus
+                value: from-override
+
+  - workflowId: reusableInComponentsAction
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - reference: $components.successActions.sharedJump
+
+  # parameters on actions that name no workflowId are never read: each
+  # carries an inline `in`, which would throw if it were. The *Plain twins
+  # are the same workflows without the parameters.
+  - workflowId: endWithParameters
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: stop
+            type: end
+            parameters:
+              - name: status
+                in: query
+                value: ignored
+      - stepId: never
+        operationId: getInventory
+  - workflowId: endPlain
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: stop
+            type: end
+      - stepId: never
+        operationId: getInventory
+
+  - workflowId: gotoStepWithParameters
+    steps:
+      - stepId: first
+        operationId: getInventory
+        onSuccess:
+          - name: skip
+            type: goto
+            stepId: third
+            parameters:
+              - name: status
+                in: query
+                value: ignored
+      - stepId: second
+        operationId: getInventory
+      - stepId: third
+        operationId: getInventory
+  - workflowId: gotoStepPlain
+    steps:
+      - stepId: first
+        operationId: getInventory
+        onSuccess:
+          - name: skip
+            type: goto
+            stepId: third
+      - stepId: second
+        operationId: getInventory
+      - stepId: third
+        operationId: getInventory
+
+  - workflowId: retryStepWithParameters
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: again
+            type: retry
+            retryLimit: 1
+            stepId: doomed
+            parameters:
+              - name: status
+                in: query
+                value: ignored
+  - workflowId: retryStepPlain
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: again
+            type: retry
+            retryLimit: 1
+            stepId: doomed
+
+  # both actions match; only the first fires, so the second's inline `in`
+  # is never read.
+  - workflowId: matchedNotFired
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: taken
+            type: goto
+            workflowId: echoTarget
+            parameters:
+              - name: status
+                value: taken
+          - name: notTaken
+            type: goto
+            workflowId: echoTarget
+            parameters:
+              - name: status
+                in: query
+                value: never
+
+  # the caller's own `$inputs` are not forwarded to a target without
+  # parameters.
+  - workflowId: gotoWithoutParameters
+    inputs:
+      type: object
+      properties:
+        status:
+          type: string
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: echoTarget
+
+  # the workflow `subWorkflowFreshOutputs` calls; its output is the name
+  # in the response, which the stub varies per call.
+  - workflowId: fetchName
+    steps:
+      - stepId: fetch
+        operationId: getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: "7"
+        outputs:
+          name: $response.body#/name
+    outputs:
+      name: $steps.fetch.outputs.name
+
+  # the step-calling-a-workflow twin of `freshOutputs`: `call` runs twice,
+  # looping back on "Rex" and transferring on "Fido". State still holds the
+  # first run's outputs when the transfer fires, so both values must come
+  # from the attempt itself, through `$outputs` and `$steps.call.outputs`.
+  - workflowId: subWorkflowFreshOutputs
+    steps:
+      - stepId: call
+        workflowId: fetchName
+        outputs:
+          petName: $outputs.name
+        onSuccess:
+          - name: again
+            type: goto
+            stepId: call
+            criteria:
+              - condition: $outputs.name == 'Rex'
+          - name: jump
+            type: goto
+            workflowId: echoTarget
+            parameters:
+              - name: name
+                value: $outputs.name
+              - name: status
+                value: $steps.call.outputs.petName
+
+  # a step calling a workflow made no HTTP call, so `$statusCode` in its
+  # action's parameters is an authoring error.
+  - workflowId: subWorkflowStatusCode
+    steps:
+      - stepId: call
+        workflowId: repairEcho
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: echoTarget
+            parameters:
+              - name: code
+                value: $statusCode
+
+  # a transfer into another document; the parameter resolves against this
+  # document's components.
+  - workflowId: crossDocumentGoto
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: $sourceDescriptions.childWorkflows.childSetup
+            parameters:
+              - reference: $components.parameters.sharedToken
