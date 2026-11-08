@@ -204,8 +204,8 @@ workflows:
             workflowId: echoTarget
             parameters: oops
 
-  # no successCriteria, so a non-200 response completes the run without the
-  # action ever firing.
+  # the action's criteria do not even need to match: the `in` is rejected
+  # before the first request.
   - workflowId: inlineIn
     steps:
       - stepId: only
@@ -220,6 +220,39 @@ workflows:
               - name: status
                 in: query
                 value: inline
+
+  # rejected before the first request although an `end` never reads its
+  # parameters: the validator reports the `in` either way.
+  - workflowId: inlineInOnEnd
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: stop
+            type: end
+            parameters:
+              - name: status
+                in: query
+                value: inline
+
+  # the workflow-level action carries an inline `in`, and the step overrides
+  # it by name, so it never reaches the step's own list; the validator still
+  # reports it.
+  - workflowId: inlineInOnOverriddenWorkflowAction
+    successActions:
+      - name: shared
+        type: goto
+        workflowId: echoTarget
+        parameters:
+          - name: status
+            in: query
+            value: inline
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: shared
+            type: end
 
   - workflowId: reusableWithIn
     steps:
@@ -240,26 +273,26 @@ workflows:
         onSuccess:
           - reference: $components.successActions.sharedJump
 
-  # parameters on actions that name no workflowId are never read: each
-  # carries an inline `in`, which would throw if it were. The *Plain twins
-  # are the same workflows without the parameters.
+  # parameters on actions that name no workflowId are never read. The step
+  # holding the action calls a workflow, so its `$statusCode` parameter would
+  # throw unavailable-expression if it were resolved. The *Plain twins are
+  # the same workflows without the parameters.
   - workflowId: endWithParameters
     steps:
       - stepId: only
-        operationId: getInventory
+        workflowId: repairEcho
         onSuccess:
           - name: stop
             type: end
             parameters:
-              - name: status
-                in: query
-                value: ignored
+              - name: code
+                value: $statusCode
       - stepId: never
         operationId: getInventory
   - workflowId: endPlain
     steps:
       - stepId: only
-        operationId: getInventory
+        workflowId: repairEcho
         onSuccess:
           - name: stop
             type: end
@@ -269,15 +302,14 @@ workflows:
   - workflowId: gotoStepWithParameters
     steps:
       - stepId: first
-        operationId: getInventory
+        workflowId: repairEcho
         onSuccess:
           - name: skip
             type: goto
             stepId: third
             parameters:
-              - name: status
-                in: query
-                value: ignored
+              - name: code
+                value: $statusCode
       - stepId: second
         operationId: getInventory
       - stepId: third
@@ -285,7 +317,7 @@ workflows:
   - workflowId: gotoStepPlain
     steps:
       - stepId: first
-        operationId: getInventory
+        workflowId: repairEcho
         onSuccess:
           - name: skip
             type: goto
@@ -295,39 +327,39 @@ workflows:
       - stepId: third
         operationId: getInventory
 
+  # repairEcho's `code` output is absent, so the step fails its criteria.
   - workflowId: retryStepWithParameters
     steps:
       - stepId: doomed
-        operationId: getInventory
+        workflowId: repairEcho
         successCriteria:
-          - condition: $statusCode == 200
+          - condition: $outputs.code == 1
         onFailure:
           - name: again
             type: retry
             retryLimit: 1
             stepId: doomed
             parameters:
-              - name: status
-                in: query
-                value: ignored
+              - name: code
+                value: $statusCode
   - workflowId: retryStepPlain
     steps:
       - stepId: doomed
-        operationId: getInventory
+        workflowId: repairEcho
         successCriteria:
-          - condition: $statusCode == 200
+          - condition: $outputs.code == 1
         onFailure:
           - name: again
             type: retry
             retryLimit: 1
             stepId: doomed
 
-  # both actions match; only the first fires, so the second's inline `in`
-  # is never read.
+  # both actions match; only the first fires. The second reads `$statusCode`,
+  # which throws on a step calling a workflow if it is ever resolved.
   - workflowId: matchedNotFired
     steps:
       - stepId: only
-        operationId: getInventory
+        workflowId: repairEcho
         onSuccess:
           - name: taken
             type: goto
@@ -339,9 +371,8 @@ workflows:
             type: goto
             workflowId: echoTarget
             parameters:
-              - name: status
-                in: query
-                value: never
+              - name: code
+                value: $statusCode
 
   # the caller's own `$inputs` are not forwarded to a target without
   # parameters.

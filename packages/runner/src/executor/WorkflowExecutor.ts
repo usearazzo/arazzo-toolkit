@@ -1,8 +1,10 @@
 import { toValue } from '@speclynx/apidom-core';
 import { isArrayElement, isObjectElement, isStringElement } from '@speclynx/apidom-datamodel';
 import {
+  isFailureActionElement,
   isParameterElement,
   isStepElement,
+  isSuccessActionElement,
   type WorkflowElement,
   type StepElement,
   type FailureActionElement,
@@ -632,6 +634,16 @@ class WorkflowExecutor {
     // included: an unreadable assertion found at step three must not cost the
     // run the requests of steps one and two.
     for (const step of steps) this.#stepExecutor.assertSuccessCriteria(step, workflowId);
+    // and to every action's `parameters`, for the same reason: an `in` the
+    // specification forbids must not cost the run the requests before the
+    // step whose action carries it.
+    // the workflow's own default actions too: one every step overrides by
+    // name never reaches a step's list, yet the validator still reports it.
+    this.#assertActionParameters([workflow.successActions, workflow.failureActions], workflowId);
+    for (const step of steps) {
+      const stepId = toValue(step.stepId) as string;
+      this.#assertActionParameters([step.onSuccess, step.onFailure], workflowId, stepId);
+    }
 
     const dependencies = await this.#runDependencies(workflow, invocation, scope);
     if (dependencies.some((dependency) => this.#settledFailed(dependency))) {
@@ -1333,13 +1345,9 @@ class WorkflowExecutor {
    * the context of the attempt that fired it — `$statusCode`, `$response.*`
    * and the rest of that step outcome, plus the outputs it just produced.
    * Resolved against the calling invocation's document, so its `$components`
-   * apply, never the target's. No `parameters` gives `{}`.
-   *
-   * An `in` written inline is an authoring error the specification states
-   * outright ("The `in` field MUST NOT be used"), raised only once the action
-   * fires. One that arrives through a `$components.parameters` Reusable Object
-   * is not: a shared component carries `in` for the operation steps that use
-   * it, and the dereferencer marks the transcluded copy with `ref-fields`.
+   * apply, never the target's. No `parameters` gives `{}`. Their shape was
+   * checked before the workflow's first request, by
+   * {@link WorkflowExecutor.#assertActionParameters}.
    */
   #actionInputs(
     parameters: SuccessActionParametersElement | FailureActionParametersElement | undefined,
@@ -1348,26 +1356,71 @@ class WorkflowExecutor {
     stepId: string,
   ): Record<string, unknown> {
     const { workflowId, document } = invocation;
-    const scope = { workflowId, stepId };
-    if (isArrayElement(parameters)) {
-      const inline = [...parameters].find(
-        (parameter) =>
-          isParameterElement(parameter) &&
-          parameter.hasKey('in') &&
-          !parameter.meta.hasKey('ref-fields'),
-      );
-      if (inline !== undefined) {
-        throw new ResolverError(
-          `An action parameter of step "${stepId}" in workflow "${workflowId}" declares an \`in\`; parameters of an action naming a workflowId map to its inputs by name`,
-          { ...scope, target: 'parameters', reason: ResolverError.ActionParameterLocation },
-        );
-      }
-    }
     return this.#parameterResolver.resolve(
       parameters,
       (expression) => this.#evaluate(outcome.actionContext, expression, document),
-      scope,
+      { workflowId, stepId },
     );
+  }
+
+  /**
+   * Throws {@link ResolverError} unless every action in `lists` — a step's
+   * `onSuccess` / `onFailure`, or the workflow's own `successActions` /
+   * `failureActions` — has an absent `parameters` or a list free of inline `in`:
+   * `malformed-parameters` for one that is present but not a list,
+   * `action-parameter-location` for a Parameter Object that declares `in`. The
+   * specification says outright that "The `in` field MUST NOT be used" on
+   * them. An `in` arriving through a `$components.parameters` Reusable Object
+   * is not inline — a shared component carries `in` for the operation steps
+   * that use it — and the dereferencer marks the transcluded copy with
+   * `ref-fields`.
+   *
+   * Checked for every action, `workflowId` or not, before any step of the
+   * workflow runs: both are authoring errors the validator reports, so a run
+   * must not make requests on the way to discovering them. Valid `parameters`
+   * on an action naming no `workflowId` are still ignored, as the validator
+   * only warns about them. A list that is not an array is skipped here and left
+   * for the code that reads it to report. `stepId` is absent for the
+   * workflow's own lists, and the error then names the workflow alone.
+   */
+  #assertActionParameters(lists: readonly unknown[], workflowId: string, stepId?: string): void {
+    const owner =
+      stepId === undefined
+        ? `workflow "${workflowId}"`
+        : `step "${stepId}" in workflow "${workflowId}"`;
+    for (const actions of lists) {
+      if (!isArrayElement(actions)) continue;
+
+      for (const action of actions) {
+        if (!isSuccessActionElement(action) && !isFailureActionElement(action)) continue;
+        if (!action.hasKey('parameters')) continue;
+
+        const scope = {
+          workflowId,
+          ...(stepId === undefined ? {} : { stepId }),
+          target: 'parameters',
+        };
+        const { parameters } = action;
+        if (!isArrayElement(parameters)) {
+          throw new ResolverError('`parameters` is present but is not a list', {
+            ...scope,
+            reason: ResolverError.MalformedParameters,
+          });
+        }
+        const inline = [...parameters].some(
+          (parameter) =>
+            isParameterElement(parameter) &&
+            parameter.hasKey('in') &&
+            !parameter.meta.hasKey('ref-fields'),
+        );
+        if (inline) {
+          throw new ResolverError(
+            `An action parameter of ${owner} declares an \`in\`; action parameters map to the target workflow's inputs by name`,
+            { ...scope, reason: ResolverError.ActionParameterLocation },
+          );
+        }
+      }
+    }
   }
 
   /**
