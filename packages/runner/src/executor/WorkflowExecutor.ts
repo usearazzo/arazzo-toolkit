@@ -65,6 +65,12 @@ export interface WorkflowExecutorOptions {
    */
   readonly stepExecutor: StepExecutor;
   /**
+   * Normalizes each workflow before it runs: dereferences it, which may fetch
+   * externally referenced documents, and inherits its parameters and actions
+   * into its steps. Defaults to a fresh {@link ArazzoWorkflowNormalizer}.
+   */
+  readonly workflowNormalizer?: ArazzoWorkflowNormalizer;
+  /**
    * Upper bound on the number of step attempts in a single run — every attempt
    * of every step counts, including each `retry` and each entry into a
    * sub-workflow step. Guards against a runaway `goto` loop, a runaway `retry`,
@@ -493,7 +499,7 @@ class WorkflowExecutor {
   readonly #maxWorkflowDepth: number;
   readonly #now: () => number;
   readonly #extractor = new ArazzoWorkflowExtractor();
-  readonly #normalizer = new ArazzoWorkflowNormalizer();
+  readonly #normalizer: ArazzoWorkflowNormalizer;
   readonly #outputResolver = new OutputResolver();
   readonly #parameterResolver = new WorkflowParameterResolver();
   readonly #stepExecutor: StepExecutor;
@@ -505,6 +511,7 @@ class WorkflowExecutor {
     this.#document = options.document;
     this.#registry = options.registry;
     this.#workflowLocatorNormalizer = new ArazzoWorkflowLocatorNormalizer(options.registry);
+    this.#normalizer = options.workflowNormalizer ?? new ArazzoWorkflowNormalizer();
     this.#maxSteps = options.maxSteps ?? WorkflowExecutor.#DEFAULT_MAX_STEPS;
     this.#maxWorkflowDepth =
       options.maxWorkflowDepth ?? WorkflowExecutor.#DEFAULT_MAX_WORKFLOW_DEPTH;

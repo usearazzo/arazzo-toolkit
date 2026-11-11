@@ -56,9 +56,9 @@
   "dependencies": {
     "@babel/runtime-corejs3": "^8.1.0",
     "@speclynx/api-languageservice": "^3.0.4",
-    "@speclynx/apidom-error": "^7.0.1",
-    "@speclynx/apidom-ns-arazzo-1": "^7.0.1",
-    "@speclynx/apidom-reference": "^7.0.1",
+    "@speclynx/apidom-error": "^7.0.2",
+    "@speclynx/apidom-ns-arazzo-1": "^7.0.2",
+    "@speclynx/apidom-reference": "^7.0.2",
     "@usearazzo/parser": "1.0.1-alpha.27",
     "ramda": "^0.32.0",
     "type-fest": "^5.10.0",

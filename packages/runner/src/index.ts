@@ -3,6 +3,7 @@ export {
   default as ArazzoRunner,
   type ArazzoRunnerOptions,
   type ArazzoRunnerLoadOptions,
+  type ArazzoRunnerReferenceOptions,
 } from './ArazzoRunner.ts';
 
 /* Document Registry */
