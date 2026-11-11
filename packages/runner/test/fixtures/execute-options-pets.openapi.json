@@ -1,28 +1,141 @@
 {
   "openapi": "3.1.0",
-  "info": { "title": "Pets", "version": "1.0.0" },
-  "servers": [{ "url": "https://pets.example/v1" }],
-  "security": [{ "api_key": [] }],
+  "info": {
+    "title": "Pets",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://pets.example/v1"
+    }
+  ],
+  "security": [
+    {
+      "api_key": []
+    }
+  ],
   "paths": {
     "/pets": {
       "get": {
         "operationId": "listPets",
-        "security": [{ "api_key": [], "bearer": [] }],
-        "responses": { "200": { "description": "OK" } }
+        "security": [
+          {
+            "api_key": [],
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       }
     },
     "/health": {
       "get": {
         "operationId": "getHealth",
         "security": [],
-        "responses": { "200": { "description": "OK" } }
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/basic": {
+      "get": {
+        "operationId": "getWithBasic",
+        "security": [
+          {
+            "basic": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/oauth": {
+      "get": {
+        "operationId": "getWithOAuth",
+        "security": [
+          {
+            "oauth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/oidc": {
+      "get": {
+        "operationId": "getWithOpenIdConnect",
+        "security": [
+          {
+            "oidc": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/cookie": {
+      "get": {
+        "operationId": "getWithCookieKey",
+        "security": [
+          {
+            "cookie_key": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       }
     }
   },
   "components": {
     "securitySchemes": {
-      "api_key": { "type": "apiKey", "in": "header", "name": "X-API-Key" },
-      "bearer": { "type": "http", "scheme": "bearer" }
+      "api_key": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      },
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "basic": {
+        "type": "http",
+        "scheme": "basic"
+      },
+      "oauth": {
+        "type": "oauth2",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "https://pets.example/token",
+            "scopes": {}
+          }
+        }
+      },
+      "oidc": {
+        "type": "openIdConnect",
+        "openIdConnectUrl": "https://pets.example/.well-known/openid-configuration"
+      },
+      "cookie_key": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "session"
+      }
     }
   }
 }

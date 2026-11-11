@@ -16,6 +16,9 @@ sourceDescriptions:
   - name: petsAPIAgain
     url: ./execute-options-pets.openapi.json
     type: openapi
+  - name: legacyAPI
+    url: ./execute-options-legacy.openapi-2-0.json
+    type: openapi
   - name: nested
     url: ./execute-options-nested.arazzo.yaml
     type: arazzo
@@ -31,6 +34,26 @@ workflows:
         operationId: $sourceDescriptions.paymentsAPI.createCharge
       - stepId: health
         operationId: $sourceDescriptions.petsAPI.getHealth
+
+  # one step per kind of security scheme, in OpenAPI 3.1 and in OpenAPI 2.0
+  - workflowId: credentialForms
+    steps:
+      - stepId: bearer
+        operationId: $sourceDescriptions.petsAPI.listPets
+      - stepId: basic
+        operationId: $sourceDescriptions.petsAPI.getWithBasic
+      - stepId: oauth
+        operationId: $sourceDescriptions.petsAPI.getWithOAuth
+      - stepId: openIdConnect
+        operationId: $sourceDescriptions.petsAPI.getWithOpenIdConnect
+      - stepId: cookieKey
+        operationId: $sourceDescriptions.petsAPI.getWithCookieKey
+      - stepId: legacyKey
+        operationId: $sourceDescriptions.legacyAPI.legacyWithKey
+      - stepId: legacyBasic
+        operationId: $sourceDescriptions.legacyAPI.legacyWithBasic
+      - stepId: legacyOAuth
+        operationId: $sourceDescriptions.legacyAPI.legacyWithOAuth
 
   - workflowId: throughNested
     steps:

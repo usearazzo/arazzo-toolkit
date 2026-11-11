@@ -88,6 +88,101 @@ describe('WorkflowExecutor — executeOptions per source description', function 
     });
   });
 
+  context('given credential for each kind of security scheme', function () {
+    // the vendored request builder applies these; the tests pin the forms the
+    // `securities` option documents, one request per scheme.
+    const executeOptions = {
+      petsAPI: {
+        securities: {
+          authorized: {
+            api_key: 'KEY',
+            bearer: 'TOKEN',
+            basic: { username: 'user', password: 'pass' },
+            oauth: { token: { access_token: 'OAUTH' } },
+            oidc: { token: { access_token: 'OIDC', token_type: 'DPoP' } },
+            cookie_key: 'SESSION',
+          },
+        },
+      },
+      legacyAPI: {
+        securities: {
+          authorized: {
+            api_key: { value: 'LEGACY-KEY' },
+            basic: { username: 'user', password: 'pass' },
+            oauth: { token: { access_token: 'LEGACY-OAUTH' } },
+          },
+        },
+      },
+    };
+    let requests: Record<string, OpenAPIOperationRequest>;
+
+    beforeEach(async function () {
+      const { runner, calls } = await makeRunner();
+
+      await runner.execute('credentialForms', { executeOptions });
+      requests = Object.fromEntries(calls.map((call) => [call.url, call]));
+    });
+
+    specify('should send a bearer token given as a string', function () {
+      assert.strictEqual(
+        requests['https://pets.example/v1/pets'].headers.Authorization,
+        'Bearer TOKEN',
+      );
+    });
+
+    specify('should send basic credentials', function () {
+      assert.strictEqual(
+        requests['https://pets.example/v1/basic'].headers.Authorization,
+        'Basic dXNlcjpwYXNz',
+      );
+    });
+
+    specify('should send an oauth2 token as a bearer token', function () {
+      assert.strictEqual(
+        requests['https://pets.example/v1/oauth'].headers.Authorization,
+        'Bearer OAUTH',
+      );
+    });
+
+    specify('should send an openIdConnect token with its token type', function () {
+      assert.strictEqual(
+        requests['https://pets.example/v1/oidc'].headers.Authorization,
+        'DPoP OIDC',
+      );
+    });
+
+    specify('should send an API key declared in a cookie', function () {
+      assert.strictEqual(
+        requests['https://pets.example/v1/cookie'].headers.Cookie,
+        'session=SESSION',
+      );
+    });
+
+    context('given OpenAPI 2.0 document', function () {
+      specify('should send an API key', function () {
+        assert.strictEqual(
+          requests['https://legacy.example/v1/key'].headers['X-API-Key'],
+          'LEGACY-KEY',
+        );
+      });
+
+      specify('should send basic credentials', function () {
+        // the 2.0 request builder writes the header name in lower case
+        assert.strictEqual(
+          requests['https://legacy.example/v1/basic'].headers.authorization,
+          'Basic dXNlcjpwYXNz',
+        );
+      });
+
+      specify('should send an oauth2 token as a bearer token', function () {
+        assert.strictEqual(
+          requests['https://legacy.example/v1/oauth'].headers.authorization,
+          'Bearer LEGACY-OAUTH',
+        );
+      });
+    });
+  });
+
   context('given entry for one API only', function () {
     specify('should give the other API no options', async function () {
       const { runner, calls } = await makeRunner();
