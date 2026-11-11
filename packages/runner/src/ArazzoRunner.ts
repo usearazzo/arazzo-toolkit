@@ -111,7 +111,8 @@ class ArazzoRunner {
    * document, or the given registry already backs another entry document
    */
   static async load(uri: string, options: ArazzoRunnerLoadOptions = {}): Promise<ArazzoRunner> {
-    const referenceOptions = ArazzoRunner.#referenceOptions(options.reference);
+    // `resolve` only, whatever else the given object carries
+    const referenceOptions = pick(['resolve'], options.reference ?? {});
     const {
       registry = new DocumentRegistry({
         providers: [
@@ -161,7 +162,8 @@ class ArazzoRunner {
       );
     }
 
-    const referenceOptions = ArazzoRunner.#referenceOptions(reference);
+    // `resolve` only, whatever else the given object carries
+    const referenceOptions = pick(['resolve'], reference ?? {});
     const operationExecutor = new OpenAPIOperationExecutor({
       httpClient,
       requestInterceptor,
@@ -182,16 +184,6 @@ class ArazzoRunner {
       stepExecutor,
       workflowNormalizer: new ArazzoWorkflowNormalizer(referenceOptions),
     });
-  }
-
-  /**
-   * The part of the `reference` option the runner passes on: `resolve` only,
-   * whatever else the given object carries.
-   */
-  static #referenceOptions(
-    reference: ArazzoRunnerReferenceOptions = {},
-  ): ArazzoRunnerReferenceOptions {
-    return pick(['resolve'], reference);
   }
 
   /**
