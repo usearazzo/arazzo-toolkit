@@ -7,13 +7,18 @@ import { ArazzoRunner } from '../../src/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const run = async (entryPath: string, workflowId: string, inputs: Record<string, unknown>) => {
+const run = async (
+  entryPath: string,
+  sourceDescriptionName: string,
+  workflowId: string,
+  inputs: Record<string, unknown>,
+) => {
   // no httpClient: the runner defaults to httpClientFetch, real HTTP
   const runner = await ArazzoRunner.load(entryPath);
 
   return runner.execute(workflowId, {
     inputs,
-    executeOptions: { server: process.env.PETSTORE_URL },
+    executeOptions: { [sourceDescriptionName]: { server: process.env.PETSTORE_URL } },
   });
 };
 
@@ -21,6 +26,7 @@ describe('petstore workflows against a live petstore', function () {
   specify('authenticateAndOrderPet', async function () {
     const result = await run(
       path.join(__dirname, '..', 'fixtures', 'petstore-order-workflow.arazzo.yaml'),
+      'petstoreAPI',
       'authenticateAndOrderPet',
       {
         username: 'theUser',
@@ -41,6 +47,7 @@ describe('petstore workflows against a live petstore', function () {
   specify('loginUserRetrievePet', async function () {
     const result = await run(
       path.join(__dirname, 'fixtures', 'LoginAndRetrievePets.arazzo.yaml'),
+      'petStoreDescription',
       'loginUserRetrievePet',
       { username: 'theUser', password: '12345' },
     );

@@ -58,7 +58,7 @@ describe('WorkflowExecutor — OAI pet-coupons example', function () {
   });
 
   // the example's OpenAPI description declares no servers.
-  const executeOptions = { server: 'https://petstore.example.com/api/v3' };
+  const executeOptions = { 'pet-coupons': { server: 'https://petstore.example.com/api/v3' } };
 
   const orderBody = (): unknown => JSON.parse(requests.at(-1)?.body as string);
 

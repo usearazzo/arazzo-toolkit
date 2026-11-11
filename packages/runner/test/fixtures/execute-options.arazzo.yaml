@@ -1,0 +1,35 @@
+arazzo: 1.0.1
+info:
+  title: Execute options per source description
+  version: 1.0.0
+
+# `petsAPI` and `paymentsAPI` both declare a security scheme named `api_key`,
+# and `petsAPIAgain` is a second name for the document `petsAPI` points at.
+sourceDescriptions:
+  - name: petsAPI
+    url: ./execute-options-pets.openapi.json
+    type: openapi
+  - name: paymentsAPI
+    url: ./execute-options-payments.openapi.json
+    type: openapi
+  - name: petsAPIAgain
+    url: ./execute-options-pets.openapi.json
+    type: openapi
+  - name: nested
+    url: ./execute-options-nested.arazzo.yaml
+    type: arazzo
+
+workflows:
+  - workflowId: twoAPIs
+    steps:
+      - stepId: listPets
+        operationId: $sourceDescriptions.petsAPI.listPets
+      - stepId: charge
+        operationId: $sourceDescriptions.paymentsAPI.createCharge
+      - stepId: health
+        operationId: $sourceDescriptions.petsAPI.getHealth
+
+  - workflowId: throughNested
+    steps:
+      - stepId: nested
+        workflowId: $sourceDescriptions.nested.nestedCalls

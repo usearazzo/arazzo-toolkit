@@ -1,0 +1,19 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Payments", "version": "1.0.0" },
+  "servers": [{ "url": "https://payments.example/v2" }],
+  "paths": {
+    "/charges": {
+      "post": {
+        "operationId": "createCharge",
+        "security": [{ "api_key": [] }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "api_key": { "type": "apiKey", "in": "query", "name": "key" }
+    }
+  }
+}

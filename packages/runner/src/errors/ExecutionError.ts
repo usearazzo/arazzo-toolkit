@@ -13,6 +13,8 @@ import ArazzoRunnerError from './ArazzoRunnerError.ts';
 class ExecutionError extends ArazzoRunnerError {
   /** The run was cancelled through its `AbortSignal`; the signal's reason is the `cause`. */
   static readonly Aborted = 'aborted' as const;
+  /** Two `executeOptions` entries name source descriptions that point at the same document. */
+  static readonly AmbiguousExecuteOptions = 'ambiguous-execute-options' as const;
   /** A step or a `goto`/`retry` action declares more than one mutually exclusive target. */
   static readonly AmbiguousTarget = 'ambiguous-target' as const;
   /** The `dependsOn` edges alone form a cycle between workflows. */
@@ -47,7 +49,7 @@ class ExecutionError extends ArazzoRunnerError {
   static readonly StepBudget = 'step-budget' as const;
   /** An action declares a `type` other than `end`, `goto` or `retry`. */
   static readonly UnknownActionType = 'unknown-action-type' as const;
-  /** `execute` received an option it does not know. */
+  /** `execute` received an option it does not know, or `executeOptions` that are not keyed by source description. */
   static readonly UnknownExecuteOption = 'unknown-execute-option' as const;
   /** A step produced a transition the workflow executor does not recognize. */
   static readonly UnknownTransitionKind = 'unknown-transition-kind' as const;

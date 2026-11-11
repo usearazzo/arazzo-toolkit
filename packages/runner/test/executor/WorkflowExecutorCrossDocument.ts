@@ -198,20 +198,24 @@ describe('WorkflowExecutor cross-document references', function () {
       },
     );
 
-    specify("should forward executeOptions to a foreign workflow's steps", async function () {
-      const { executor, calls } = makeExecutor();
+    specify(
+      'should keep executeOptions from a foreign document reusing the name for another API',
+      async function () {
+        const { executor, calls } = makeExecutor();
 
-      const result = await executor.execute('crossDocumentStep', {
-        executeOptions: { server: 'https://override.example/base' },
-      });
+        const result = await executor.execute('crossDocumentStep', {
+          executeOptions: { petstoreAPI: { server: 'https://override.example/base' } },
+        });
 
-      assert.strictEqual(result.status, 'completed');
-      // the server override reached the foreign document's step as well as
-      // the entry document's own.
-      assert.include(calls[0].url, 'https://override.example/base');
-      assert.include(calls[0].url, '/pet/7');
-      assert.include(calls[1].url, 'https://override.example/base');
-    });
+        assert.strictEqual(result.status, 'completed');
+        // both documents name a source description `petstoreAPI`, each for a
+        // different OpenAPI document. The entry names the document, not the
+        // name, so the foreign document's step keeps its own server.
+        assert.include(calls[0].url, '/child-api/v1');
+        assert.notInclude(calls[0].url, 'https://override.example/base');
+        assert.include(calls[1].url, 'https://override.example/base');
+      },
+    );
   });
 
   context('dependsOn across documents', function () {

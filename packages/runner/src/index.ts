@@ -129,6 +129,7 @@ export type {
 export { default as StepExecutor } from './executor/StepExecutor.ts';
 export type {
   StepExecutorOptions,
+  StepExecuteOptions,
   StepExecutionResult,
   CriterionEvaluationRecord,
   ContextSource,
@@ -138,6 +139,8 @@ export type {
   OpenAPIOperationExecutorOptions,
   OpenAPIOperationExecuteOptions,
   OpenAPIOperationExecuteOptionsBag,
+  OpenAPIOperationSecurities,
+  OpenAPIOperationSecurityCredential,
   RequestInterceptor,
 } from './executor/OpenAPIOperationExecutor.ts';
 export { default as SourceDescriptionsLocatorNormalizer } from './executor/SourceDescriptionsLocatorNormalizer.ts';

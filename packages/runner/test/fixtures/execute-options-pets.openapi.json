@@ -1,0 +1,28 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Pets", "version": "1.0.0" },
+  "servers": [{ "url": "https://pets.example/v1" }],
+  "security": [{ "api_key": [] }],
+  "paths": {
+    "/pets": {
+      "get": {
+        "operationId": "listPets",
+        "security": [{ "api_key": [], "bearer": [] }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "security": [],
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "api_key": { "type": "apiKey", "in": "header", "name": "X-API-Key" },
+      "bearer": { "type": "http", "scheme": "bearer" }
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { toValue } from '@speclynx/apidom-core';
+import { isPlainObject } from 'ramda-adjunct';
 import { isArrayElement, isObjectElement, isStringElement } from '@speclynx/apidom-datamodel';
 import {
   isFailureActionElement,
@@ -33,13 +34,14 @@ import StepExecutor, {
 import ArazzoWorkflowLocatorNormalizer, {
   type ArazzoWorkflowLocator,
 } from './ArazzoWorkflowLocatorNormalizer.ts';
+import type { OpenAPIOperationLocator } from './OpenAPIOperationLocatorNormalizer.ts';
 import StepRetryRunner from './StepRetryRunner.ts';
 import WorkflowCallStack, { type WorkflowCallVia } from './WorkflowCallStack.ts';
 import StepTransitionInterpreter, { actionTargets } from './StepTransitionInterpreter.ts';
 import type { SelectedAction } from '../action/ActionResolver.ts';
 import ExecutionError from '../errors/ExecutionError.ts';
 import ResolverError from '../errors/ResolverError.ts';
-import { readAbortSignal, throwIfAborted } from './abort.ts';
+import { throwIfAborted } from './abort.ts';
 
 /**
  * Options for the WorkflowExecutor.
@@ -121,10 +123,22 @@ export interface WorkflowExecuteOptions {
    */
   readonly inputs?: Record<string, unknown>;
   /**
-   * The opaque client-specific bag forwarded verbatim to every
-   * {@link StepExecutor.execute} (e.g. a `server` to run against).
+   * Execute options addressed to an API: keyed by the `name` of a source
+   * description of the entry document, each entry the opaque client-specific
+   * bag forwarded verbatim to {@link StepExecutor.execute} for the steps that
+   * call an operation of the OpenAPI document that name points at (e.g. a
+   * `server` to run against, or the credentials of its security schemes).
+   *
+   * An entry configures a document, not a name: a step of another Arazzo
+   * document calling the same OpenAPI document gets the entry whatever name it
+   * knows the document by, and one calling a different document under the same
+   * name gets nothing. Steps of an API without an entry get no options.
+   *
+   * A key naming no source description, one naming a source description that
+   * is not an OpenAPI document, and two keys pointing at the same document all
+   * throw before the first request.
    */
-  readonly executeOptions?: Record<string, unknown>;
+  readonly executeOptions?: Record<string, Record<string, unknown>>;
   /**
    * Inputs for the workflows run implicitly to satisfy `dependsOn`, keyed by
    * the `dependsOn` entry as written — the bare workflowId for a
@@ -167,11 +181,9 @@ export interface WorkflowExecuteOptions {
    * is not something the steps did, and the steps that never ran were not
    * decided against.
    *
-   * The signal is also forwarded to the transport (through the same
-   * `executeOptions` bag it may be passed in), so the request in flight when the
-   * abort lands is cancelled rather than merely awaited. A `signal` passed in
-   * that bag instead is observed here too — it cancels the run just as this
-   * option does — and this option wins when both are given.
+   * The signal is also forwarded to the transport with every step's execute
+   * options, so the request in flight when the abort lands is cancelled rather
+   * than merely awaited.
    */
   readonly signal?: AbortSignal;
 }
@@ -379,7 +391,10 @@ interface DependencyRun {
  * two mutable ledgers that must span the whole call tree.
  */
 interface RunScope {
-  readonly executeOptions: Record<string, unknown>;
+  /**
+   * The execute options of a step, by the operation it was located to.
+   */
+  readonly executeOptions: (locator: OpenAPIOperationLocator) => Record<string, unknown>;
   readonly dependencyInputs: Record<string, Record<string, unknown>>;
   readonly runDependencies: boolean;
   /**
@@ -537,17 +552,17 @@ class WorkflowExecutor {
   ): Promise<WorkflowExecutionResult> {
     this.#rejectUnknownOptions(options);
 
-    // a signal in the opaque bag was the only channel before this option existed,
-    // and it still reaches the transport. Absorbing it here is what makes it a
-    // whole cancellation rather than half of one: read only at dispatch, it would
-    // abort requests while the loop walked on through the remaining steps.
-    const signal = options.signal ?? readAbortSignal(options.executeOptions ?? {});
+    const { signal } = options;
+    const executeOptions = this.#executeOptionsByDocument(options.executeOptions ?? {});
     const scope: RunScope = {
-      // the first-class signal is also spread into the opaque bag, because that
-      // bag is how anything reaches the transport: the executor's own checks
-      // stop the run at the next boundary, and this is what cancels the request
-      // already in flight. Spread last, so it wins over one passed in the bag.
-      executeOptions: { ...options.executeOptions, ...(signal === undefined ? {} : { signal }) },
+      // the signal is spread into every step's opaque bag, because that bag is
+      // how anything reaches the transport: the executor's own checks stop the
+      // run at the next boundary, and this is what cancels the request already
+      // in flight. Spread last, so it wins over one passed in an entry.
+      executeOptions: (locator) => ({
+        ...executeOptions.get(locator.document.uri),
+        ...(signal === undefined ? {} : { signal }),
+      }),
       dependencyInputs: options.dependencyInputs ?? {},
       runDependencies: options.runDependencies ?? true,
       signal,
@@ -565,6 +580,56 @@ class WorkflowExecutor {
       }),
       'root',
     );
+  }
+
+  /**
+   * Resolves the `executeOptions` entries to the documents they configure,
+   * keyed by canonical document URI.
+   *
+   * Every way an entry can fail to name exactly one OpenAPI document throws
+   * here, before the run starts: sent to no API or to two, its options would
+   * be missing or misdirected with nothing to show for it until a request
+   * failed.
+   */
+  #executeOptionsByDocument(
+    executeOptions: Record<string, Record<string, unknown>>,
+  ): Map<string, Record<string, unknown>> {
+    const byDocument = new Map<string, Record<string, unknown>>();
+    const names = new Map<string, string>();
+
+    for (const [name, options] of Object.entries(executeOptions)) {
+      const uri = this.#document.resolveSourceDescriptionURI(name);
+
+      if (uri === undefined) {
+        throw new ExecutionError(
+          `executeOptions is keyed by source description name, and "${name}" names no source description of the Arazzo document at "${this.#document.uri}"; options for an API go under its source description's name: { executeOptions: { <name>: { ... } } }`,
+          { reason: ExecutionError.SourceDescriptionNotFound },
+        );
+      }
+      if (!isPlainObject(options)) {
+        throw new ExecutionError(
+          `executeOptions entry "${name}" must be an object of options for that source description`,
+          { reason: ExecutionError.UnknownExecuteOption },
+        );
+      }
+      if (this.#document.resolveSourceDescriptionField(name, 'type') === 'arazzo') {
+        throw new ExecutionError(
+          `executeOptions entry "${name}" names a source description that is not an OpenAPI document`,
+          { reason: ExecutionError.SourceDescriptionNotOpenAPI },
+        );
+      }
+      if (byDocument.has(uri)) {
+        throw new ExecutionError(
+          `executeOptions entries "${names.get(uri)}" and "${name}" name source descriptions that point at the same document at "${uri}"`,
+          { reason: ExecutionError.AmbiguousExecuteOptions },
+        );
+      }
+
+      byDocument.set(uri, options);
+      names.set(uri, name);
+    }
+
+    return byDocument;
   }
 
   /**
