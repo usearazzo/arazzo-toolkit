@@ -1,6 +1,6 @@
 {
   "name": "@usearazzo/resolver",
-  "version": "1.0.1-alpha.28",
+  "version": "1.0.1-alpha.29",
   "description": "Resolver for Arazzo Documents.",
   "keywords": [
     "arazzo",
@@ -61,7 +61,7 @@
     "@speclynx/apidom-ns-openapi-3-0": "^7.0.2",
     "@speclynx/apidom-ns-openapi-3-1": "^7.0.2",
     "@speclynx/apidom-reference": "^7.0.2",
-    "@usearazzo/parser": "1.0.1-alpha.28",
+    "@usearazzo/parser": "1.0.1-alpha.29",
     "type-fest": "^5.10.0"
   },
   "devDependencies": {

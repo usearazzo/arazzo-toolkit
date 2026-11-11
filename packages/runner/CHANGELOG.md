@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.29](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.28...v1.0.1-alpha.29) (2026-11-11)
+
+### Features
+
+- **runner:** address execute options to a source description ([#346](https://github.com/usearazzo/arazzo-toolkit/issues/346)) ([d5375cd](https://github.com/usearazzo/arazzo-toolkit/commit/d5375cdedab0fcb6d2cf23b5db130fc0656ff498)), closes [#345](https://github.com/usearazzo/arazzo-toolkit/issues/345)
+
+### BREAKING CHANGES
+
+- **runner:** executeOptions passed to ArazzoRunner.execute and
+  WorkflowExecutor.execute is keyed by source description name. Replace
+
 ## [1.0.1-alpha.28](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.27...v1.0.1-alpha.28) (2026-11-11)
 
 ### Features
