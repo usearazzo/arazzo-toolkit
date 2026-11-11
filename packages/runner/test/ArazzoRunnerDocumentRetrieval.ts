@@ -18,6 +18,7 @@ import {
   ClientError,
   DocumentLoadError,
   NormalizationError,
+  type ArazzoRunnerReferenceOptions,
   type HTTPClient,
   type OpenAPIOperationRequest,
 } from '../src/index.ts';
@@ -252,6 +253,23 @@ describe('ArazzoRunner document retrieval', function () {
 
       assert.lengthOf(testServer.requests, 4);
       assert.isTrue(testServer.requests.every((request) => !request.intercepted));
+    });
+
+    specify('should pass on nothing but the resolve options', async function () {
+      // a caller not checked by the type: one value would reach every building block
+      const reference = {
+        resolve: credentials,
+        parse: { parsers: [] },
+        dereference: { strategies: [] },
+      } as ArazzoRunnerReferenceOptions;
+      const runner = await ArazzoRunner.load(entryURL, {
+        reference,
+        httpClient: makeHTTPClient([]),
+      });
+
+      const result = await runner.execute('getPet', { inputs: { id: '7' } });
+
+      assert.strictEqual(result.status, 'completed');
     });
 
     for (const openapiVersion of ['3.0.3', '2.0']) {

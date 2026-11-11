@@ -1,3 +1,5 @@
+import { pick } from 'ramda';
+
 import type ArazzoDocument from './document/ArazzoDocument.ts';
 import type { WorkflowId } from './document/ArazzoWorkflowIndex.ts';
 import DocumentRegistry from './registry/DocumentRegistry.ts';
@@ -19,6 +21,15 @@ import WorkflowExecutor, {
   type WorkflowExecutionResult,
 } from './executor/WorkflowExecutor.ts';
 import InvalidEntryDocumentError from './errors/InvalidEntryDocumentError.ts';
+
+/**
+ * The options of ApiDOM reference the runner accepts: its `resolve` options,
+ * which mean the same for every building block that retrieves documents.
+ * `parse` and `dereference` options differ per building block, so the runner
+ * passes none of them on; set those on the building blocks themselves.
+ * @public
+ */
+export type ArazzoRunnerReferenceOptions = Pick<DocumentRegistryProviderOptions, 'resolve'>;
 
 /**
  * Options for {@link ArazzoRunner.load}.
@@ -57,7 +68,7 @@ export interface ArazzoRunnerLoadOptions
    * then reaches the normalizers only: give that registry's providers the
    * same options.
    */
-  readonly reference?: Pick<DocumentRegistryProviderOptions, 'resolve'>;
+  readonly reference?: ArazzoRunnerReferenceOptions;
 }
 
 /**
@@ -100,11 +111,12 @@ class ArazzoRunner {
    * document, or the given registry already backs another entry document
    */
   static async load(uri: string, options: ArazzoRunnerLoadOptions = {}): Promise<ArazzoRunner> {
+    const referenceOptions = ArazzoRunner.#referenceOptions(options.reference);
     const {
       registry = new DocumentRegistry({
         providers: [
-          new ArazzoDocumentRegistryProvider(options.reference),
-          new OpenAPIDocumentRegistryProvider(options.reference),
+          new ArazzoDocumentRegistryProvider(referenceOptions),
+          new OpenAPIDocumentRegistryProvider(referenceOptions),
         ],
       }),
       ...rest
@@ -149,13 +161,14 @@ class ArazzoRunner {
       );
     }
 
+    const referenceOptions = ArazzoRunner.#referenceOptions(reference);
     const operationExecutor = new OpenAPIOperationExecutor({
       httpClient,
       requestInterceptor,
       operationNormalizer: new OpenAPIOperationNormalizer({
-        openapi2: new OpenAPI2OperationNormalizer(reference),
-        openapi30: new OpenAPI30OperationNormalizer(reference),
-        openapi31: new OpenAPI31OperationNormalizer(reference),
+        openapi2: new OpenAPI2OperationNormalizer(referenceOptions),
+        openapi30: new OpenAPI30OperationNormalizer(referenceOptions),
+        openapi31: new OpenAPI31OperationNormalizer(referenceOptions),
       }),
     });
     const stepExecutor = new StepExecutor({ document, registry, operationExecutor });
@@ -167,8 +180,18 @@ class ArazzoRunner {
       document,
       registry,
       stepExecutor,
-      workflowNormalizer: new ArazzoWorkflowNormalizer(reference),
+      workflowNormalizer: new ArazzoWorkflowNormalizer(referenceOptions),
     });
+  }
+
+  /**
+   * The part of the `reference` option the runner passes on: `resolve` only,
+   * whatever else the given object carries.
+   */
+  static #referenceOptions(
+    reference: ArazzoRunnerReferenceOptions = {},
+  ): ArazzoRunnerReferenceOptions {
+    return pick(['resolve'], reference);
   }
 
   /**
