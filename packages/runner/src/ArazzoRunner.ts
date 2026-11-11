@@ -1,6 +1,14 @@
 import type ArazzoDocument from './document/ArazzoDocument.ts';
 import type { WorkflowId } from './document/ArazzoWorkflowIndex.ts';
 import DocumentRegistry from './registry/DocumentRegistry.ts';
+import type { DocumentRegistryProviderOptions } from './registry/providers/DocumentRegistryProvider.ts';
+import ArazzoDocumentRegistryProvider from './registry/providers/ArazzoDocumentRegistryProvider.ts';
+import OpenAPIDocumentRegistryProvider from './registry/providers/OpenAPIDocumentRegistryProvider.ts';
+import ArazzoWorkflowNormalizer from './normalizer/ArazzoWorkflowNormalizer.ts';
+import OpenAPIOperationNormalizer from './normalizer/OpenAPIOperationNormalizer.ts';
+import OpenAPI2OperationNormalizer from './normalizer/OpenAPI2OperationNormalizer.ts';
+import OpenAPI30OperationNormalizer from './normalizer/OpenAPI30OperationNormalizer.ts';
+import OpenAPI31OperationNormalizer from './normalizer/OpenAPI31OperationNormalizer.ts';
 import OpenAPIOperationExecutor, {
   type OpenAPIOperationExecutorOptions,
 } from './executor/OpenAPIOperationExecutor.ts';
@@ -17,9 +25,14 @@ import InvalidEntryDocumentError from './errors/InvalidEntryDocumentError.ts';
  *
  * Every option is a seam of a building block the runner wires: `registry` is
  * the {@link DocumentRegistry} the documents load into (a fresh one with the
- * default providers when omitted), `httpClient` and `requestInterceptor` go to
+ * default providers when omitted), `resolve` goes to everything the runner
+ * builds that retrieves documents, `httpClient` and `requestInterceptor` go to
  * the {@link OpenAPIOperationExecutor}, and the rest go to the
  * {@link WorkflowExecutor}.
+ *
+ * Retrieving documents and calling APIs are separate on purpose: `resolve`
+ * never applies to API calls, and `httpClient` / `requestInterceptor` never
+ * apply to document retrieval, so credentials for one do not reach the other.
  * @public
  */
 export interface ArazzoRunnerLoadOptions
@@ -31,6 +44,19 @@ export interface ArazzoRunnerLoadOptions
    * document: loading a different one into it throws.
    */
   readonly registry?: DocumentRegistry;
+  /**
+   * How documents are retrieved: the entry document, its source descriptions
+   * and every externally referenced document. These are the `resolve` options
+   * of ApiDOM reference, e.g. `resolverOpts.axiosConfig` for request headers
+   * or a TLS agent, or `resolvers` for a resolver list of your own.
+   *
+   * The runner gives them to the default registry providers and to the
+   * normalizers, which fetch external references lazily. A `registry` passed
+   * alongside is already configured through its own providers, so `resolve`
+   * then reaches the normalizers only: give that registry's providers the
+   * same options.
+   */
+  readonly resolve?: DocumentRegistryProviderOptions['resolve'];
 }
 
 /**
@@ -73,7 +99,16 @@ class ArazzoRunner {
    * document, or the given registry already backs another entry document
    */
   static async load(uri: string, options: ArazzoRunnerLoadOptions = {}): Promise<ArazzoRunner> {
-    const { registry = new DocumentRegistry(), ...rest } = options;
+    const referenceOptions = ArazzoRunner.#referenceOptions(options.resolve);
+    const {
+      registry = new DocumentRegistry({
+        providers: [
+          new ArazzoDocumentRegistryProvider(referenceOptions),
+          new OpenAPIDocumentRegistryProvider(referenceOptions),
+        ],
+      }),
+      ...rest
+    } = options;
     // acquiring a second entry would pin it for good and, through the LRU
     // order, could displace the first as the registry's entry; a registry that
     // already backs one only looks the document up.
@@ -96,8 +131,14 @@ class ArazzoRunner {
    * @throws InvalidEntryDocumentError - When `document` is not the entry document of `registry`
    */
   constructor(options: ArazzoRunnerOptions) {
-    const { document, registry, httpClient, requestInterceptor, ...workflowExecutorOptions } =
-      options;
+    const {
+      document,
+      registry,
+      resolve,
+      httpClient,
+      requestInterceptor,
+      ...workflowExecutorOptions
+    } = options;
 
     // a registry pins every entry document it acquires but reports only the
     // first as its entry, so one registry serves one entry document.
@@ -108,7 +149,16 @@ class ArazzoRunner {
       );
     }
 
-    const operationExecutor = new OpenAPIOperationExecutor({ httpClient, requestInterceptor });
+    const referenceOptions = ArazzoRunner.#referenceOptions(resolve);
+    const operationExecutor = new OpenAPIOperationExecutor({
+      httpClient,
+      requestInterceptor,
+      operationNormalizer: new OpenAPIOperationNormalizer({
+        openapi2: new OpenAPI2OperationNormalizer(referenceOptions),
+        openapi30: new OpenAPI30OperationNormalizer(referenceOptions),
+        openapi31: new OpenAPI31OperationNormalizer(referenceOptions),
+      }),
+    });
     const stepExecutor = new StepExecutor({ document, registry, operationExecutor });
 
     this.document = document;
@@ -118,7 +168,19 @@ class ArazzoRunner {
       document,
       registry,
       stepExecutor,
+      workflowNormalizer: new ArazzoWorkflowNormalizer(referenceOptions),
     });
+  }
+
+  /**
+   * The reference options carrying `resolve`, for the providers and normalizers.
+   * An absent `resolve` yields no key at all: merged as `undefined`, it would
+   * erase the defaults it is merged over.
+   */
+  static #referenceOptions(
+    resolve: ArazzoRunnerLoadOptions['resolve'],
+  ): DocumentRegistryProviderOptions {
+    return resolve === undefined ? {} : { resolve };
   }
 
   /**
