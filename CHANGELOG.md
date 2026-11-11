@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.28](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.27...v1.0.1-alpha.28) (2026-11-11)
+
+### Features
+
+- **runner:** add reference options for document retrieval ([#343](https://github.com/usearazzo/arazzo-toolkit/issues/343)) ([e26323c](https://github.com/usearazzo/arazzo-toolkit/commit/e26323cafe9a15e89e5e327ce7cee74deefb4cf8)), closes [#310](https://github.com/usearazzo/arazzo-toolkit/issues/310)
+
 ## [1.0.1-alpha.27](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.26...v1.0.1-alpha.27) (2026-11-08)
 
 ### Bug Fixes
