@@ -143,6 +143,8 @@ const runner = await ArazzoRunner.load(uri, {
 });
 ```
 
+`request.headers` is a plain object, and the case of a header name in it can differ: for an OpenAPI 2.0 document, credentials from `securities` arrive under `authorization`. Match header names case-insensitively in an interceptor, and when replacing a header that may already be there, delete the existing key first: the same header under two spellings is sent as one header with both values.
+
 To send requests through another HTTP stack, replace the `httpClient`. It is a function from the built request to a WHATWG `Response`; here undici with a connection pool that global `fetch` cannot take:
 
 ```js
