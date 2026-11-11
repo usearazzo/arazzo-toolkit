@@ -136,12 +136,13 @@ workflows:
   # the transfer target used below: two steps whose outputs the caller's
   # `transferredTo` exposes, and an `inputs` declaration read by neither
   # operation's own parameters (both are hardcoded) but by a step output —
-  # proving a goto's transfer always runs its target with {} inputs (issue
-  # #62, the same gap a retry's workflowId reference has). Deliberately
-  # avoids reading `$inputs` through an OpenAPI operation *parameter*: the
-  # stub transport skips request validation, but the real OpenAPI request
+  # proving a goto's transfer without `parameters` runs its target with {}
+  # inputs. Action `parameters` (Arazzo 1.1.0) are the input channel; they
+  # are covered by action-parameters.arazzo.yaml. Deliberately avoids
+  # reading `$inputs` through an OpenAPI operation *parameter*: the stub
+  # transport skips request validation, but the real OpenAPI request
   # builder underneath does not, and a required parameter left unresolved
-  # would fail there rather than demonstrate the gap.
+  # would fail there rather than show the empty inputs.
   - workflowId: transferTarget
     inputs:
       type: object
