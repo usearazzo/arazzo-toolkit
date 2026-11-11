@@ -1,0 +1,75 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Legacy",
+    "version": "1.0.0"
+  },
+  "host": "legacy.example",
+  "basePath": "/v1",
+  "schemes": [
+    "https"
+  ],
+  "paths": {
+    "/key": {
+      "get": {
+        "operationId": "legacyWithKey",
+        "security": [
+          {
+            "api_key": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/basic": {
+      "get": {
+        "operationId": "legacyWithBasic",
+        "security": [
+          {
+            "basic": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/oauth": {
+      "get": {
+        "operationId": "legacyWithOAuth",
+        "security": [
+          {
+            "oauth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "api_key": {
+      "type": "apiKey",
+      "in": "header",
+      "name": "X-API-Key"
+    },
+    "basic": {
+      "type": "basic"
+    },
+    "oauth": {
+      "type": "oauth2",
+      "flow": "application",
+      "tokenUrl": "https://legacy.example/token",
+      "scopes": {}
+    }
+  }
+}

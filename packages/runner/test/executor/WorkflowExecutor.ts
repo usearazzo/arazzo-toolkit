@@ -878,50 +878,29 @@ describe('WorkflowExecutor', function () {
       assert.strictEqual(calls[0].signal, controller.signal);
     });
 
-    specify('should cancel the run for a signal passed in executeOptions', async function () {
-      // the bag was the only channel before `signal` existed. Observed only at
-      // dispatch it would abort requests while the loop walked on, so it gates
-      // the executor's boundaries too — here, the second step never starts.
-      const controller = new AbortController();
-      const { executor, calls } = makeExecutor(okResponse, {
-        onCall: () => controller.abort(),
-      });
-
-      const error = await captureError(
-        executor.execute('linear', {
-          inputs: { status: 'available' },
-          executeOptions: { signal: controller.signal },
-        }),
-      );
-
-      assert.strictEqual(error.reason, 'aborted');
-      assert.strictEqual(error.stepId, 'getPet');
-      assert.strictEqual(calls.length, 1);
-    });
-
-    specify('should ignore a bag value that is not a usable signal', async function () {
-      // the bag is open, so anything may be under `signal`. A value the runner
-      // cannot subscribe to is not a cancellation: taking it for one would
-      // trade a working run for a TypeError thrown from inside a retry wait.
+    specify('should drop a signal passed in an executeOptions entry', async function () {
+      // an entry reaches the steps of one API only, so its signal would cancel
+      // those and leave the run walking on: half a cancellation.
       const { executor, calls } = makeExecutor();
 
       const result = await executor.execute('linear', {
         inputs: { status: 'available' },
-        executeOptions: { signal: { aborted: true } },
+        executeOptions: { petstoreAPI: { signal: AbortSignal.abort() } },
       });
 
       assert.strictEqual(result.status, 'completed');
       assert.strictEqual(calls.length, 2);
+      assert.isUndefined(calls[0].signal);
     });
 
-    specify('should take precedence over a signal smuggled in executeOptions', async function () {
+    specify('should take precedence over a signal in an executeOptions entry', async function () {
       const { executor, calls } = makeExecutor();
       const stale = new AbortController();
       const controller = new AbortController();
 
       await executor.execute('linear', {
         inputs: { status: 'available' },
-        executeOptions: { signal: stale.signal },
+        executeOptions: { petstoreAPI: { signal: stale.signal } },
         signal: controller.signal,
       });
 

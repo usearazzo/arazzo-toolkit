@@ -1,0 +1,22 @@
+arazzo: 1.0.1
+info:
+  title: Execute options per source description, nested document
+  version: 1.0.0
+
+# `animals` is another name for the entry document's `petsAPI` document, and
+# `petsAPI` here is a different document than the entry's `petsAPI`.
+sourceDescriptions:
+  - name: animals
+    url: ./execute-options-pets.openapi.json
+    type: openapi
+  - name: petsAPI
+    url: ./execute-options-payments.openapi.json
+    type: openapi
+
+workflows:
+  - workflowId: nestedCalls
+    steps:
+      - stepId: listPets
+        operationId: $sourceDescriptions.animals.listPets
+      - stepId: charge
+        operationId: $sourceDescriptions.petsAPI.createCharge

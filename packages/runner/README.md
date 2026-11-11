@@ -78,7 +78,7 @@ const runner = await ArazzoRunner.load(
 );
 const result = await runner.execute('authenticateAndOrderPet', {
   inputs: { username: 'theUser', password: '12345', preferredPetStatus: 'available', orderQuantity: 1 },
-  executeOptions: { server: 'http://localhost:8080/api/v3' },
+  executeOptions: { petstoreAPI: { server: 'http://localhost:8080/api/v3' } },
 });
 result.steps.map((s) => `${s.successful ? '✓' : '✗'} ${s.stepId}`);
 
@@ -106,7 +106,7 @@ const runner = await ArazzoRunner.load(
 
 const result = await runner.execute('authenticateAndOrderPet', {
   inputs: { username: 'theUser', password: '12345', preferredPetStatus: 'available', orderQuantity: 1 },
-  executeOptions: { server: 'http://localhost:8080/api/v3' },
+  executeOptions: { petstoreAPI: { server: 'http://localhost:8080/api/v3' } },
 });
 ```
 
@@ -114,7 +114,26 @@ const result = await runner.execute('authenticateAndOrderPet', {
 
 To see what a document offers before running it, `runner.document.listWorkflows()` returns a `WorkflowDescriptor` for each workflow `execute` accepts, in document order: its `workflowId`, its `jsonPointer` in the document and, when the document gives them as strings, its `summary` and `description`. It reads the entry document only; source descriptions are not loaded.
 
-To add credentials, pass a `requestInterceptor`:
+`executeOptions` is keyed by source description name: each entry holds the options for the API that source description points at, and reaches only the steps calling it. That is where a `server` and static credentials go. `securities` takes a credential per security scheme the API's OpenAPI document declares, and each is applied where its scheme says, to the operations that require it:
+
+```js
+await runner.execute('buyPet', {
+  inputs,
+  executeOptions: {
+    petstoreAPI: {
+      server: 'http://localhost:8080/api/v3',
+      securities: { authorized: { api_key: 'KEY' } },
+    },
+    paymentsAPI: {
+      securities: { authorized: { bearerAuth: 'TOKEN', basicAuth: { username: 'user', password: 'pass' } } },
+    },
+  },
+});
+```
+
+An entry configures the OpenAPI document its name points at, so two APIs that happen to name a scheme alike never see each other's credentials, and a workflow of another Arazzo document calling the same OpenAPI document gets the entry too. A key that names no source description or an Arazzo one, two keys for one document, and an entry that is not an object all throw before the first request. A `signal` in an entry is dropped; cancel a run with the `signal` option. An API that only a nested Arazzo document declares has no name here: declare it in the entry document, or use an interceptor.
+
+For credentials computed per request, or anything `securities` cannot express, pass a `requestInterceptor`:
 
 ```js
 const runner = await ArazzoRunner.load(uri, {
@@ -123,6 +142,8 @@ const runner = await ArazzoRunner.load(uri, {
   },
 });
 ```
+
+`request.headers` is a plain object, and the case of a header name in it can differ: for an OpenAPI 2.0 document, credentials from `securities` arrive under `authorization`. Match header names case-insensitively in an interceptor, and when replacing a header that may already be there, delete the existing key first: the same header under two spellings is sent as one header with both values.
 
 To send requests through another HTTP stack, replace the `httpClient`. It is a function from the built request to a WHATWG `Response`; here undici with a connection pool that global `fetch` cannot take:
 

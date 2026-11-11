@@ -194,6 +194,15 @@ export interface StepAttemptOutcome {
 }
 
 /**
+ * The execute options of a step: the opaque bag forwarded to the operation
+ * executor, or a function returning it for the operation the step was located
+ * to.
+ * @public
+ */
+export type StepExecuteOptions =
+  Record<string, unknown> | ((locator: OpenAPIOperationLocator) => Record<string, unknown>);
+
+/**
  * Executes a single Arazzo step that invokes an OpenAPI operation.
  *
  * The pipeline locates the step's operation (`operationId` / `operationPath`),
@@ -257,7 +266,9 @@ class StepExecutor {
    * `executeOptions` is an opaque bag passed through to the operation executor
    * (e.g. a `server` to run the step against, or an `AbortSignal`). The
    * Arazzo-derived options (`operationId`, `parameters`, `requestBody`) always
-   * take precedence over it.
+   * take precedence over it. A function is called with the operation the step
+   * was located to and returns the bag, for options that depend on which API
+   * the step calls.
    *
    * A `signal` in that bag is honored here and not only at the transport: an
    * already-aborted signal throws with reason `ExecutionError.Aborted` instead of issuing a
@@ -272,7 +283,7 @@ class StepExecutor {
   async execute(
     step: StepElement,
     state: ContextSource,
-    executeOptions: Record<string, unknown> = {},
+    executeOptions: StepExecuteOptions = {},
     workflowId?: string,
   ): Promise<StepExecutionResult> {
     const stepId = toValue(step.stepId) as string;
@@ -301,6 +312,8 @@ class StepExecutor {
     // Pointer) locator that the operation executor extracts, normalizes,
     // assembles into a standalone doc, and runs.
     const locator = await this.#locateOperation(step, scope);
+    const operationOptions =
+      typeof executeOptions === 'function' ? executeOptions(locator) : executeOptions;
 
     // resolve parameters and request body against the pre-request context.
     // keyed by '{in}.{name}' rather than bare name, so two parameters that
@@ -322,7 +335,7 @@ class StepExecutor {
     // still reach this line — and this is the last moment before the step has a
     // live side effect. The signal stays in the bag, so a request already in
     // flight is aborted by the transport as before.
-    const signal = readAbortSignal(executeOptions);
+    const signal = readAbortSignal(operationOptions);
     throwIfAborted(signal, scope);
 
     // the Arazzo-derived parameters and request body are spread after the opaque
@@ -331,7 +344,7 @@ class StepExecutor {
     let response: OpenAPIOperationResponse;
     try {
       response = await this.#operationExecutor.execute(locator, {
-        ...executeOptions,
+        ...operationOptions,
         parameters,
         ...this.#requestBodyOptions(requestBody),
       });

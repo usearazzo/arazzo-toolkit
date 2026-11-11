@@ -1,0 +1,61 @@
+arazzo: 1.0.1
+info:
+  title: Execute options per source description
+  version: 1.0.0
+
+# `petsAPI` and `paymentsAPI` both declare a security scheme named `api_key`,
+# `petsAPIAgain` is a second name for the document `petsAPI` points at, and
+# `noURL` is malformed on purpose: it points at no document.
+sourceDescriptions:
+  - name: petsAPI
+    url: ./execute-options-pets.openapi.json
+    type: openapi
+  - name: paymentsAPI
+    url: ./execute-options-payments.openapi.json
+    type: openapi
+  - name: petsAPIAgain
+    url: ./execute-options-pets.openapi.json
+    type: openapi
+  - name: legacyAPI
+    url: ./execute-options-legacy.openapi-2-0.json
+    type: openapi
+  - name: nested
+    url: ./execute-options-nested.arazzo.yaml
+    type: arazzo
+  - name: noURL
+    type: openapi
+
+workflows:
+  - workflowId: twoAPIs
+    steps:
+      - stepId: listPets
+        operationId: $sourceDescriptions.petsAPI.listPets
+      - stepId: charge
+        operationId: $sourceDescriptions.paymentsAPI.createCharge
+      - stepId: health
+        operationId: $sourceDescriptions.petsAPI.getHealth
+
+  # one step per kind of security scheme, in OpenAPI 3.1 and in OpenAPI 2.0
+  - workflowId: credentialForms
+    steps:
+      - stepId: bearer
+        operationId: $sourceDescriptions.petsAPI.listPets
+      - stepId: basic
+        operationId: $sourceDescriptions.petsAPI.getWithBasic
+      - stepId: oauth
+        operationId: $sourceDescriptions.petsAPI.getWithOAuth
+      - stepId: openIdConnect
+        operationId: $sourceDescriptions.petsAPI.getWithOpenIdConnect
+      - stepId: cookieKey
+        operationId: $sourceDescriptions.petsAPI.getWithCookieKey
+      - stepId: legacyKey
+        operationId: $sourceDescriptions.legacyAPI.legacyWithKey
+      - stepId: legacyBasic
+        operationId: $sourceDescriptions.legacyAPI.legacyWithBasic
+      - stepId: legacyOAuth
+        operationId: $sourceDescriptions.legacyAPI.legacyWithOAuth
+
+  - workflowId: throughNested
+    steps:
+      - stepId: nested
+        workflowId: $sourceDescriptions.nested.nestedCalls

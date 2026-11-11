@@ -92,7 +92,7 @@ const runner = await ArazzoRunner.load(
 );
 const result = await runner.execute('authenticateAndOrderPet', {
   inputs: { username: 'theUser', password: '12345', preferredPetStatus: 'available', orderQuantity: 1 },
-  executeOptions: { server: 'http://localhost:8080/api/v3' },
+  executeOptions: { petstoreAPI: { server: 'http://localhost:8080/api/v3' } },
 });
 result.steps.map((s) => `${s.successful ? '✓' : '✗'} ${s.stepId}`);
 

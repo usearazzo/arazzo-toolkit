@@ -67,6 +67,30 @@ const UNDECLARED_LOCATIONS = new Set(['header', 'query', 'cookie', 'path']);
 const IGNORED_HEADERS = new Set(['accept', 'authorization', 'content-type']);
 
 /**
+ * The credential for one security scheme, in the form the vendored
+ * swagger-client applies it: the key or token itself (or `{ value }`) for an
+ * `apiKey` or an `http` bearer scheme, `{ username, password }` for an `http`
+ * basic scheme, and `{ token: { access_token, token_type } }` for an `oauth2`
+ * or `openIdConnect` scheme.
+ * @public
+ */
+export type OpenAPIOperationSecurityCredential =
+  | string
+  | { readonly value: string }
+  | { readonly username: string; readonly password: string }
+  | { readonly token: Readonly<Record<string, string>> };
+
+/**
+ * Credentials for the security schemes of an OpenAPI document, keyed by the
+ * scheme name under `components.securitySchemes` (`securityDefinitions` in
+ * OpenAPI 2.0).
+ * @public
+ */
+export interface OpenAPIOperationSecurities {
+  readonly authorized: Readonly<Record<string, OpenAPIOperationSecurityCredential>>;
+}
+
+/**
  * Options for executing an OpenAPI operation.
  *
  * All fields are forwarded to the vendored swagger-client `buildRequest`
@@ -75,11 +99,14 @@ const IGNORED_HEADERS = new Set(['accept', 'authorization', 'content-type']);
  * building the request and sending it.
  *
  * Typed here are the options the runner itself drives and the ones callers
- * routinely reach for. The rest of `buildRequest`'s surface (`securities`,
- * `scheme`, `parameterBuilders`, `attachContentTypeForEmptyPayload`, …) is
- * deliberately left untyped and passes through the bag's open tail unchanged —
- * see {@link OpenAPIOperationExecuteOptionsBag}. Authentication in particular
- * is not modeled: Arazzo is auth-agnostic, so credentials are applied with a
+ * routinely reach for. The rest of `buildRequest`'s surface (`scheme`,
+ * `parameterBuilders`, `attachContentTypeForEmptyPayload`, …) is deliberately
+ * left untyped and passes through the bag's open tail unchanged — see
+ * {@link OpenAPIOperationExecuteOptionsBag}.
+ *
+ * Arazzo is auth-agnostic, so credentials come from outside the workflow:
+ * static ones for the security schemes the OpenAPI document declares go in
+ * `securities`, and anything computed per request is applied with a
  * {@link RequestInterceptor}.
  * @public
  */
@@ -124,6 +151,13 @@ export interface OpenAPIOperationExecuteOptions {
    * a declared server — an override carries no declared variables.
    */
   readonly serverVariables?: Record<string, string>;
+  /**
+   * Credentials for the security schemes of the operation's OpenAPI document.
+   * Only the schemes the operation requires are applied, each where its
+   * scheme says (header, query or cookie); an operation with an empty
+   * `security` gets none.
+   */
+  readonly securities?: OpenAPIOperationSecurities;
   readonly signal?: AbortSignal;
   readonly requestInterceptor?: RequestInterceptor;
 }
@@ -136,11 +170,9 @@ export interface OpenAPIOperationExecuteOptions {
  * the rest of `buildRequest`'s surface (`scheme`, `parameterBuilders`,
  * `attachContentTypeForEmptyPayload`, …) passes through untouched.
  *
- * Nothing routine belongs in the tail. Credentials go through a
- * {@link RequestInterceptor} and `server` covers every case that once needed a
- * `contextUrl`, so reaching for either of those here means an edge case: tests
- * standing in for a document fetched over HTTP, or credentials applied from the
- * document's own security schemes.
+ * Nothing routine belongs in the tail. `server` covers every case that once
+ * needed a `contextUrl`, so reaching for that here means an edge case: tests
+ * standing in for a document fetched over HTTP.
  *
  * Two kinds of entry are inert rather than honored, since the executor owns
  * what they used to control. The operation target always comes from the
