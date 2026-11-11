@@ -878,6 +878,21 @@ describe('WorkflowExecutor', function () {
       assert.strictEqual(calls[0].signal, controller.signal);
     });
 
+    specify('should drop a signal passed in an executeOptions entry', async function () {
+      // an entry reaches the steps of one API only, so its signal would cancel
+      // those and leave the run walking on: half a cancellation.
+      const { executor, calls } = makeExecutor();
+
+      const result = await executor.execute('linear', {
+        inputs: { status: 'available' },
+        executeOptions: { petstoreAPI: { signal: AbortSignal.abort() } },
+      });
+
+      assert.strictEqual(result.status, 'completed');
+      assert.strictEqual(calls.length, 2);
+      assert.isUndefined(calls[0].signal);
+    });
+
     specify('should take precedence over a signal in an executeOptions entry', async function () {
       const { executor, calls } = makeExecutor();
       const stale = new AbortController();

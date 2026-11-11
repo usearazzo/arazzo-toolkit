@@ -186,6 +186,31 @@ describe('WorkflowExecutor — executeOptions per source description', function 
       assert.strictEqual(error.reason, ExecutionError.UnknownExecuteOption);
     });
 
+    specify('should throw for executeOptions that are not an object', async function () {
+      const { runner, calls } = await makeRunner();
+      const executeOptions = [{ server: 'https://override.example' }] as unknown as Record<
+        string,
+        Record<string, unknown>
+      >;
+
+      const error = await captureError(runner.execute('twoAPIs', { executeOptions }));
+
+      assert.strictEqual(error.reason, ExecutionError.UnknownExecuteOption);
+      assert.isEmpty(calls);
+    });
+
+    specify('should throw for a source description without a url', async function () {
+      const { runner, calls } = await makeRunner();
+
+      const error = await captureError(
+        runner.execute('twoAPIs', { executeOptions: { noURL: { server: 'https://x.example' } } }),
+      );
+
+      assert.strictEqual(error.reason, ExecutionError.SourceDescriptionNotFound);
+      assert.include(error.message, 'has no url');
+      assert.isEmpty(calls);
+    });
+
     specify('should throw for a source description that is an Arazzo document', async function () {
       const { runner } = await makeRunner();
 

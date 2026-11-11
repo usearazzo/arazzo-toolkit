@@ -17,6 +17,7 @@ import {
   ResolverError,
   CriterionError,
   type HTTPClient,
+  type OpenAPIOperationLocator,
   type OpenAPIOperationRequest,
 } from '../../src/index.ts';
 
@@ -92,6 +93,41 @@ describe('StepExecutor', function () {
     makeExecutorFor(entry, registry, respond);
 
   const state = () => new WorkflowExecutionState({ inputs: { preferredPetStatus: 'available' } });
+
+  context('execute options', function () {
+    const step = () =>
+      refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: '$inputs.preferredPetStatus' }],
+      }) as StepElement;
+
+    specify('should forward a bag to the operation executor', async function () {
+      const { executor, requests } = makeExecutor();
+
+      await executor.execute(step(), state(), { server: 'https://bag.example/api' });
+
+      assert.include(requests[0].url, 'https://bag.example/api/pet/findByStatus');
+    });
+
+    specify(
+      'should call a function with the located operation and forward its bag',
+      async function () {
+        const { executor, requests } = makeExecutor();
+        const locators: OpenAPIOperationLocator[] = [];
+
+        await executor.execute(step(), state(), (locator) => {
+          locators.push(locator);
+          return { server: 'https://function.example/api' };
+        });
+
+        assert.lengthOf(locators, 1);
+        assert.match(locators[0].document.uri, /petstore\.openapi\.json$/);
+        assert.strictEqual(locators[0].jsonPointer, '/paths/~1pet~1findByStatus/get');
+        assert.include(requests[0].url, 'https://function.example/api/pet/findByStatus');
+      },
+    );
+  });
 
   context('operation resolution', function () {
     specify('should resolve a plain operationId and execute it', async function () {

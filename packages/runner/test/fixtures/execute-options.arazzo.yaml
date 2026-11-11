@@ -4,7 +4,8 @@ info:
   version: 1.0.0
 
 # `petsAPI` and `paymentsAPI` both declare a security scheme named `api_key`,
-# and `petsAPIAgain` is a second name for the document `petsAPI` points at.
+# `petsAPIAgain` is a second name for the document `petsAPI` points at, and
+# `noURL` is malformed on purpose: it points at no document.
 sourceDescriptions:
   - name: petsAPI
     url: ./execute-options-pets.openapi.json
@@ -18,6 +19,8 @@ sourceDescriptions:
   - name: nested
     url: ./execute-options-nested.arazzo.yaml
     type: arazzo
+  - name: noURL
+    type: openapi
 
 workflows:
   - workflowId: twoAPIs

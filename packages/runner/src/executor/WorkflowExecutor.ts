@@ -135,8 +135,9 @@ export interface WorkflowExecuteOptions {
    * name gets nothing. Steps of an API without an entry get no options.
    *
    * A key naming no source description, one naming a source description that
-   * is not an OpenAPI document, and two keys pointing at the same document all
-   * throw before the first request.
+   * has no `url` or is not an OpenAPI document, two keys pointing at the same
+   * document, and an entry that is not an object all throw before the first
+   * request.
    */
   readonly executeOptions?: Record<string, Record<string, unknown>>;
   /**
@@ -183,7 +184,8 @@ export interface WorkflowExecuteOptions {
    *
    * The signal is also forwarded to the transport with every step's execute
    * options, so the request in flight when the abort lands is cancelled rather
-   * than merely awaited.
+   * than merely awaited. This option is the only way to cancel a run: a
+   * `signal` in an `executeOptions` entry is dropped.
    */
   readonly signal?: AbortSignal;
 }
@@ -555,14 +557,13 @@ class WorkflowExecutor {
     const { signal } = options;
     const executeOptions = this.#executeOptionsByDocument(options.executeOptions ?? {});
     const scope: RunScope = {
-      // the signal is spread into every step's opaque bag, because that bag is
+      // the signal is put into every step's opaque bag, because that bag is
       // how anything reaches the transport: the executor's own checks stop the
       // run at the next boundary, and this is what cancels the request already
-      // in flight. Spread last, so it wins over one passed in an entry.
-      executeOptions: (locator) => ({
-        ...executeOptions.get(locator.document.uri),
-        ...(signal === undefined ? {} : { signal }),
-      }),
+      // in flight. Set even when absent, so a `signal` in an entry never
+      // stands in for it: that one would cancel the steps of a single API and
+      // leave the run walking on.
+      executeOptions: (locator) => ({ ...executeOptions.get(locator.document.uri), signal }),
       dependencyInputs: options.dependencyInputs ?? {},
       runDependencies: options.runDependencies ?? true,
       signal,
@@ -597,12 +598,25 @@ class WorkflowExecutor {
     const byDocument = new Map<string, Record<string, unknown>>();
     const names = new Map<string, string>();
 
+    if (!isPlainObject(executeOptions)) {
+      throw new ExecutionError(
+        'executeOptions must be an object keyed by source description name: { executeOptions: { <name>: { ... } } }',
+        { reason: ExecutionError.UnknownExecuteOption },
+      );
+    }
+
     for (const [name, options] of Object.entries(executeOptions)) {
       const uri = this.#document.resolveSourceDescriptionURI(name);
 
-      if (uri === undefined) {
+      if (!this.#document.sourceDescriptionIndex.has(name)) {
         throw new ExecutionError(
           `executeOptions is keyed by source description name, and "${name}" names no source description of the Arazzo document at "${this.#document.uri}"; options for an API go under its source description's name: { executeOptions: { <name>: { ... } } }`,
+          { reason: ExecutionError.SourceDescriptionNotFound },
+        );
+      }
+      if (uri === undefined) {
+        throw new ExecutionError(
+          `executeOptions entry "${name}" names a source description that has no url, so it points at no document`,
           { reason: ExecutionError.SourceDescriptionNotFound },
         );
       }

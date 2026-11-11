@@ -131,7 +131,7 @@ await runner.execute('buyPet', {
 });
 ```
 
-An entry configures the OpenAPI document its name points at, so two APIs that happen to name a scheme alike never see each other's credentials, and a workflow of another Arazzo document calling the same OpenAPI document gets the entry too. A key that names no source description, or two keys for one document, throws before the first request. An API that only a nested Arazzo document declares has no name here: declare it in the entry document, or use an interceptor.
+An entry configures the OpenAPI document its name points at, so two APIs that happen to name a scheme alike never see each other's credentials, and a workflow of another Arazzo document calling the same OpenAPI document gets the entry too. A key that names no source description or an Arazzo one, two keys for one document, and an entry that is not an object all throw before the first request. A `signal` in an entry is dropped; cancel a run with the `signal` option. An API that only a nested Arazzo document declares has no name here: declare it in the entry document, or use an interceptor.
 
 For credentials computed per request, or anything `securities` cannot express, pass a `requestInterceptor`:
 
