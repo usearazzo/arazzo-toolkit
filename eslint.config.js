@@ -55,10 +55,12 @@ export default tseslint.config(
         'error',
         'always',
         {
-          ts: 'always',
-          tsx: 'always',
-          js: 'always',
-          jsx: 'never',
+          pattern: {
+            ts: 'always',
+            tsx: 'always',
+            js: 'always',
+            jsx: 'never',
+          },
           ignorePackages: true,
         },
       ],
