@@ -27,7 +27,7 @@ Use it to test an API flow end to end in CI, to drive a workflow from your own s
 - **Steps.** Parameters and request bodies resolved from runtime expressions, `successCriteria` evaluated (`simple`, `regex`, `jsonpath`, `xpath`), `outputs` resolved from the response.
 - **Control flow.** `goto`, `retry` (with `retryLimit`, `retryAfter`, and references), and `end`, as the specification defines them, with workflow-level default actions and parameters, and action `parameters` as the inputs of a `goto` or `retry` workflow target.
 - **Composition.** Sub-workflow steps, `dependsOn` prerequisites, one-way transfer to another workflow, and workflows in other Arazzo documents.
-- **Your HTTP stack.** Global `fetch` by default, or any client you plug in. Credentials go in through a request interceptor, since Arazzo is auth-agnostic.
+- **Your HTTP stack.** Global `fetch` by default, or any client you plug in. Arazzo is auth-agnostic, so credentials come from you: static ones per API, or a request interceptor.
 
 ## At a glance
 
@@ -110,80 +110,19 @@ const result = await runner.execute('authenticateAndOrderPet', {
 });
 ```
 
-`runner.document` and `runner.registry` are the loaded entry document and the registry holding its source descriptions; unless you pass one, every runner `load` returns has a registry of its own. `load` takes the seams of the building blocks it wires: `registry` (one registry backs one entry document, so loading a different document into it throws `InvalidEntryDocumentError`), `reference` (how documents are retrieved, see below), `httpClient` and `requestInterceptor`, and the workflow executor's `maxSteps`, `maxWorkflowDepth`, `sleep` and `now`. To bind a runner to a document you already acquired, use `new ArazzoRunner({ document, registry })`; it throws `InvalidEntryDocumentError` unless `document` is the entry document of `registry`.
+`executeOptions` is keyed by source description name, so each API gets its own options. Beyond this example:
 
-To see what a document offers before running it, `runner.document.listWorkflows()` returns a `WorkflowDescriptor` for each workflow `execute` accepts, in document order: its `workflowId`, its `jsonPointer` in the document and, when the document gives them as strings, its `summary` and `description`. It reads the entry document only; source descriptions are not loaded.
+| To | Use | Reference |
+|---|---|---|
+| Point an API at another server | `server`, `serverVariables` in its `executeOptions` entry | [Choosing the server](https://usearazzo.com/docs/runner/#server) |
+| Send static credentials | `securities` in its `executeOptions` entry | [Authentication](https://usearazzo.com/docs/runner/#authentication) |
+| Compute credentials per request | `requestInterceptor` | [Request interceptor](https://usearazzo.com/docs/runner/#request-interceptor) |
+| Use another HTTP stack, a proxy or a client certificate for API calls | `httpClient` | [The HTTP client](https://usearazzo.com/docs/runner/#http-client) |
+| Load documents behind credentials or mutual TLS | `reference` on `load` | [Document retrieval](https://usearazzo.com/docs/runner/#document-retrieval) |
+| Cancel a run | `signal` | [Cancellation](https://usearazzo.com/docs/runner/#cancellation) |
+| Compose the building blocks yourself | `DocumentRegistry`, the executors | [Runner API Reference](https://usearazzo.com/docs/runner/) |
 
-`executeOptions` is keyed by source description name: each entry holds the options for the API that source description points at, and reaches only the steps calling it. That is where a `server` and static credentials go. `securities` takes a credential per security scheme the API's OpenAPI document declares, and each is applied where its scheme says, to the operations that require it:
-
-```js
-await runner.execute('buyPet', {
-  inputs,
-  executeOptions: {
-    petstoreAPI: {
-      server: 'http://localhost:8080/api/v3',
-      securities: { authorized: { api_key: 'KEY' } },
-    },
-    paymentsAPI: {
-      securities: { authorized: { bearerAuth: 'TOKEN', basicAuth: { username: 'user', password: 'pass' } } },
-    },
-  },
-});
-```
-
-An entry configures the OpenAPI document its name points at, so two APIs that happen to name a scheme alike never see each other's credentials, and a workflow of another Arazzo document calling the same OpenAPI document gets the entry too. A key that names no source description or an Arazzo one, two keys for one document, and an entry that is not an object all throw before the first request. A `signal` in an entry is dropped; cancel a run with the `signal` option. An API that only a nested Arazzo document declares has no name here: declare it in the entry document, or use an interceptor.
-
-For credentials computed per request, or anything `securities` cannot express, pass a `requestInterceptor`:
-
-```js
-const runner = await ArazzoRunner.load(uri, {
-  requestInterceptor: async (request) => {
-    request.headers.Authorization = `Bearer ${await acquireToken()}`;
-  },
-});
-```
-
-`request.headers` is a plain object, and the case of a header name in it can differ: for an OpenAPI 2.0 document, credentials from `securities` arrive under `authorization`. Match header names case-insensitively in an interceptor, and when replacing a header that may already be there, delete the existing key first: the same header under two spellings is sent as one header with both values.
-
-To send requests through another HTTP stack, replace the `httpClient`. It is a function from the built request to a WHATWG `Response`; here undici with a connection pool that global `fetch` cannot take:
-
-```js
-import { fetch, Agent } from 'undici';
-
-const dispatcher = new Agent({ connections: 16, keepAliveTimeout: 60_000 });
-
-const runner = await ArazzoRunner.load(uri, {
-  httpClient: (request) => fetch(request.url, { ...request, dispatcher }),
-});
-```
-
-The two combine: the interceptor changes the request, and the client sends it. Both are options of `OpenAPIOperationExecutor` too, for when you compose the building blocks yourself.
-
-Retrieving documents is separate from calling APIs. The entry document, its source descriptions and every externally referenced document are fetched by [ApiDOM reference](https://github.com/speclynx/apidom/tree/main/packages/apidom-reference#resolver-plugin-options), which `httpClient` and `requestInterceptor` never touch, so credentials for an API do not reach a host that only serves a document. Configure it with `reference`, which takes its `resolve` options; here a client certificate (mutual TLS) for both sides:
-
-```js
-import https from 'node:https';
-import { fetch, Agent } from 'undici';
-
-const tls = { cert, key, ca };
-const dispatcher = new Agent({ connect: tls });
-
-const runner = await ArazzoRunner.load(uri, {
-  // document retrieval
-  reference: {
-    resolve: { resolverOpts: { axiosConfig: { httpsAgent: new https.Agent(tls) } } },
-  },
-  // API calls
-  httpClient: (request) => fetch(request.url, { ...request, dispatcher }),
-});
-```
-
-For documents behind an API key or token, add the header per origin with `axiosConfig.interceptors.request`; plain `axiosConfig.headers` are sent to every host a document or reference points at. In the errors of failed downloads, standard credentials such as the `Authorization` header are masked. A custom header is masked only when listed in `axiosConfig.redact`, and that list replaces the default one, so spread ApiDOM's `HTTPResolverAxios.defaultRedact` into it. Credentials embedded in a URL are not masked.
-
-Two things to know:
-
-- A `registry` of your own is configured through its providers (`new ArazzoDocumentRegistryProvider({ resolve })`, `new OpenAPIDocumentRegistryProvider({ resolve })`, both need the options). Pass the same options to `load` as `reference` too: they then reach the normalizers, which fetch external references.
-- Retrieved documents are cached per process by URL, for all registries. A registry whose providers get an HTTP resolver of their own in `resolve.resolvers` has a private cache; `resolvers` replaces the default list, so include a file resolver if you load local documents.
+Retrieving documents and calling APIs are separate: credentials for one never reach the other.
 
 ## Documentation
 
