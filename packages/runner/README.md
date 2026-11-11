@@ -157,7 +157,7 @@ const runner = await ArazzoRunner.load(uri, {
 });
 ```
 
-For documents behind an API key or token, add the header per origin with `axiosConfig.interceptors.request`; plain `axiosConfig.headers` are sent to every host a document or reference points at. In the errors of failed downloads, standard credentials such as the `Authorization` header are masked; list a custom header in `axiosConfig.redact` to mask it too. Credentials embedded in a URL are not masked.
+For documents behind an API key or token, add the header per origin with `axiosConfig.interceptors.request`; plain `axiosConfig.headers` are sent to every host a document or reference points at. In the errors of failed downloads, standard credentials such as the `Authorization` header are masked. A custom header is masked only when listed in `axiosConfig.redact`, and that list replaces the default one, so spread ApiDOM's `HTTPResolverAxios.defaultRedact` into it. Credentials embedded in a URL are not masked.
 
 Two things to know:
 

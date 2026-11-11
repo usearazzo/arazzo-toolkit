@@ -28,7 +28,7 @@ const token = 'document-retrieval-secret';
  * The documents a test server serves. The workflow inputs and an operation
  * parameter are external references, which only the normalizers fetch.
  */
-const documentsFor = (baseURL: string): Record<string, unknown> => ({
+const documentsFor = (baseURL: string, openapiVersion: string): Record<string, unknown> => ({
   '/arazzo.json': {
     arazzo: '1.0.1',
     info: { title: 'Document retrieval', version: '1.0.0' },
@@ -49,37 +49,68 @@ const documentsFor = (baseURL: string): Record<string, unknown> => ({
     ],
   },
   '/inputs.json': { type: 'object', properties: { id: { type: 'string' } } },
-  '/openapi.json': {
-    openapi: '3.1.0',
-    info: { title: 'Pets', version: '1.0.0' },
-    servers: [{ url: baseURL }],
-    paths: {
-      '/pets': {
-        get: {
-          operationId: 'getPet',
-          parameters: [{ $ref: './shared.json#/components/parameters/id' }],
-          responses: { 200: { description: 'OK' } },
+  ...(openapiVersion === '2.0'
+    ? {
+        '/openapi.json': {
+          swagger: '2.0',
+          info: { title: 'Pets', version: '1.0.0' },
+          host: new URL(baseURL).host,
+          schemes: [new URL(baseURL).protocol.slice(0, -1)],
+          paths: {
+            '/pets': {
+              get: {
+                operationId: 'getPet',
+                parameters: [{ $ref: './shared.json#/parameters/id' }],
+                responses: { 200: { description: 'OK' } },
+              },
+            },
+          },
         },
-      },
-    },
-  },
-  '/shared.json': {
-    openapi: '3.1.0',
-    info: { title: 'Shared', version: '1.0.0' },
-    paths: {},
-    components: {
-      parameters: { id: { name: 'id', in: 'query', schema: { type: 'string' } } },
-    },
-  },
+        '/shared.json': {
+          swagger: '2.0',
+          info: { title: 'Shared', version: '1.0.0' },
+          paths: {},
+          parameters: { id: { name: 'id', in: 'query', type: 'string' } },
+        },
+      }
+    : {
+        '/openapi.json': {
+          openapi: openapiVersion,
+          info: { title: 'Pets', version: '1.0.0' },
+          servers: [{ url: baseURL }],
+          paths: {
+            '/pets': {
+              get: {
+                operationId: 'getPet',
+                parameters: [{ $ref: './shared.json#/components/parameters/id' }],
+                responses: { 200: { description: 'OK' } },
+              },
+            },
+          },
+        },
+        '/shared.json': {
+          openapi: openapiVersion,
+          info: { title: 'Shared', version: '1.0.0' },
+          paths: {},
+          components: {
+            parameters: { id: { name: 'id', in: 'query', schema: { type: 'string' } } },
+          },
+        },
+      }),
 });
 
 interface TestServer {
   readonly server: http.Server;
   readonly baseURL: string;
   /**
-   * The path of every document request, with whether it carried the token.
+   * The path of every document request, with whether it carried the token
+   * and whether the request interceptor of the tests had touched it.
    */
-  readonly requests: { path: string; authorized: boolean }[];
+  readonly requests: { path: string; authorized: boolean; intercepted: boolean }[];
+  /**
+   * The OpenAPI version of the served source description; `3.1.0` at start.
+   */
+  openapiVersion: string;
 }
 
 /**
@@ -93,6 +124,7 @@ const startServer = (
 ): Promise<TestServer> =>
   new Promise((resolve) => {
     const requests: TestServer['requests'] = [];
+    const settings = { openapiVersion: '3.1.0' };
     let baseURL = '';
     const server = createServer((request, response) => {
       const requestPath = request.url!.split('?')[0];
@@ -104,8 +136,12 @@ const startServer = (
       }
 
       const authorized = request.headers.authorization === `Bearer ${token}`;
-      const document = documentsFor(baseURL)[requestPath];
-      requests.push({ path: requestPath, authorized });
+      const document = documentsFor(baseURL, settings.openapiVersion)[requestPath];
+      requests.push({
+        path: requestPath,
+        authorized,
+        intercepted: request.headers['x-api-call'] !== undefined,
+      });
 
       if (protect && !authorized) response.statusCode = 401;
       else if (document === undefined) response.statusCode = 404;
@@ -114,7 +150,7 @@ const startServer = (
 
     server.listen(0, () => {
       baseURL = `${protocol}://localhost:${(server.address() as AddressInfo).port}`;
-      resolve({ server, baseURL, requests });
+      resolve(Object.assign(settings, { server, baseURL, requests }));
     });
   });
 
@@ -190,7 +226,7 @@ describe('ArazzoRunner document retrieval', function () {
       assert.isTrue(testServer.requests.every((request) => request.authorized));
     });
 
-    specify('should not send the document credentials with API calls', async function () {
+    specify('should not hand the document credentials to the HTTP client', async function () {
       const calls: OpenAPIOperationRequest[] = [];
       const runner = await ArazzoRunner.load(entryURL, {
         reference: { resolve: credentials },
@@ -211,14 +247,34 @@ describe('ArazzoRunner document retrieval', function () {
           request.headers['X-API-Call'] = 'yes';
         },
       });
-      const headersSeen: http.IncomingHttpHeaders[] = [];
-      testServer.server.on('request', (request) => headersSeen.push(request.headers));
 
       await runner.execute('getPet', { inputs: { id: '7' } });
 
-      assert.isNotEmpty(headersSeen);
-      assert.isTrue(headersSeen.every((headers) => headers['x-api-call'] === undefined));
+      assert.lengthOf(testServer.requests, 4);
+      assert.isTrue(testServer.requests.every((request) => !request.intercepted));
     });
+
+    for (const openapiVersion of ['3.0.3', '2.0']) {
+      specify(
+        `should retrieve external references of OpenAPI ${openapiVersion}`,
+        async function () {
+          testServer.openapiVersion = openapiVersion;
+          const runner = await ArazzoRunner.load(entryURL, {
+            reference: { resolve: credentials },
+            httpClient: makeHTTPClient([]),
+          });
+
+          const result = await runner.execute('getPet', { inputs: { id: '7' } });
+
+          assert.strictEqual(result.status, 'completed');
+          assert.includeMembers(
+            testServer.requests.map((request) => request.path),
+            ['/openapi.json', '/shared.json'],
+          );
+          assert.isTrue(testServer.requests.every((request) => request.authorized));
+        },
+      );
+    }
 
     context('given registry built with the same options', function () {
       specify('should reach the normalizers through the reference option', async function () {
@@ -229,6 +285,27 @@ describe('ArazzoRunner document retrieval', function () {
           ],
         });
         const runner = await ArazzoRunner.load(entryURL, {
+          registry,
+          reference: { resolve: credentials },
+          httpClient: makeHTTPClient([]),
+        });
+
+        const result = await runner.execute('getPet', { inputs: { id: '7' } });
+
+        assert.strictEqual(result.status, 'completed');
+        assert.isTrue(testServer.requests.every((request) => request.authorized));
+      });
+
+      specify('should reach the normalizers through the constructor too', async function () {
+        const registry = new DocumentRegistry({
+          providers: [
+            new ArazzoDocumentRegistryProvider({ resolve: credentials }),
+            new OpenAPIDocumentRegistryProvider({ resolve: credentials }),
+          ],
+        });
+        const document = await registry.acquireEntryDocument(entryURL);
+        const runner = new ArazzoRunner({
+          document,
           registry,
           reference: { resolve: credentials },
           httpClient: makeHTTPClient([]),
@@ -295,10 +372,10 @@ describe('ArazzoRunner document retrieval', function () {
     let entryURL: string;
 
     /**
-     * An HTTP client presenting the client certificate, built on `node:https`.
+     * An HTTP client built on `node:https` with the given TLS options.
      */
-    const makeMutualTLSClient = (): HTTPClient => {
-      const agent = new https.Agent(tls);
+    const makeHTTPSClient = (options: https.AgentOptions): HTTPClient => {
+      const agent = new https.Agent(options);
 
       return (request) =>
         new Promise((resolve, reject) => {
@@ -385,7 +462,16 @@ describe('ArazzoRunner document retrieval', function () {
     });
 
     specify('should fail to load without a client certificate', async function () {
-      const error = await captureRejection(ArazzoRunner.load(entryURL));
+      // the server certificate is trusted, so only the missing client certificate fails
+      const error = await captureRejection(
+        ArazzoRunner.load(entryURL, {
+          reference: {
+            resolve: {
+              resolverOpts: { axiosConfig: { httpsAgent: new https.Agent({ ca: tls.ca }) } },
+            },
+          },
+        }),
+      );
 
       assert.instanceOf(error, DocumentLoadError);
     });
@@ -395,7 +481,7 @@ describe('ArazzoRunner document retrieval', function () {
         reference: {
           resolve: { resolverOpts: { axiosConfig: { httpsAgent: new https.Agent(tls) } } },
         },
-        httpClient: makeMutualTLSClient(),
+        httpClient: makeHTTPSClient(tls),
       });
 
       const result = await runner.execute('getPet', { inputs: { id: '7' } });
@@ -412,6 +498,8 @@ describe('ArazzoRunner document retrieval', function () {
         reference: {
           resolve: { resolverOpts: { axiosConfig: { httpsAgent: new https.Agent(tls) } } },
         },
+        // trusts the server certificate, presents none of its own
+        httpClient: makeHTTPSClient({ ca: tls.ca }),
       });
 
       const error = await captureRejection(runner.execute('getPet', { inputs: { id: '7' } }));
