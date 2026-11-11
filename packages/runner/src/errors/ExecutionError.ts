@@ -49,7 +49,7 @@ class ExecutionError extends ArazzoRunnerError {
   static readonly StepBudget = 'step-budget' as const;
   /** An action declares a `type` other than `end`, `goto` or `retry`. */
   static readonly UnknownActionType = 'unknown-action-type' as const;
-  /** `execute` received an option it does not know, or `executeOptions` (or one of its entries) that is not an object. */
+  /** `execute` received an option it does not know, or an `executeOptions` entry that is not an object. */
   static readonly UnknownExecuteOption = 'unknown-execute-option' as const;
   /** A step produced a transition the workflow executor does not recognize. */
   static readonly UnknownTransitionKind = 'unknown-transition-kind' as const;

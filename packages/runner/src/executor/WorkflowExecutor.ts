@@ -39,7 +39,7 @@ import StepRetryRunner from './StepRetryRunner.ts';
 import WorkflowCallStack, { type WorkflowCallVia } from './WorkflowCallStack.ts';
 import StepTransitionInterpreter, { actionTargets } from './StepTransitionInterpreter.ts';
 import type { SelectedAction } from '../action/ActionResolver.ts';
-import ExecutionError from '../errors/ExecutionError.ts';
+import ExecutionError, { type ExecutionErrorReason } from '../errors/ExecutionError.ts';
 import ResolverError from '../errors/ResolverError.ts';
 import { throwIfAborted } from './abort.ts';
 
@@ -596,51 +596,38 @@ class WorkflowExecutor {
     executeOptions: Record<string, Record<string, unknown>>,
   ): Map<string, Record<string, unknown>> {
     const byDocument = new Map<string, Record<string, unknown>>();
-    const names = new Map<string, string>();
-
-    if (!isPlainObject(executeOptions)) {
+    const fail = (name: string, problem: string, reason: ExecutionErrorReason): never => {
       throw new ExecutionError(
-        'executeOptions must be an object keyed by source description name: { executeOptions: { <name>: { ... } } }',
-        { reason: ExecutionError.UnknownExecuteOption },
+        `executeOptions is keyed by source description name, and "${name}" ${problem}`,
+        { reason },
       );
-    }
+    };
 
     for (const [name, options] of Object.entries(executeOptions)) {
       const uri = this.#document.resolveSourceDescriptionURI(name);
 
-      if (!this.#document.sourceDescriptionIndex.has(name)) {
-        throw new ExecutionError(
-          `executeOptions is keyed by source description name, and "${name}" names no source description of the Arazzo document at "${this.#document.uri}"; options for an API go under its source description's name: { executeOptions: { <name>: { ... } } }`,
-          { reason: ExecutionError.SourceDescriptionNotFound },
-        );
-      }
       if (uri === undefined) {
-        throw new ExecutionError(
-          `executeOptions entry "${name}" names a source description that has no url, so it points at no document`,
-          { reason: ExecutionError.SourceDescriptionNotFound },
-        );
-      }
-      if (!isPlainObject(options)) {
-        throw new ExecutionError(
-          `executeOptions entry "${name}" must be an object of options for that source description`,
-          { reason: ExecutionError.UnknownExecuteOption },
+        return fail(
+          name,
+          `names no source description with a url in the Arazzo document at "${this.#document.uri}"`,
+          ExecutionError.SourceDescriptionNotFound,
         );
       }
       if (this.#document.resolveSourceDescriptionField(name, 'type') === 'arazzo') {
-        throw new ExecutionError(
-          `executeOptions entry "${name}" names a source description that is not an OpenAPI document`,
-          { reason: ExecutionError.SourceDescriptionNotOpenAPI },
-        );
+        fail(name, 'names an Arazzo document', ExecutionError.SourceDescriptionNotOpenAPI);
+      }
+      if (!isPlainObject(options)) {
+        fail(name, 'is not given an object of options', ExecutionError.UnknownExecuteOption);
       }
       if (byDocument.has(uri)) {
-        throw new ExecutionError(
-          `executeOptions entries "${names.get(uri)}" and "${name}" name source descriptions that point at the same document at "${uri}"`,
-          { reason: ExecutionError.AmbiguousExecuteOptions },
+        fail(
+          name,
+          `points at "${uri}", which another entry already configures`,
+          ExecutionError.AmbiguousExecuteOptions,
         );
       }
 
       byDocument.set(uri, options);
-      names.set(uri, name);
     }
 
     return byDocument;
