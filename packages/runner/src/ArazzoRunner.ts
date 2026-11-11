@@ -25,12 +25,12 @@ import InvalidEntryDocumentError from './errors/InvalidEntryDocumentError.ts';
  *
  * Every option is a seam of a building block the runner wires: `registry` is
  * the {@link DocumentRegistry} the documents load into (a fresh one with the
- * default providers when omitted), `resolve` goes to everything the runner
+ * default providers when omitted), `reference` goes to everything the runner
  * builds that retrieves documents, `httpClient` and `requestInterceptor` go to
  * the {@link OpenAPIOperationExecutor}, and the rest go to the
  * {@link WorkflowExecutor}.
  *
- * Retrieving documents and calling APIs are separate on purpose: `resolve`
+ * Retrieving documents and calling APIs are separate on purpose: `reference`
  * never applies to API calls, and `httpClient` / `requestInterceptor` never
  * apply to document retrieval, so credentials for one do not reach the other.
  * @public
@@ -45,18 +45,19 @@ export interface ArazzoRunnerLoadOptions
    */
   readonly registry?: DocumentRegistry;
   /**
-   * How documents are retrieved: the entry document, its source descriptions
-   * and every externally referenced document. These are the `resolve` options
-   * of ApiDOM reference, e.g. `resolverOpts.axiosConfig` for request headers
-   * or a TLS agent, or `resolvers` for a resolver list of your own.
+   * Options of ApiDOM reference, which retrieves the documents: the entry
+   * document, its source descriptions and every externally referenced
+   * document. Its `resolve` options say how, e.g. `resolverOpts.axiosConfig`
+   * for request headers or a TLS agent, or `resolvers` for a resolver list of
+   * your own.
    *
    * The runner gives them to the default registry providers and to the
    * normalizers, which fetch external references lazily. A `registry` passed
-   * alongside is already configured through its own providers, so `resolve`
+   * alongside is already configured through its own providers, so `reference`
    * then reaches the normalizers only: give that registry's providers the
    * same options.
    */
-  readonly resolve?: DocumentRegistryProviderOptions['resolve'];
+  readonly reference?: Pick<DocumentRegistryProviderOptions, 'resolve'>;
 }
 
 /**
@@ -99,12 +100,11 @@ class ArazzoRunner {
    * document, or the given registry already backs another entry document
    */
   static async load(uri: string, options: ArazzoRunnerLoadOptions = {}): Promise<ArazzoRunner> {
-    const referenceOptions = ArazzoRunner.#referenceOptions(options.resolve);
     const {
       registry = new DocumentRegistry({
         providers: [
-          new ArazzoDocumentRegistryProvider(referenceOptions),
-          new OpenAPIDocumentRegistryProvider(referenceOptions),
+          new ArazzoDocumentRegistryProvider(options.reference),
+          new OpenAPIDocumentRegistryProvider(options.reference),
         ],
       }),
       ...rest
@@ -134,7 +134,7 @@ class ArazzoRunner {
     const {
       document,
       registry,
-      resolve,
+      reference,
       httpClient,
       requestInterceptor,
       ...workflowExecutorOptions
@@ -149,14 +149,13 @@ class ArazzoRunner {
       );
     }
 
-    const referenceOptions = ArazzoRunner.#referenceOptions(resolve);
     const operationExecutor = new OpenAPIOperationExecutor({
       httpClient,
       requestInterceptor,
       operationNormalizer: new OpenAPIOperationNormalizer({
-        openapi2: new OpenAPI2OperationNormalizer(referenceOptions),
-        openapi30: new OpenAPI30OperationNormalizer(referenceOptions),
-        openapi31: new OpenAPI31OperationNormalizer(referenceOptions),
+        openapi2: new OpenAPI2OperationNormalizer(reference),
+        openapi30: new OpenAPI30OperationNormalizer(reference),
+        openapi31: new OpenAPI31OperationNormalizer(reference),
       }),
     });
     const stepExecutor = new StepExecutor({ document, registry, operationExecutor });
@@ -168,19 +167,8 @@ class ArazzoRunner {
       document,
       registry,
       stepExecutor,
-      workflowNormalizer: new ArazzoWorkflowNormalizer(referenceOptions),
+      workflowNormalizer: new ArazzoWorkflowNormalizer(reference),
     });
-  }
-
-  /**
-   * The reference options carrying `resolve`, for the providers and normalizers.
-   * An absent `resolve` yields no key at all: merged as `undefined`, it would
-   * erase the defaults it is merged over.
-   */
-  static #referenceOptions(
-    resolve: ArazzoRunnerLoadOptions['resolve'],
-  ): DocumentRegistryProviderOptions {
-    return resolve === undefined ? {} : { resolve };
   }
 
   /**

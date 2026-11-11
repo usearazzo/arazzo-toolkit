@@ -167,16 +167,16 @@ describe('ArazzoRunner document retrieval', function () {
       await stopServer(testServer.server);
     });
 
-    specify('should fail to load without the resolve option', async function () {
+    specify('should fail to load without the reference option', async function () {
       const error = await captureRejection(ArazzoRunner.load(entryURL));
 
       assert.instanceOf(error, DocumentLoadError);
     });
 
-    specify('should retrieve every document with the resolve option', async function () {
+    specify('should retrieve every document with the reference option', async function () {
       const calls: OpenAPIOperationRequest[] = [];
       const runner = await ArazzoRunner.load(entryURL, {
-        resolve: credentials,
+        reference: { resolve: credentials },
         httpClient: makeHTTPClient(calls),
       });
 
@@ -190,10 +190,10 @@ describe('ArazzoRunner document retrieval', function () {
       assert.isTrue(testServer.requests.every((request) => request.authorized));
     });
 
-    specify('should not send the resolve credentials with API calls', async function () {
+    specify('should not send the document credentials with API calls', async function () {
       const calls: OpenAPIOperationRequest[] = [];
       const runner = await ArazzoRunner.load(entryURL, {
-        resolve: credentials,
+        reference: { resolve: credentials },
         httpClient: makeHTTPClient(calls),
       });
 
@@ -205,7 +205,7 @@ describe('ArazzoRunner document retrieval', function () {
 
     specify('should not apply the request interceptor to document retrieval', async function () {
       const runner = await ArazzoRunner.load(entryURL, {
-        resolve: credentials,
+        reference: { resolve: credentials },
         httpClient: makeHTTPClient([]),
         requestInterceptor: (request) => {
           request.headers['X-API-Call'] = 'yes';
@@ -221,7 +221,7 @@ describe('ArazzoRunner document retrieval', function () {
     });
 
     context('given registry built with the same options', function () {
-      specify('should reach the normalizers through the resolve option', async function () {
+      specify('should reach the normalizers through the reference option', async function () {
         const registry = new DocumentRegistry({
           providers: [
             new ArazzoDocumentRegistryProvider({ resolve: credentials }),
@@ -230,7 +230,7 @@ describe('ArazzoRunner document retrieval', function () {
         });
         const runner = await ArazzoRunner.load(entryURL, {
           registry,
-          resolve: credentials,
+          reference: { resolve: credentials },
           httpClient: makeHTTPClient([]),
         });
 
@@ -240,7 +240,7 @@ describe('ArazzoRunner document retrieval', function () {
         assert.isTrue(testServer.requests.every((request) => request.authorized));
       });
 
-      specify('should fail on external references without the resolve option', async function () {
+      specify('should fail on external references without the reference option', async function () {
         const registry = new DocumentRegistry({
           providers: [
             new ArazzoDocumentRegistryProvider({ resolve: credentials }),
@@ -260,11 +260,13 @@ describe('ArazzoRunner document retrieval', function () {
 
     context('given HTTP resolver of its own', function () {
       specify('should not be served documents cached by other runners', async function () {
-        await ArazzoRunner.load(entryURL, { resolve: credentials });
+        await ArazzoRunner.load(entryURL, { reference: { resolve: credentials } });
         const requestCount = testServer.requests.length;
 
         const error = await captureRejection(
-          ArazzoRunner.load(entryURL, { resolve: { resolvers: [new HTTPResolverAxios()] } }),
+          ArazzoRunner.load(entryURL, {
+            reference: { resolve: { resolvers: [new HTTPResolverAxios()] } },
+          }),
         );
 
         assert.instanceOf(error, DocumentLoadError);
@@ -275,7 +277,9 @@ describe('ArazzoRunner document retrieval', function () {
     context('given document that cannot be retrieved', function () {
       specify('should not expose the credentials in the error', async function () {
         const error = await captureRejection(
-          ArazzoRunner.load(`${testServer.baseURL}/missing.json`, { resolve: credentials }),
+          ArazzoRunner.load(`${testServer.baseURL}/missing.json`, {
+            reference: { resolve: credentials },
+          }),
         );
 
         assert.instanceOf(error, DocumentLoadError);
@@ -388,7 +392,9 @@ describe('ArazzoRunner document retrieval', function () {
 
     specify('should retrieve documents and call the API with one', async function () {
       const runner = await ArazzoRunner.load(entryURL, {
-        resolve: { resolverOpts: { axiosConfig: { httpsAgent: new https.Agent(tls) } } },
+        reference: {
+          resolve: { resolverOpts: { axiosConfig: { httpsAgent: new https.Agent(tls) } } },
+        },
         httpClient: makeMutualTLSClient(),
       });
 
@@ -403,7 +409,9 @@ describe('ArazzoRunner document retrieval', function () {
 
     specify('should need the client certificate for API calls too', async function () {
       const runner = await ArazzoRunner.load(entryURL, {
-        resolve: { resolverOpts: { axiosConfig: { httpsAgent: new https.Agent(tls) } } },
+        reference: {
+          resolve: { resolverOpts: { axiosConfig: { httpsAgent: new https.Agent(tls) } } },
+        },
       });
 
       const error = await captureRejection(runner.execute('getPet', { inputs: { id: '7' } }));

@@ -110,7 +110,7 @@ const result = await runner.execute('authenticateAndOrderPet', {
 });
 ```
 
-`runner.document` and `runner.registry` are the loaded entry document and the registry holding its source descriptions; unless you pass one, every runner `load` returns has a registry of its own. `load` takes the seams of the building blocks it wires: `registry` (one registry backs one entry document, so loading a different document into it throws `InvalidEntryDocumentError`), `resolve` (how documents are retrieved, see below), `httpClient` and `requestInterceptor`, and the workflow executor's `maxSteps`, `maxWorkflowDepth`, `sleep` and `now`. To bind a runner to a document you already acquired, use `new ArazzoRunner({ document, registry })`; it throws `InvalidEntryDocumentError` unless `document` is the entry document of `registry`.
+`runner.document` and `runner.registry` are the loaded entry document and the registry holding its source descriptions; unless you pass one, every runner `load` returns has a registry of its own. `load` takes the seams of the building blocks it wires: `registry` (one registry backs one entry document, so loading a different document into it throws `InvalidEntryDocumentError`), `reference` (how documents are retrieved, see below), `httpClient` and `requestInterceptor`, and the workflow executor's `maxSteps`, `maxWorkflowDepth`, `sleep` and `now`. To bind a runner to a document you already acquired, use `new ArazzoRunner({ document, registry })`; it throws `InvalidEntryDocumentError` unless `document` is the entry document of `registry`.
 
 To see what a document offers before running it, `runner.document.listWorkflows()` returns a `WorkflowDescriptor` for each workflow `execute` accepts, in document order: its `workflowId`, its `jsonPointer` in the document and, when the document gives them as strings, its `summary` and `description`. It reads the entry document only; source descriptions are not loaded.
 
@@ -138,7 +138,7 @@ const runner = await ArazzoRunner.load(uri, {
 
 The two combine: the interceptor changes the request, and the client sends it. Both are options of `OpenAPIOperationExecutor` too, for when you compose the building blocks yourself.
 
-Retrieving documents is separate from calling APIs. The entry document, its source descriptions and every externally referenced document are fetched by [ApiDOM reference](https://github.com/speclynx/apidom/tree/main/packages/apidom-reference#resolver-plugin-options), which `httpClient` and `requestInterceptor` never touch, so credentials for an API do not reach a host that only serves a document. Configure it with `resolve`; here a client certificate (mutual TLS) for both sides:
+Retrieving documents is separate from calling APIs. The entry document, its source descriptions and every externally referenced document are fetched by [ApiDOM reference](https://github.com/speclynx/apidom/tree/main/packages/apidom-reference#resolver-plugin-options), which `httpClient` and `requestInterceptor` never touch, so credentials for an API do not reach a host that only serves a document. Configure it with `reference`, which takes its `resolve` options; here a client certificate (mutual TLS) for both sides:
 
 ```js
 import https from 'node:https';
@@ -149,7 +149,9 @@ const dispatcher = new Agent({ connect: tls });
 
 const runner = await ArazzoRunner.load(uri, {
   // document retrieval
-  resolve: { resolverOpts: { axiosConfig: { httpsAgent: new https.Agent(tls) } } },
+  reference: {
+    resolve: { resolverOpts: { axiosConfig: { httpsAgent: new https.Agent(tls) } } },
+  },
   // API calls
   httpClient: (request) => fetch(request.url, { ...request, dispatcher }),
 });
@@ -159,7 +161,7 @@ For documents behind an API key or token, add the header per origin with `axiosC
 
 Two things to know:
 
-- A `registry` of your own is configured through its providers (`new ArazzoDocumentRegistryProvider({ resolve })`, `new OpenAPIDocumentRegistryProvider({ resolve })`, both need the options). Pass the same `resolve` to `load` as well: it then reaches the normalizers, which fetch external references.
+- A `registry` of your own is configured through its providers (`new ArazzoDocumentRegistryProvider({ resolve })`, `new OpenAPIDocumentRegistryProvider({ resolve })`, both need the options). Pass the same options to `load` as `reference` too: they then reach the normalizers, which fetch external references.
 - Retrieved documents are cached per process by URL, for all registries. A registry whose providers get an HTTP resolver of their own in `resolve.resolvers` has a private cache; `resolvers` replaces the default list, so include a file resolver if you load local documents.
 
 ## Documentation
