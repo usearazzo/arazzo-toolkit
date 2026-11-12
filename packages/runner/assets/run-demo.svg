@@ -46,7 +46,7 @@
   <g clip-path="url(#screen)">
   <g class="scroll" transform="translate(0 -154)" font-family="'Fira Code',Monaco,Consolas,ui-monospace,SFMono-Regular,Menlo,'Liberation Mono',monospace" font-size="14" xml:space="preserve">
     <g class="l0"><text x="22.0" y="70" fill="#AEB6C2">$</text><text x="38.9" y="70" fill="#A3D977">docker run --rm -d -p 8080:8080 swaggerapi/petstore3:1.0.28</text><g class="t0" transform="translate(497.4 0)"><rect x="38.9" y="54" width="921" height="22" fill="#1F2937"/></g></g>
-    <g class="l1"><text x="22.0" y="92" fill="#AEB6C2">e7d2c5a17eb5b5b8c316000c8987d5d4a6c2f93ba161c5bd6fb1cec26cfc9d9a</text></g>
+    <g class="l1"><text x="22.0" y="92" fill="#AEB6C2">fdd3ad0884d1cb293bc53c4697e2dc85f7454632685cb5e675f579dedf4f6ec5</text></g>
     <g class="l2"><text x="22.0" y="114" fill="#AEB6C2">$</text><text x="38.9" y="114" fill="#A3D977">node</text><g class="t2" transform="translate(33.7 0)"><rect x="38.9" y="98" width="921" height="22" fill="#1F2937"/></g></g>
     <g class="l3"><text x="22.0" y="136" fill="#AEB6C2">Welcome to Node.js v24.10.0.</text></g>
     <g class="l4"><text x="22.0" y="158" fill="#AEB6C2">Type ".help" for more information.</text></g>
@@ -59,7 +59,7 @@
     <g class="l11"><text x="22.0" y="312" fill="#E5E7EB">);</text></g>
     <g class="l12"><text x="22.0" y="334" fill="#E5E7EB">const result = await runner.execute('authenticateAndOrderPet', {</text></g>
     <g class="l13"><text x="38.9" y="356" fill="#E5E7EB">inputs: { username: 'theUser', password: '12345', preferredPetStatus: 'available', orderQuantity: 1 },</text></g>
-    <g class="l14"><text x="38.9" y="378" fill="#E5E7EB">executeOptions: { server: 'http://localhost:8080/api/v3' },</text></g>
+    <g class="l14"><text x="38.9" y="378" fill="#E5E7EB">executeOptions: { petstoreAPI: { server: 'http://localhost:8080/api/v3' } },</text></g>
     <g class="l15"><text x="22.0" y="400" fill="#E5E7EB">});</text></g>
     <g class="l16"><text x="22.0" y="422" fill="#E5E7EB">result.steps.map((s) =&gt; `${s.successful ? '✓' : '✗'} ${s.stepId}`);</text></g>
     <g class="l17"></g>

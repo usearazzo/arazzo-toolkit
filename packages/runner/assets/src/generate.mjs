@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const RUNNER_VERSION = '1.0.1-alpha.11';
+const RUNNER_VERSION = '1.0.1-alpha.29';
 const PETSTORE_IMAGE = 'swaggerapi/petstore3:1.0.28';
 const SHOWN_PORT = '8080';
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -29,7 +29,7 @@ const runner = await ArazzoRunner.load(
 );
 const result = await runner.execute('authenticateAndOrderPet', {
   inputs: { username: 'theUser', password: '12345', preferredPetStatus: 'available', orderQuantity: 1 },
-  executeOptions: { server: 'http://localhost:${SHOWN_PORT}/api/v3' },
+  executeOptions: { petstoreAPI: { server: 'http://localhost:${SHOWN_PORT}/api/v3' } },
 });
 result.steps.map((s) => \`\${s.successful ? '✓' : '✗'} \${s.stepId}\`);`;
 const AFTER = 'result.status';

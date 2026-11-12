@@ -1,5 +1,5 @@
 $ docker run --rm -d -p 8080:8080 swaggerapi/petstore3:1.0.28
-e7d2c5a17eb5b5b8c316000c8987d5d4a6c2f93ba161c5bd6fb1cec26cfc9d9a
+fdd3ad0884d1cb293bc53c4697e2dc85f7454632685cb5e675f579dedf4f6ec5
 $ node
 Welcome to Node.js v24.10.0.
 Type ".help" for more information.
@@ -12,7 +12,7 @@ const runner = await ArazzoRunner.load(
 );
 const result = await runner.execute('authenticateAndOrderPet', {
   inputs: { username: 'theUser', password: '12345', preferredPetStatus: 'available', orderQuantity: 1 },
-  executeOptions: { server: 'http://localhost:8080/api/v3' },
+  executeOptions: { petstoreAPI: { server: 'http://localhost:8080/api/v3' } },
 });
 result.steps.map((s) => `${s.successful ? '✓' : '✗'} ${s.stepId}`);
 
