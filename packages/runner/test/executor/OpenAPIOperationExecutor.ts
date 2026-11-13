@@ -807,6 +807,7 @@ describe('OpenAPIOperationExecutor', function () {
     specify('should match the boundary regardless of case', async function () {
       const { executor, requests } = makeExecutor({
         requestInterceptor: (request) => {
+          request.body = '--X--\r\n';
           request.headers['Content-Type'] = 'Multipart/Form-Data; BOUNDARY=X';
         },
       });
@@ -833,6 +834,36 @@ describe('OpenAPIOperationExecutor', function () {
       });
 
       assert.notProperty(requests[0].headers, 'Content-type');
+    });
+
+    specify('should drop a boundary the FormData body does not use', async function () {
+      // the step authored a boundary, but the body is still the FormData the
+      // transport encodes with a boundary of its own
+      const { executor, requests } = makeExecutor();
+
+      await executor.execute(multipartLocator, {
+        requestBody: { name: 'report' },
+        requestContentType: 'multipart/form-data; boundary=abc',
+      });
+
+      assert.instanceOf(requests[0].body, FormData);
+      assert.isUndefined(contentTypeOf(requests[0]));
+    });
+
+    specify('should leave a content type that is not a string alone', async function () {
+      const { executor, requests } = makeExecutor({
+        requestInterceptor: (request) => {
+          // what a JavaScript interceptor can do despite the type
+          (request.headers as Record<string, unknown>)['Content-Type'] = 42;
+        },
+      });
+
+      await executor.execute(multipartLocator, {
+        requestBody: { name: 'report' },
+        requestContentType: 'multipart/form-data',
+      });
+
+      assert.strictEqual(requests[0].headers['Content-Type'] as unknown, 42);
     });
 
     specify('should check the content type under every spelling', async function () {
