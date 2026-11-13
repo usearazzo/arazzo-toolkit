@@ -317,7 +317,8 @@ class StepExecutor {
     // assembles into a standalone doc, and runs.
     const locator = await this.#locateOperation(step, scope);
     const operationOptions =
-      typeof executeOptions === 'function' ? executeOptions(locator, scope) : executeOptions;
+      // a copy, so the function cannot rewrite the scope this step attributes its errors to
+      typeof executeOptions === 'function' ? executeOptions(locator, { ...scope }) : executeOptions;
 
     // resolve parameters and request body against the pre-request context.
     // keyed by '{in}.{name}' rather than bare name, so two parameters that
