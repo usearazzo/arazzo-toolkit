@@ -302,24 +302,39 @@ describe('WorkflowExecutor — executeOptions per source description', function 
 
       assert.strictEqual(error.reason, ExecutionError.SourceDescriptionNotOpenAPI);
     });
+  });
 
-    specify('should throw for two names pointing at the same document', async function () {
+  context('given entries for two names of one document', function () {
+    const executeOptions = {
+      petsAPI: { server: 'https://one.example' },
+      petsAPIAgain: { server: 'https://two.example' },
+    };
+
+    specify('should give each name its own entry', async function () {
       const { runner, calls } = await makeRunner();
 
-      const error = await captureError(
-        runner.execute('twoAPIs', {
-          executeOptions: {
-            petsAPI: { server: 'https://one.example' },
-            petsAPIAgain: { server: 'https://two.example' },
-          },
-        }),
-      );
+      const result = await runner.execute('twoNames', { executeOptions });
 
-      assert.strictEqual(error.reason, ExecutionError.AmbiguousExecuteOptions);
-      assert.include(error.message, '"petsAPIAgain"');
-      assert.include(error.message, 'execute-options-pets.openapi.json');
-      assert.isEmpty(calls);
+      assert.strictEqual(result.status, 'completed');
+      assert.strictEqual(calls[0].url, 'https://one.example/pets');
+      assert.strictEqual(calls[1].url, 'https://two.example/pets');
     });
+
+    specify(
+      'should throw for a nested step that reaches the document by its own name',
+      async function () {
+        const { runner, calls } = await makeRunner();
+
+        const error = await captureError(runner.execute('throughNested', { executeOptions }));
+
+        assert.strictEqual(error.reason, ExecutionError.AmbiguousExecuteOptions);
+        assert.strictEqual(error.stepId, 'listPets');
+        assert.strictEqual(error.workflowId, 'nestedCalls');
+        assert.include(error.message, '"animals" of the Arazzo document at');
+        assert.include(error.message, '"petsAPI", "petsAPIAgain"');
+        assert.isEmpty(calls);
+      },
+    );
   });
 
   context('given second name for a document that has one entry', function () {

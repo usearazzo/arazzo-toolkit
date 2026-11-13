@@ -35,6 +35,7 @@ import ArazzoWorkflowLocatorNormalizer, {
   type ArazzoWorkflowLocator,
 } from './ArazzoWorkflowLocatorNormalizer.ts';
 import type { OpenAPIOperationLocator } from './OpenAPIOperationLocatorNormalizer.ts';
+import type { RequestContextStep } from './OpenAPIOperationExecutor.ts';
 import StepRetryRunner from './StepRetryRunner.ts';
 import WorkflowCallStack, { type WorkflowCallVia } from './WorkflowCallStack.ts';
 import StepTransitionInterpreter, { actionTargets } from './StepTransitionInterpreter.ts';
@@ -126,18 +127,20 @@ export interface WorkflowExecuteOptions {
    * Execute options addressed to an API: keyed by the `name` of a source
    * description of the entry document, each entry the opaque client-specific
    * bag forwarded verbatim to {@link StepExecutor.execute} for the steps that
-   * call an operation of the OpenAPI document that name points at (e.g. a
-   * `server` to run against, or the credentials of its security schemes).
+   * call an operation through that source description (e.g. a `server` to run
+   * against, or the credentials of its security schemes).
    *
-   * An entry configures a document, not a name: a step of another Arazzo
-   * document calling the same OpenAPI document gets the entry whatever name it
-   * knows the document by, and one calling a different document under the same
-   * name gets nothing. Steps of an API without an entry get no options.
+   * An entry configures a name, so two source descriptions pointing at the
+   * same OpenAPI document can be configured apart. A step reaching its document
+   * any other way — through a name without an entry, through a name of
+   * another Arazzo document, or through a literal URL — gets the one entry
+   * configuring that document; it gets nothing when no entry does, and throws
+   * when several do, since nothing says which applies. Steps of an API without
+   * an entry get no options.
    *
    * A key naming no source description, one naming a source description that
-   * has no `url` or is not an OpenAPI document, two keys pointing at the same
-   * document, and an entry that is not an object all throw before the first
-   * request.
+   * has no `url` or is not an OpenAPI document, and an entry that is not an
+   * object all throw before the first request.
    */
   readonly executeOptions?: Record<string, Record<string, unknown>>;
   /**
@@ -392,11 +395,23 @@ interface DependencyRun {
  * {@link WorkflowExecutor.execute} call — the caller's per-run options plus the
  * two mutable ledgers that must span the whole call tree.
  */
+/**
+ * One `executeOptions` entry and the canonical URI of the document its name
+ * points at.
+ */
+interface ExecuteOptionsEntry {
+  readonly uri: string;
+  readonly options: Record<string, unknown>;
+}
+
 interface RunScope {
   /**
    * The execute options of a step, by the operation it was located to.
    */
-  readonly executeOptions: (locator: OpenAPIOperationLocator) => Record<string, unknown>;
+  readonly executeOptions: (
+    locator: OpenAPIOperationLocator,
+    step: RequestContextStep,
+  ) => Record<string, unknown>;
   readonly dependencyInputs: Record<string, Record<string, unknown>>;
   readonly runDependencies: boolean;
   /**
@@ -555,7 +570,7 @@ class WorkflowExecutor {
     this.#rejectUnknownOptions(options);
 
     const { signal } = options;
-    const executeOptions = this.#executeOptionsByDocument(options.executeOptions ?? {});
+    const executeOptions = this.#executeOptionsByName(options.executeOptions ?? {});
     const scope: RunScope = {
       // the signal is put into every step's opaque bag, because that bag is
       // how anything reaches the transport: the executor's own checks stop the
@@ -563,7 +578,10 @@ class WorkflowExecutor {
       // in flight. Set even when absent, so a `signal` in an entry never
       // stands in for it: that one would cancel the steps of a single API and
       // leave the run walking on.
-      executeOptions: (locator) => ({ ...executeOptions.get(locator.document.uri), signal }),
+      executeOptions: (locator, step) => ({
+        ...this.#executeOptionsFor(executeOptions, locator, step),
+        signal,
+      }),
       dependencyInputs: options.dependencyInputs ?? {},
       runDependencies: options.runDependencies ?? true,
       signal,
@@ -584,18 +602,17 @@ class WorkflowExecutor {
   }
 
   /**
-   * Resolves the `executeOptions` entries to the documents they configure,
-   * keyed by canonical document URI.
+   * Resolves each `executeOptions` entry to the canonical URI of the document
+   * its name points at, keyed by name.
    *
-   * Every way an entry can fail to name exactly one OpenAPI document throws
-   * here, before the run starts: sent to no API or to two, its options would
-   * be missing or misdirected with nothing to show for it until a request
-   * failed.
+   * Every way an entry can fail to name an OpenAPI document throws here,
+   * before the run starts: sent to no API, its options would be missing with
+   * nothing to show for it until a request failed.
    */
-  #executeOptionsByDocument(
+  #executeOptionsByName(
     executeOptions: Record<string, Record<string, unknown>>,
-  ): Map<string, Record<string, unknown>> {
-    const byDocument = new Map<string, Record<string, unknown>>();
+  ): Map<string, ExecuteOptionsEntry> {
+    const byName = new Map<string, ExecuteOptionsEntry>();
     const fail = (name: string, problem: string, reason: ExecutionErrorReason): never => {
       throw new ExecutionError(
         `executeOptions is keyed by source description name, and "${name}" ${problem}`,
@@ -619,18 +636,43 @@ class WorkflowExecutor {
       if (!isPlainObject(options)) {
         fail(name, 'is not given an object of options', ExecutionError.UnknownExecuteOption);
       }
-      if (byDocument.has(uri)) {
-        fail(
-          name,
-          `points at "${uri}", which another entry already configures`,
-          ExecutionError.AmbiguousExecuteOptions,
-        );
-      }
 
-      byDocument.set(uri, options);
+      byName.set(name, { uri, options });
     }
 
-    return byDocument;
+    return byName;
+  }
+
+  /**
+   * The entry for the step's operation: the entry of the name the step reached
+   * it through, when that is a name of the entry document with an entry;
+   * otherwise the one entry configuring the operation's document, if any.
+   */
+  #executeOptionsFor(
+    entries: Map<string, ExecuteOptionsEntry>,
+    locator: OpenAPIOperationLocator,
+    step: RequestContextStep,
+  ): Record<string, unknown> | undefined {
+    const source = locator.sourceDescription;
+    const named = source?.documentURI === this.#document.uri ? entries.get(source.name) : undefined;
+    if (named !== undefined) return named.options;
+
+    const documentURI = locator.document.uri;
+    const configuring = [...entries].filter(([, entry]) => entry.uri === documentURI);
+    if (configuring.length > 1) {
+      const names = configuring.map(([name]) => `"${name}"`).join(', ');
+      let through = 'a literal URL';
+      if (source?.documentURI === this.#document.uri) {
+        through = `"${source.name}", which has no entry`;
+      } else if (source !== undefined) {
+        through = `"${source.name}" of the Arazzo document at "${source.documentURI}"`;
+      }
+      throw new ExecutionError(
+        `Step "${step.stepId}" reaches "${documentURI}" through ${through}, and executeOptions entries ${names} all configure that document, so which applies is ambiguous`,
+        { ...step, reason: ExecutionError.AmbiguousExecuteOptions },
+      );
+    }
+    return configuring[0]?.[1].options;
   }
 
   /**

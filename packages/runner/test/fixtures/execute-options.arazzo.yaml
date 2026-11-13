@@ -55,6 +55,14 @@ workflows:
       - stepId: legacyOAuth
         operationId: $sourceDescriptions.legacyAPI.legacyWithOAuth
 
+  # the same OpenAPI document through both of its names
+  - workflowId: twoNames
+    steps:
+      - stepId: listPets
+        operationId: $sourceDescriptions.petsAPI.listPets
+      - stepId: listPetsAgain
+        operationId: $sourceDescriptions.petsAPIAgain.listPets
+
   - workflowId: throughNested
     steps:
       - stepId: nested
