@@ -24,6 +24,23 @@ import SourceDescriptionsLocatorNormalizer from './SourceDescriptionsLocatorNorm
 export interface OpenAPIOperationLocator {
   readonly document: OpenAPIDocument;
   readonly jsonPointer: string;
+  /**
+   * The source description the step reached the operation through. Absent when
+   * the reference names none (an `operationPath` with a literal URL) and on a
+   * locator built by hand.
+   */
+  readonly sourceDescription?: OpenAPIOperationSourceDescription;
+}
+
+/**
+ * A source description as an Arazzo document declares it: its `name`, and the
+ * URI of the Arazzo document that declares it. Names are local to their
+ * document, so the pair identifies one source description across a run.
+ * @public
+ */
+export interface OpenAPIOperationSourceDescription {
+  readonly name: string;
+  readonly documentURI: string;
 }
 
 /**
@@ -98,8 +115,10 @@ class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormali
     document: ArazzoDocument,
     scope?: StepScope,
   ): Promise<OpenAPIOperationLocator> {
+    let sourceName: string | undefined;
     for (const expression of extract(operationPath) ?? []) {
       const parsed = this.parseSourceDescriptionsExpression(expression);
+      sourceName ??= parsed?.sourceName;
       if (
         parsed !== undefined &&
         document.resolveSourceDescriptionURI(parsed.sourceName) === undefined
@@ -152,7 +171,13 @@ class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormali
       );
     }
 
-    return { document: source, jsonPointer };
+    return {
+      document: source,
+      jsonPointer,
+      ...(sourceName === undefined
+        ? {}
+        : { sourceDescription: { name: sourceName, documentURI: document.uri } }),
+    };
   }
 
   async #resolveSourced(
@@ -176,7 +201,11 @@ class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormali
         { ...scope, reason: ExecutionError.OperationNotFound },
       );
     }
-    return { document: openapiDocument, jsonPointer };
+    return {
+      document: openapiDocument,
+      jsonPointer,
+      sourceDescription: { name: sourceName, documentURI: document.uri },
+    };
   }
 
   /**
@@ -196,7 +225,8 @@ class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormali
     document: ArazzoDocument,
     scope: StepScope | undefined,
   ): Promise<OpenAPIOperationLocator> {
-    for (const uri of document.sourceDescriptionURIs()) {
+    for (const [name, { uri }] of document.sourceDescriptionIndex) {
+      if (uri === undefined) continue;
       const source = await this.registry.acquire(uri);
       if (!OpenAPIDocument.is(source)) continue;
 
@@ -207,7 +237,11 @@ class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormali
           { ...scope, reason: ExecutionError.OperationNotFound },
         );
       }
-      return { document: source, jsonPointer };
+      return {
+        document: source,
+        jsonPointer,
+        sourceDescription: { name, documentURI: document.uri },
+      };
     }
 
     // no source was named, so this is not a missing source description: there

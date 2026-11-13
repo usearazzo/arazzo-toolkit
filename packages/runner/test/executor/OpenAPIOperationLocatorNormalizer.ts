@@ -59,6 +59,7 @@ describe('OpenAPIOperationLocatorNormalizer', function () {
 
       assert.strictEqual(locator.document.uri, expectedSourceURI());
       assert.strictEqual(locator.jsonPointer, '/paths/~1pet~1findByStatus/get');
+      assert.deepEqual(locator.sourceDescription, { name: 'petstoreAPI', documentURI: entry.uri });
     });
 
     specify('should resolve a $sourceDescriptions operationId expression', async function () {
@@ -69,6 +70,7 @@ describe('OpenAPIOperationLocatorNormalizer', function () {
 
       assert.strictEqual(locator.document.uri, expectedSourceURI());
       assert.strictEqual(locator.jsonPointer, '/paths/~1pet~1findByStatus/get');
+      assert.deepEqual(locator.sourceDescription, { name: 'petstoreAPI', documentURI: entry.uri });
     });
 
     specify('should reject a plain operationId its OpenAPI source lacks', async function () {
@@ -172,6 +174,10 @@ describe('OpenAPIOperationLocatorNormalizer', function () {
         assert.strictEqual(locator.document.uri, expectedSourceURI());
         assert.match(locator.document.uri, /\/fixtures\/petstore\.openapi\.json$/);
         assert.strictEqual(locator.jsonPointer, '/paths/~1pet~1findByStatus/get');
+        assert.deepEqual(locator.sourceDescription, {
+          name: 'petstoreAPI',
+          documentURI: entry.uri,
+        });
       },
     );
 
@@ -184,6 +190,8 @@ describe('OpenAPIOperationLocatorNormalizer', function () {
 
       assert.strictEqual(locator.document.uri, expectedSourceURI());
       assert.strictEqual(locator.jsonPointer, '/paths/~1pet~1findByStatus/get');
+      // a literal url names no source description
+      assert.notProperty(locator, 'sourceDescription');
     });
 
     specify('should decode a percent-encoded JSON Pointer fragment', async function () {
