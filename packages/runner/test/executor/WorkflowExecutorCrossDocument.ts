@@ -12,6 +12,7 @@ import {
   ExecutionError,
   type HTTPClient,
   type OpenAPIOperationRequest,
+  type RequestContext,
   type StepRunRecord,
   type RetryReferenceRecord,
   type WorkflowExecutionResult,
@@ -153,6 +154,46 @@ describe('WorkflowExecutor cross-document references', function () {
         assert.match(result.outputs.childSource as string, /cross-document-child\.openapi\.json$/);
         // the nested run is recorded under the bare foreign workflowId.
         assert.strictEqual(subWorkflowsOf(result.steps[0])[0].workflowId, 'childFetch');
+      },
+    );
+
+    specify(
+      'should tell interceptors which document declares the source description',
+      async function () {
+        // both documents name their API petstoreAPI; the declaring document is
+        // what tells the two apart.
+        const contexts: RequestContext[] = [];
+        const executor = new WorkflowExecutor({
+          document: entry,
+          registry,
+          stepExecutor: new StepExecutor({
+            document: entry,
+            registry,
+            operationExecutor: new OpenAPIOperationExecutor({
+              httpClient: async () =>
+                new Response(JSON.stringify(okResponse.body), {
+                  status: okResponse.status,
+                  headers: { 'content-type': 'application/json' },
+                }),
+              requestInterceptor: (_request, context) => {
+                contexts.push(context);
+              },
+            }),
+          }),
+        });
+
+        await executor.execute('crossDocumentStep');
+
+        assert.deepEqual(
+          contexts.map((context) => context.operation.sourceDescription),
+          [
+            {
+              name: 'petstoreAPI',
+              documentURI: entry.resolveSourceDescriptionURI('childWorkflows')!,
+            },
+            { name: 'petstoreAPI', documentURI: entry.uri },
+          ],
+        );
       },
     );
 

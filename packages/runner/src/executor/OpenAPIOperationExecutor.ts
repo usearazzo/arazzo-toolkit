@@ -30,7 +30,10 @@ import OpenAPIOperationExtractor from '../extractor/OpenAPIOperationExtractor.ts
 import OpenAPIOperationNormalizer from '../normalizer/OpenAPIOperationNormalizer.ts';
 import OpenAPIDocumentAssembler from '../assembler/OpenAPIDocumentAssembler.ts';
 import ClientError from '../errors/ClientError.ts';
-import type { OpenAPIOperationLocator } from './OpenAPIOperationLocatorNormalizer.ts';
+import type {
+  OpenAPIOperationLocator,
+  OpenAPIOperationSourceDescription,
+} from './OpenAPIOperationLocatorNormalizer.ts';
 
 /**
  * The Arazzo step a request is issued for: its `stepId`, and the `workflowId`
@@ -49,9 +52,10 @@ export interface RequestContextStep {
  * expanded URL.
  *
  * `operation` is always present: it is the operation's locator — its canonical
- * OpenAPI document URI and the JSON Pointer to it — plus the `operationId` the
- * document declares, if any. `step` is present only when the request is issued
- * for an Arazzo step, i.e. through the step executor (and so the runner); an
+ * OpenAPI document URI, the JSON Pointer to it and, when the locator carries
+ * one, the source description it was located through — plus the `operationId`
+ * the document declares, if any. `step` is present only when the request is
+ * issued for an Arazzo step, i.e. through the step executor (and so the runner); an
  * {@link OpenAPIOperationExecutor} used on its own receives it only when its
  * caller passes `step` in the execute options. Absent fields are omitted, never
  * `undefined`.
@@ -62,6 +66,7 @@ export interface RequestContext {
     readonly documentURI: string;
     readonly jsonPointer: string;
     readonly operationId?: string;
+    readonly sourceDescription?: OpenAPIOperationSourceDescription;
   };
   readonly step?: RequestContextStep;
 }
@@ -368,6 +373,9 @@ class OpenAPIOperationExecutor {
         documentURI: locator.document.uri,
         jsonPointer: locator.jsonPointer,
         ...(typeof declaredOperationId === 'string' ? { operationId: declaredOperationId } : {}),
+        ...(locator.sourceDescription === undefined
+          ? {}
+          : { sourceDescription: { ...locator.sourceDescription } }),
       },
       // a copy, so an interceptor editing it cannot rewrite the caller's object
       // (the step executor reuses it to attribute errors)

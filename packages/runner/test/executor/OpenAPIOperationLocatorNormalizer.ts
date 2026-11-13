@@ -59,6 +59,7 @@ describe('OpenAPIOperationLocatorNormalizer', function () {
 
       assert.strictEqual(locator.document.uri, expectedSourceURI());
       assert.strictEqual(locator.jsonPointer, '/paths/~1pet~1findByStatus/get');
+      assert.deepEqual(locator.sourceDescription, { name: 'petstoreAPI', documentURI: entry.uri });
     });
 
     specify('should resolve a $sourceDescriptions operationId expression', async function () {
@@ -69,6 +70,7 @@ describe('OpenAPIOperationLocatorNormalizer', function () {
 
       assert.strictEqual(locator.document.uri, expectedSourceURI());
       assert.strictEqual(locator.jsonPointer, '/paths/~1pet~1findByStatus/get');
+      assert.deepEqual(locator.sourceDescription, { name: 'petstoreAPI', documentURI: entry.uri });
     });
 
     specify('should reject a plain operationId its OpenAPI source lacks', async function () {
@@ -172,6 +174,10 @@ describe('OpenAPIOperationLocatorNormalizer', function () {
         assert.strictEqual(locator.document.uri, expectedSourceURI());
         assert.match(locator.document.uri, /\/fixtures\/petstore\.openapi\.json$/);
         assert.strictEqual(locator.jsonPointer, '/paths/~1pet~1findByStatus/get');
+        assert.deepEqual(locator.sourceDescription, {
+          name: 'petstoreAPI',
+          documentURI: entry.uri,
+        });
       },
     );
 
@@ -184,7 +190,23 @@ describe('OpenAPIOperationLocatorNormalizer', function () {
 
       assert.strictEqual(locator.document.uri, expectedSourceURI());
       assert.strictEqual(locator.jsonPointer, '/paths/~1pet~1findByStatus/get');
+      // a literal url names no source description
+      assert.notProperty(locator, 'sourceDescription');
     });
+
+    specify(
+      'should not take the source description from an expression other than url',
+      async function () {
+        // the url is literal; the trailing expression names a source but builds no part of it
+        const locator = await normalizer.normalizeOperationPath(
+          `${expectedSourceURI()}{$sourceDescriptions.petstoreAPI.nosuch}#/paths/~1pet~1findByStatus/get`,
+          entry,
+        );
+
+        assert.strictEqual(locator.document.uri, expectedSourceURI());
+        assert.notProperty(locator, 'sourceDescription');
+      },
+    );
 
     specify('should decode a percent-encoded JSON Pointer fragment', async function () {
       // ~1 is the JSON Pointer escape for '/'; a percent-encoded fragment must

@@ -254,6 +254,9 @@ describe('ArazzoRunner', function () {
         executeOptions: { petstoreAPI: { requestInterceptor: record } },
       });
 
+      assert.isTrue(
+        contexts.every((context) => context.operation.sourceDescription?.name === 'petstoreAPI'),
+      );
       assert.deepEqual(
         contexts.map((context) => [context.step, context.operation.operationId]),
         [
