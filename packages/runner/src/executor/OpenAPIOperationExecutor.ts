@@ -868,18 +868,13 @@ class OpenAPIOperationExecutor {
     finalized = (await perCallInterceptor?.(finalized, context)) ?? finalized;
 
     // for multipart/form-data, remove the built content-type so the transport
-    // sets one carrying the correct boundary; one that already names a
-    // boundary is kept, since an interceptor set it for the body it built
-    const contentType = finalized.headers['content-type'] ?? finalized.headers['Content-Type'];
-    const mediaType =
-      typeof contentType === 'string' ? parse(contentType, { type: 'media-type' }).tree : undefined;
-    if (
-      mediaType?.type === 'multipart' &&
-      mediaType.subtype === 'form-data' &&
-      mediaType.parameters.boundary === undefined
-    ) {
-      delete finalized.headers['content-type'];
-      delete finalized.headers['Content-Type'];
+    // sets one carrying the correct boundary; one that names a boundary is
+    // kept, since an interceptor set it for the body it built
+    for (const name of ['content-type', 'Content-Type']) {
+      const contentType = finalized.headers[name];
+      if (typeof contentType !== 'string' || !/multipart\/form-data/i.test(contentType)) continue;
+      const boundary = parse(contentType, { type: 'media-type' }).tree?.parameters.boundary;
+      if (!boundary) delete finalized.headers[name];
     }
     return finalized;
   }

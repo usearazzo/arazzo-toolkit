@@ -803,6 +803,41 @@ describe('OpenAPIOperationExecutor', function () {
 
       assert.strictEqual(contentTypeOf(requests[0]), 'multipart/form-data; boundary=X');
     });
+
+    specify('should match the boundary regardless of case', async function () {
+      const { executor, requests } = makeExecutor({
+        requestInterceptor: (request) => {
+          request.headers['Content-Type'] = 'Multipart/Form-Data; BOUNDARY=X';
+        },
+      });
+
+      await executor.execute(multipartLocator, {
+        requestBody: { name: 'report' },
+        requestContentType: 'multipart/form-data',
+      });
+
+      assert.strictEqual(contentTypeOf(requests[0]), 'Multipart/Form-Data; BOUNDARY=X');
+    });
+
+    for (const contentType of [
+      'multipart/form-data; boundary=""',
+      'multipart/form-data; boundary',
+    ]) {
+      specify(`should leave ${contentType} to the transport`, async function () {
+        const { executor, requests } = makeExecutor({
+          requestInterceptor: (request) => {
+            request.headers['Content-Type'] = contentType;
+          },
+        });
+
+        await executor.execute(multipartLocator, {
+          requestBody: { name: 'report' },
+          requestContentType: 'multipart/form-data',
+        });
+
+        assert.isUndefined(contentTypeOf(requests[0]));
+      });
+    }
   });
 
   context('given parameters the operation does not declare', function () {
