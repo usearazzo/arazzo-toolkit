@@ -12,7 +12,7 @@ import {
   cookieNameLenientValidator,
   cookieValueStrictPercentEncoder,
 } from '@swaggerexpert/cookie';
-import { identify, matches, selectBestMatch } from '@swaggerexpert/media-types';
+import { identify, matches, parse, selectBestMatch } from '@swaggerexpert/media-types';
 import { isPlainObject } from 'ramda-adjunct';
 
 // @ts-expect-error vendored swagger-client bundle has no type declarations
@@ -868,9 +868,16 @@ class OpenAPIOperationExecutor {
     finalized = (await perCallInterceptor?.(finalized, context)) ?? finalized;
 
     // for multipart/form-data, remove the built content-type so the transport
-    // sets one carrying the correct boundary
+    // sets one carrying the correct boundary; one that already names a
+    // boundary is kept, since an interceptor set it for the body it built
     const contentType = finalized.headers['content-type'] ?? finalized.headers['Content-Type'];
-    if (typeof contentType === 'string' && /multipart\/form-data/i.test(contentType)) {
+    const mediaType =
+      typeof contentType === 'string' ? parse(contentType, { type: 'media-type' }).tree : undefined;
+    if (
+      mediaType?.type === 'multipart' &&
+      mediaType.subtype === 'form-data' &&
+      mediaType.parameters.boundary === undefined
+    ) {
       delete finalized.headers['content-type'];
       delete finalized.headers['Content-Type'];
     }

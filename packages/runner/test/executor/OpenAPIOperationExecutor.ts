@@ -760,6 +760,51 @@ describe('OpenAPIOperationExecutor', function () {
     });
   });
 
+  context('given a multipart/form-data request body', function () {
+    let multipartLocator: OpenAPIOperationLocator;
+
+    before(async function () {
+      const document = (await new DocumentRegistry().acquire(
+        path.join(fixturesPath, 'multipart.openapi.json'),
+      )) as OpenAPIDocument;
+      multipartLocator = {
+        document,
+        jsonPointer: document.operationIndex.get('uploadFile')!,
+      };
+    });
+
+    const contentTypeOf = (request: OpenAPIOperationRequest): string | undefined =>
+      request.headers['Content-Type'] ?? request.headers['content-type'];
+
+    specify('should leave the content type to the transport', async function () {
+      const { executor, requests } = makeExecutor();
+
+      await executor.execute(multipartLocator, {
+        requestBody: { name: 'report' },
+        requestContentType: 'multipart/form-data',
+      });
+
+      assert.isUndefined(contentTypeOf(requests[0]));
+    });
+
+    specify('should keep a content type an interceptor gave a boundary', async function () {
+      const { executor, requests } = makeExecutor({
+        requestInterceptor: (request) => {
+          request.body =
+            '--X\r\nContent-Disposition: form-data; name="name"\r\n\r\nreport\r\n--X--\r\n';
+          request.headers['Content-Type'] = 'multipart/form-data; boundary=X';
+        },
+      });
+
+      await executor.execute(multipartLocator, {
+        requestBody: { name: 'report' },
+        requestContentType: 'multipart/form-data',
+      });
+
+      assert.strictEqual(contentTypeOf(requests[0]), 'multipart/form-data; boundary=X');
+    });
+  });
+
   context('given parameters the operation does not declare', function () {
     let undeclaredDoc: OpenAPIDocument;
     const locatorFor = (operationId: string): OpenAPIOperationLocator =>
