@@ -13,6 +13,8 @@ import {
   InvalidEntryDocumentError,
   type HTTPClient,
   type OpenAPIOperationRequest,
+  type RequestContext,
+  type RequestInterceptor,
 } from '../src/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -235,6 +237,32 @@ describe('ArazzoRunner', function () {
 
       assert.strictEqual(calls.length, 2);
       assert.isTrue(calls.every((request) => request.headers['x-trace'] === 'abc'));
+    });
+
+    specify('should hand the interceptors the step each request is for', async function () {
+      const contexts: RequestContext[] = [];
+      const record: RequestInterceptor = (_request, context) => {
+        contexts.push(context);
+      };
+      const runner = await ArazzoRunner.load(entryPath, {
+        httpClient: makeHTTPClient([]),
+        requestInterceptor: record,
+      });
+
+      await runner.execute('linear', {
+        inputs: { status: 'available' },
+        executeOptions: { petstoreAPI: { requestInterceptor: record } },
+      });
+
+      assert.deepEqual(
+        contexts.map((context) => [context.step, context.operation.operationId]),
+        [
+          [{ workflowId: 'linear', stepId: 'findPets' }, 'findPetsByStatus'],
+          [{ workflowId: 'linear', stepId: 'findPets' }, 'findPetsByStatus'],
+          [{ workflowId: 'linear', stepId: 'getPet' }, 'getPetById'],
+          [{ workflowId: 'linear', stepId: 'getPet' }, 'getPetById'],
+        ],
+      );
     });
 
     specify('should send step parameters the operation does not declare', async function () {

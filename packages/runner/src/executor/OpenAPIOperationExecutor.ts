@@ -1,3 +1,4 @@
+import { omit } from 'ramda';
 import { toValue } from '@speclynx/apidom-core';
 import { isArrayElement, isObjectElement } from '@speclynx/apidom-datamodel';
 import { url as urlUtils } from '@speclynx/apidom-reference/configuration/empty';
@@ -32,15 +33,57 @@ import ClientError from '../errors/ClientError.ts';
 import type { OpenAPIOperationLocator } from './OpenAPIOperationLocatorNormalizer.ts';
 
 /**
+ * The Arazzo step a request is issued for: its `stepId`, and the `workflowId`
+ * of the workflow it belongs to when the caller names one (step ids are only
+ * unique within a workflow).
+ * @public
+ */
+export interface RequestContextStep {
+  readonly stepId: string;
+  readonly workflowId?: string;
+}
+
+/**
+ * Identifies the request a {@link RequestInterceptor} receives, so an
+ * interceptor can target one operation or one step without matching on the
+ * expanded URL.
+ *
+ * `operation` is always present: it is the operation's locator — its canonical
+ * OpenAPI document URI and the JSON Pointer to it — plus the `operationId` the
+ * document declares, if any. `step` is present only when the request is issued
+ * for an Arazzo step, i.e. through the step executor (and so the runner); an
+ * {@link OpenAPIOperationExecutor} used on its own receives it only when its
+ * caller passes `step` in the execute options. Absent fields are omitted, never
+ * `undefined`.
+ * @public
+ */
+export interface RequestContext {
+  readonly operation: {
+    readonly documentURI: string;
+    readonly jsonPointer: string;
+    readonly operationId?: string;
+  };
+  readonly step?: RequestContextStep;
+}
+
+/**
  * Decorates the built request before it is handed to the {@link HTTPClient}.
  *
  * Receives the finalized {@link OpenAPIOperationRequest} and may mutate it in
  * place or return a replacement; returning nothing keeps the received request.
- * May be synchronous or asynchronous.
+ * May be synchronous or asynchronous. The second argument identifies what the
+ * request is for (see {@link RequestContext}); an interceptor that has no use
+ * for it may declare only the first.
+ *
+ * Interceptors run after the body is serialized (a plain-object or array body
+ * is already a JSON string, so a signature covers the exact bytes sent) and
+ * after newlines in header values are squashed, and before the request is
+ * captured for `$request.*` and handed to the transport.
  * @public
  */
 export type RequestInterceptor = (
   request: OpenAPIOperationRequest,
+  context: RequestContext,
 ) => OpenAPIOperationRequest | void | Promise<OpenAPIOperationRequest | void>;
 
 /**
@@ -159,7 +202,16 @@ export interface OpenAPIOperationExecuteOptions {
    */
   readonly securities?: OpenAPIOperationSecurities;
   readonly signal?: AbortSignal;
+  /**
+   * Runs after the executor-level interceptor, for this call only.
+   */
   readonly requestInterceptor?: RequestInterceptor;
+  /**
+   * The Arazzo step this call is issued for, handed to both interceptors as
+   * {@link RequestContext.step}. The step executor sets it; it is not
+   * forwarded to `buildRequest`.
+   */
+  readonly step?: RequestContextStep;
 }
 
 /**
@@ -174,12 +226,12 @@ export interface OpenAPIOperationExecuteOptions {
  * needed a `contextUrl`, so reaching for that here means an edge case: tests
  * standing in for a document fetched over HTTP.
  *
- * Two kinds of entry are inert rather than honored, since the executor owns
+ * Two kinds of entry are dropped rather than honored, since the executor owns
  * what they used to control. The operation target always comes from the
  * locator, so `operationId`/`operationPath` have no effect; and the options
  * only swagger-client's `execute()` ever read — `userFetch` and
  * `responseInterceptor`, which the runner replaces with `httpClient` and
- * `responseNormalizer` — reach `buildRequest` but nothing acts on them.
+ * `responseNormalizer` — never reach `buildRequest`.
  * @public
  */
 export type OpenAPIOperationExecuteOptionsBag = OpenAPIOperationExecuteOptions &
@@ -295,9 +347,32 @@ class OpenAPIOperationExecutor {
     );
     const assembled = this.#documentAssembler.assemble(normalizedOperation, locator.document);
 
-    // the interceptor is consumed here, and the target always comes from the
-    // locator, so both operation keys are dropped rather than rest
-    const { requestInterceptor, operationId: _, operationPath: __, ...rest } = executeOptions;
+    // the interceptor and step are consumed here, the target always comes from
+    // the locator, and the transport is the httpClient, so none of these
+    // reach buildRequest
+    const { requestInterceptor, step } = executeOptions;
+    const rest = omit(
+      [
+        'requestInterceptor',
+        'step',
+        'operationId',
+        'operationPath',
+        'userFetch',
+        'responseInterceptor',
+      ],
+      executeOptions,
+    );
+    const declaredOperationId = toValue(operation.operationId);
+    const context: RequestContext = {
+      operation: {
+        documentURI: locator.document.uri,
+        jsonPointer: locator.jsonPointer,
+        ...(typeof declaredOperationId === 'string' ? { operationId: declaredOperationId } : {}),
+      },
+      // a copy, so an interceptor editing it cannot rewrite the caller's object
+      // (the step executor reuses it to attribute errors)
+      ...(step === undefined ? {} : { step: { ...step } }),
+    };
 
     // each step derives the next options rather than editing in place
     const withServer = this.#applyServerOptions(rest, normalizedOperation, locator.document);
@@ -346,7 +421,7 @@ class OpenAPIOperationExecutor {
     }
 
     this.#deliverHeadersAndCookies(request, undeclared);
-    request = await this.#finalizeRequest(request, requestInterceptor);
+    request = await this.#finalizeRequest(request, requestInterceptor, context);
 
     // capture the request as sent, so `$url` / `$method` / `$request.*` can be
     // evaluated after execution; headers are copied so a transport-side
@@ -760,6 +835,7 @@ class OpenAPIOperationExecutor {
   async #finalizeRequest(
     request: OpenAPIOperationRequest,
     perCallInterceptor: RequestInterceptor | undefined,
+    context: RequestContext,
   ): Promise<OpenAPIOperationRequest> {
     let finalized = request;
 
@@ -780,8 +856,8 @@ class OpenAPIOperationExecutor {
       }
     });
 
-    finalized = (await this.#requestInterceptor?.(finalized)) ?? finalized;
-    finalized = (await perCallInterceptor?.(finalized)) ?? finalized;
+    finalized = (await this.#requestInterceptor?.(finalized, context)) ?? finalized;
+    finalized = (await perCallInterceptor?.(finalized, context)) ?? finalized;
 
     // for multipart/form-data, remove the built content-type so the transport
     // sets one carrying the correct boundary

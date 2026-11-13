@@ -19,6 +19,7 @@ import {
   type HTTPClient,
   type OpenAPIOperationLocator,
   type OpenAPIOperationRequest,
+  type RequestContext,
 } from '../../src/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -127,6 +128,54 @@ describe('StepExecutor', function () {
         assert.include(requests[0].url, 'https://function.example/api/pet/findByStatus');
       },
     );
+  });
+
+  context('request context', function () {
+    const step = () =>
+      refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: '$inputs.preferredPetStatus' }],
+      }) as StepElement;
+
+    const makeContextExecutor = (contexts: RequestContext[]): StepExecutor =>
+      new StepExecutor({
+        document: entry,
+        registry,
+        operationExecutor: new OpenAPIOperationExecutor({
+          httpClient: async () => okResponse(),
+          requestInterceptor: (_request, context) => {
+            contexts.push(context);
+          },
+        }),
+      });
+
+    specify('should hand the interceptors the step and its workflow', async function () {
+      const contexts: RequestContext[] = [];
+
+      await makeContextExecutor(contexts).execute(step(), state(), {}, 'findPetsWorkflow');
+
+      assert.deepEqual(contexts[0].step, { workflowId: 'findPetsWorkflow', stepId: 'findPets' });
+      assert.strictEqual(contexts[0].operation.operationId, 'findPetsByStatus');
+    });
+
+    specify('should omit the workflowId when the caller names none', async function () {
+      const contexts: RequestContext[] = [];
+
+      await makeContextExecutor(contexts).execute(step(), state());
+
+      assert.deepEqual(contexts[0].step, { stepId: 'findPets' });
+    });
+
+    specify('should not let an execute options bag override the step', async function () {
+      const contexts: RequestContext[] = [];
+
+      await makeContextExecutor(contexts).execute(step(), state(), {
+        step: { stepId: 'spoofed' },
+      });
+
+      assert.deepEqual(contexts[0].step, { stepId: 'findPets' });
+    });
   });
 
   context('operation resolution', function () {
