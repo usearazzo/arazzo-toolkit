@@ -135,7 +135,8 @@ export interface WorkflowExecuteOptions {
    * any other way — through a name without an entry, through a name of
    * another Arazzo document, or through a literal URL — gets the one entry
    * configuring that document; it gets nothing when no entry does, and throws
-   * when several do, since nothing says which applies. Steps of an API without
+   * when several do, since nothing says which applies. That throw comes at the
+   * step, so the steps before it have already run. Steps of an API without
    * an entry get no options.
    *
    * A key naming no source description, one naming a source description that
@@ -391,11 +392,6 @@ interface DependencyRun {
 }
 
 /**
- * The state shared by every workflow invocation of a single
- * {@link WorkflowExecutor.execute} call — the caller's per-run options plus the
- * two mutable ledgers that must span the whole call tree.
- */
-/**
  * One `executeOptions` entry and the canonical URI of the document its name
  * points at.
  */
@@ -404,6 +400,11 @@ interface ExecuteOptionsEntry {
   readonly options: Record<string, unknown>;
 }
 
+/**
+ * The state shared by every workflow invocation of a single
+ * {@link WorkflowExecutor.execute} call — the caller's per-run options plus the
+ * two mutable ledgers that must span the whole call tree.
+ */
 interface RunScope {
   /**
    * The execute options of a step, by the operation it was located to.
