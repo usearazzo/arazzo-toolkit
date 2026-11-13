@@ -118,7 +118,8 @@ class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormali
     let sourceName: string | undefined;
     for (const expression of extract(operationPath) ?? []) {
       const parsed = this.parseSourceDescriptionsExpression(expression);
-      sourceName ??= parsed?.sourceName;
+      // only the source whose url the path is built from names its document
+      if (parsed?.reference === 'url') sourceName ??= parsed.sourceName;
       if (
         parsed !== undefined &&
         document.resolveSourceDescriptionURI(parsed.sourceName) === undefined

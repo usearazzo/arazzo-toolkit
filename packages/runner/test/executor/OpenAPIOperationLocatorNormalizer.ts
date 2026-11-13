@@ -194,6 +194,20 @@ describe('OpenAPIOperationLocatorNormalizer', function () {
       assert.notProperty(locator, 'sourceDescription');
     });
 
+    specify(
+      'should not take the source description from an expression other than url',
+      async function () {
+        // the url is literal; the trailing expression names a source but builds no part of it
+        const locator = await normalizer.normalizeOperationPath(
+          `${expectedSourceURI()}{$sourceDescriptions.petstoreAPI.nosuch}#/paths/~1pet~1findByStatus/get`,
+          entry,
+        );
+
+        assert.strictEqual(locator.document.uri, expectedSourceURI());
+        assert.notProperty(locator, 'sourceDescription');
+      },
+    );
+
     specify('should decode a percent-encoded JSON Pointer fragment', async function () {
       // ~1 is the JSON Pointer escape for '/'; a percent-encoded fragment must
       // decode to the same pointer.
