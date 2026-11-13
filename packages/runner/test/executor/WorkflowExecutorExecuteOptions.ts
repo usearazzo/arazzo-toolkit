@@ -320,6 +320,17 @@ describe('WorkflowExecutor — executeOptions per source description', function 
       assert.strictEqual(calls[1].url, 'https://two.example/pets');
     });
 
+    specify('should throw for a step through a name without an entry', async function () {
+      const { runner, calls } = await makeRunner();
+
+      const error = await captureError(runner.execute('thirdName', { executeOptions }));
+
+      assert.strictEqual(error.reason, ExecutionError.AmbiguousExecuteOptions);
+      assert.strictEqual(error.stepId, 'listPets');
+      assert.include(error.message, '"petsAPIThird", which has no entry');
+      assert.isEmpty(calls);
+    });
+
     specify(
       'should throw for a nested step that reaches the document by its own name',
       async function () {
