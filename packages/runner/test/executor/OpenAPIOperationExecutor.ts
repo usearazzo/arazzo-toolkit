@@ -835,6 +835,23 @@ describe('OpenAPIOperationExecutor', function () {
       assert.notProperty(requests[0].headers, 'Content-type');
     });
 
+    specify('should check the content type under every spelling', async function () {
+      const { executor, requests } = makeExecutor({
+        requestInterceptor: (request) => {
+          // the built Content-Type stays; this adds a second one
+          request.headers['content-type'] = 'multipart/form-data';
+        },
+      });
+
+      await executor.execute(multipartLocator, {
+        requestBody: { name: 'report' },
+        requestContentType: 'multipart/form-data',
+      });
+
+      assert.notProperty(requests[0].headers, 'Content-Type');
+      assert.notProperty(requests[0].headers, 'content-type');
+    });
+
     for (const contentType of [
       'multipart/form-data; boundary=""',
       'multipart/form-data; boundary',
