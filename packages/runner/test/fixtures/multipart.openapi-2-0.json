@@ -1,0 +1,16 @@
+{
+  "swagger": "2.0",
+  "info": { "title": "Multipart upload", "version": "1.0.0" },
+  "host": "upload.example",
+  "schemes": ["https"],
+  "paths": {
+    "/files": {
+      "post": {
+        "operationId": "uploadFile",
+        "consumes": ["multipart/form-data"],
+        "parameters": [{ "name": "name", "in": "formData", "type": "string" }],
+        "responses": { "200": { "description": "Uploaded" } }
+      }
+    }
+  }
+}

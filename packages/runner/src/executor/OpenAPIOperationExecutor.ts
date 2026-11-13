@@ -877,7 +877,7 @@ class OpenAPIOperationExecutor {
       if (name.toLowerCase() !== 'content-type' || typeof contentType !== 'string') continue;
       if (!/multipart\/form-data/i.test(contentType)) continue;
       const boundary = parse(contentType, { type: 'media-type' }).tree?.parameters.boundary;
-      if (encodedByTransport || !boundary) delete finalized.headers[name];
+      if (encodedByTransport || !boundary?.trim()) delete finalized.headers[name];
     }
     return finalized;
   }

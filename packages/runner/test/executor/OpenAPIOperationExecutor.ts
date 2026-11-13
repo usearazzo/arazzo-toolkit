@@ -776,6 +776,10 @@ describe('OpenAPIOperationExecutor', function () {
     const contentTypeOf = (request: OpenAPIOperationRequest): string | undefined =>
       request.headers['Content-Type'] ?? request.headers['content-type'];
 
+    // the form fields a server reads from the request, encoded as fetch would
+    const formFieldsOf = async (request: OpenAPIOperationRequest): Promise<unknown> =>
+      Object.fromEntries(await new Request(request.url, request as RequestInit).formData());
+
     specify('should leave the content type to the transport', async function () {
       const { executor, requests } = makeExecutor();
 
@@ -785,6 +789,7 @@ describe('OpenAPIOperationExecutor', function () {
       });
 
       assert.isUndefined(contentTypeOf(requests[0]));
+      assert.deepEqual(await formFieldsOf(requests[0]), { name: 'report' });
     });
 
     specify('should keep a content type an interceptor gave a boundary', async function () {
@@ -802,6 +807,7 @@ describe('OpenAPIOperationExecutor', function () {
       });
 
       assert.strictEqual(contentTypeOf(requests[0]), 'multipart/form-data; boundary=X');
+      assert.deepEqual(await formFieldsOf(requests[0]), { name: 'report' });
     });
 
     specify('should match the boundary regardless of case', async function () {
@@ -848,7 +854,30 @@ describe('OpenAPIOperationExecutor', function () {
 
       assert.instanceOf(requests[0].body, FormData);
       assert.isUndefined(contentTypeOf(requests[0]));
+      assert.deepEqual(await formFieldsOf(requests[0]), { name: 'report' });
     });
+
+    specify(
+      'should leave the content type of a Swagger 2.0 form to the transport',
+      async function () {
+        const document = (await new DocumentRegistry().acquire(
+          path.join(fixturesPath, 'multipart.openapi-2-0.json'),
+        )) as OpenAPIDocument;
+        const { executor, requests } = makeExecutor();
+
+        await executor.execute(
+          { document, jsonPointer: document.operationIndex.get('uploadFile')! },
+          {
+            parameters: { 'formData.name': 'report' },
+            requestContentType: 'multipart/form-data; boundary=abc',
+          },
+        );
+
+        assert.instanceOf(requests[0].body, FormData);
+        assert.isUndefined(contentTypeOf(requests[0]));
+        assert.deepEqual(await formFieldsOf(requests[0]), { name: 'report' });
+      },
+    );
 
     specify('should leave a content type that is not a string alone', async function () {
       const { executor, requests } = makeExecutor({
@@ -885,11 +914,14 @@ describe('OpenAPIOperationExecutor', function () {
 
     for (const contentType of [
       'multipart/form-data; boundary=""',
+      'multipart/form-data; boundary=" "',
       'multipart/form-data; boundary',
     ]) {
-      specify(`should leave ${contentType} to the transport`, async function () {
+      specify(`should drop ${contentType} even for a body it did not encode`, async function () {
+        // a string body, so only the boundary decides: a FormData one is dropped anyway
         const { executor, requests } = makeExecutor({
           requestInterceptor: (request) => {
+            request.body = '--X--\r\n';
             request.headers['Content-Type'] = contentType;
           },
         });
