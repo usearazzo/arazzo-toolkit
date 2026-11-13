@@ -20,6 +20,7 @@ import {
   type OpenAPIOperationLocator,
   type OpenAPIOperationRequest,
   type RequestContext,
+  type RequestContextStep,
 } from '../../src/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -116,13 +117,21 @@ describe('StepExecutor', function () {
       async function () {
         const { executor, requests } = makeExecutor();
         const locators: OpenAPIOperationLocator[] = [];
+        const steps: RequestContextStep[] = [];
 
-        await executor.execute(step(), state(), (locator) => {
-          locators.push(locator);
-          return { server: 'https://function.example/api' };
-        });
+        await executor.execute(
+          step(),
+          state(),
+          (locator, calledFor) => {
+            locators.push(locator);
+            steps.push(calledFor);
+            return { server: 'https://function.example/api' };
+          },
+          'findPetsWorkflow',
+        );
 
         assert.lengthOf(locators, 1);
+        assert.deepEqual(steps, [{ workflowId: 'findPetsWorkflow', stepId: 'findPets' }]);
         assert.match(locators[0].document.uri, /petstore\.openapi\.json$/);
         assert.strictEqual(locators[0].jsonPointer, '/paths/~1pet~1findByStatus/get');
         assert.include(requests[0].url, 'https://function.example/api/pet/findByStatus');
