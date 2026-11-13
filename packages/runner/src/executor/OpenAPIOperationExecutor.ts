@@ -870,17 +870,15 @@ class OpenAPIOperationExecutor {
     // for multipart/form-data, remove the built content-type so the transport
     // sets one carrying the correct boundary; one that names a boundary is
     // kept, since an interceptor set it for the body it built
-    const name = Object.keys(finalized.headers).find(
-      (header) => header.toLowerCase() === 'content-type',
+    const contentType = Object.entries(finalized.headers).find(
+      ([header]) => header.toLowerCase() === 'content-type',
     );
-    const contentType = name === undefined ? undefined : finalized.headers[name];
     if (
-      name !== undefined &&
-      typeof contentType === 'string' &&
-      /multipart\/form-data/i.test(contentType) &&
-      !parse(contentType, { type: 'media-type' }).tree?.parameters.boundary
+      contentType !== undefined &&
+      /multipart\/form-data/i.test(contentType[1]) &&
+      !parse(contentType[1], { type: 'media-type' }).tree?.parameters.boundary
     ) {
-      delete finalized.headers[name];
+      delete finalized.headers[contentType[0]];
     }
     return finalized;
   }
