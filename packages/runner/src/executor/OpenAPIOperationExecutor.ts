@@ -1,3 +1,4 @@
+import { omit } from 'ramda';
 import { toValue } from '@speclynx/apidom-core';
 import { isArrayElement, isObjectElement } from '@speclynx/apidom-datamodel';
 import { url as urlUtils } from '@speclynx/apidom-reference/configuration/empty';
@@ -349,15 +350,18 @@ class OpenAPIOperationExecutor {
     // the interceptor and step are consumed here, the target always comes from
     // the locator, and the transport is the httpClient, so none of these
     // reach buildRequest
-    const {
-      requestInterceptor,
-      step,
-      operationId: _,
-      operationPath: __,
-      userFetch: ___,
-      responseInterceptor: ____,
-      ...rest
-    } = executeOptions;
+    const { requestInterceptor, step } = executeOptions;
+    const rest = omit(
+      [
+        'requestInterceptor',
+        'step',
+        'operationId',
+        'operationPath',
+        'userFetch',
+        'responseInterceptor',
+      ],
+      executeOptions,
+    );
     const declaredOperationId = toValue(operation.operationId);
     const context: RequestContext = {
       operation: {
