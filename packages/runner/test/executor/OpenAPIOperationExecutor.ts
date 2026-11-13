@@ -679,6 +679,7 @@ describe('OpenAPIOperationExecutor', function () {
           documentURI: locator.document.uri,
           jsonPointer: '/paths/~1pet~1findByStatus/get',
           operationId: 'findPetsByStatus',
+          sourceDescription: { name: 'petstoreAPI', documentURI: entry.uri },
         },
       });
       assert.strictEqual(contexts[1], contexts[0]);

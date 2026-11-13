@@ -131,7 +131,7 @@ const result = await runner.execute('authenticateAndOrderPet', {
 | Point an API at another server | `server`, `serverVariables` in its `executeOptions` entry | [Choosing the server](https://usearazzo.com/docs/runner/#server) |
 | Send static credentials | `securities` in its `executeOptions` entry | [Authentication](https://usearazzo.com/docs/runner/#authentication) |
 | Compute credentials per request | `requestInterceptor` | [Request interceptor](https://usearazzo.com/docs/runner/#request-interceptor) |
-| Change the requests of one step or operation only | the `RequestContext` an interceptor receives as its second argument | [Request interceptor](https://usearazzo.com/docs/runner/#request-interceptor) |
+| Change the requests of one step, operation or source description only | the `RequestContext` an interceptor receives as its second argument | [Request interceptor](https://usearazzo.com/docs/runner/#request-interceptor) |
 | Use another HTTP stack, a proxy or a client certificate for API calls | `httpClient` | [The HTTP client](https://usearazzo.com/docs/runner/#http-client) |
 | Load documents behind credentials or mutual TLS | `reference` on `load` | [Document retrieval](https://usearazzo.com/docs/runner/#document-retrieval) |
 | Cancel a run | `signal` | [Cancellation](https://usearazzo.com/docs/runner/#cancellation) |
