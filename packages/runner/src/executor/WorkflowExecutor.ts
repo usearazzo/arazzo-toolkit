@@ -658,18 +658,11 @@ class WorkflowExecutor {
     const named = source?.documentURI === this.#document.uri ? entries.get(source.name) : undefined;
     if (named !== undefined) return named.options;
 
-    const documentURI = locator.document.uri;
-    const configuring = [...entries].filter(([, entry]) => entry.uri === documentURI);
+    const configuring = [...entries].filter(([, entry]) => entry.uri === locator.document.uri);
     if (configuring.length > 1) {
       const names = configuring.map(([name]) => `"${name}"`).join(', ');
-      let through = 'a literal URL';
-      if (source?.documentURI === this.#document.uri) {
-        through = `"${source.name}", which has no entry`;
-      } else if (source !== undefined) {
-        through = `"${source.name}" of the Arazzo document at "${source.documentURI}"`;
-      }
       throw new ExecutionError(
-        `Step "${step.stepId}" reaches "${documentURI}" through ${through}, and executeOptions entries ${names} all configure that document, so which applies is ambiguous`,
+        `Step "${step.stepId}" has no executeOptions entry of its own, and ${names} all configure "${locator.document.uri}", the document it calls`,
         { ...step, reason: ExecutionError.AmbiguousExecuteOptions },
       );
     }

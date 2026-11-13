@@ -327,7 +327,7 @@ describe('WorkflowExecutor — executeOptions per source description', function 
 
       assert.strictEqual(error.reason, ExecutionError.AmbiguousExecuteOptions);
       assert.strictEqual(error.stepId, 'listPets');
-      assert.include(error.message, '"petsAPIThird", which has no entry');
+      assert.include(error.message, '"petsAPI", "petsAPIAgain"');
       assert.isEmpty(calls);
     });
 
@@ -341,7 +341,6 @@ describe('WorkflowExecutor — executeOptions per source description', function 
         assert.strictEqual(error.reason, ExecutionError.AmbiguousExecuteOptions);
         assert.strictEqual(error.stepId, 'listPets');
         assert.strictEqual(error.workflowId, 'nestedCalls');
-        assert.include(error.message, '"animals" of the Arazzo document at');
         assert.include(error.message, '"petsAPI", "petsAPIAgain"');
         assert.isEmpty(calls);
       },
