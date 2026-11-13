@@ -35,7 +35,6 @@ import ArazzoWorkflowLocatorNormalizer, {
   type ArazzoWorkflowLocator,
 } from './ArazzoWorkflowLocatorNormalizer.ts';
 import type { OpenAPIOperationLocator } from './OpenAPIOperationLocatorNormalizer.ts';
-import type { OpenAPIOperationExecuteOptionsBag } from './OpenAPIOperationExecutor.ts';
 import StepRetryRunner from './StepRetryRunner.ts';
 import WorkflowCallStack, { type WorkflowCallVia } from './WorkflowCallStack.ts';
 import StepTransitionInterpreter, { actionTargets } from './StepTransitionInterpreter.ts';
@@ -140,7 +139,7 @@ export interface WorkflowExecuteOptions {
    * document, and an entry that is not an object all throw before the first
    * request.
    */
-  readonly executeOptions?: Record<string, OpenAPIOperationExecuteOptionsBag>;
+  readonly executeOptions?: Record<string, Record<string, unknown>>;
   /**
    * Inputs for the workflows run implicitly to satisfy `dependsOn`, keyed by
    * the `dependsOn` entry as written — the bare workflowId for a

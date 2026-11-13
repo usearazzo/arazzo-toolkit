@@ -14,6 +14,7 @@ import {
   type HTTPClient,
   type OpenAPIOperationRequest,
   type RequestContext,
+  type RequestInterceptor,
 } from '../src/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -240,22 +241,17 @@ describe('ArazzoRunner', function () {
 
     specify('should hand the interceptors the step each request is for', async function () {
       const contexts: RequestContext[] = [];
+      const record: RequestInterceptor = (_request, context) => {
+        contexts.push(context);
+      };
       const runner = await ArazzoRunner.load(entryPath, {
         httpClient: makeHTTPClient([]),
-        requestInterceptor: (_request, context) => {
-          contexts.push(context);
-        },
+        requestInterceptor: record,
       });
 
       await runner.execute('linear', {
         inputs: { status: 'available' },
-        executeOptions: {
-          petstoreAPI: {
-            requestInterceptor: (_request, context) => {
-              contexts.push(context);
-            },
-          },
-        },
+        executeOptions: { petstoreAPI: { requestInterceptor: record } },
       });
 
       assert.deepEqual(
