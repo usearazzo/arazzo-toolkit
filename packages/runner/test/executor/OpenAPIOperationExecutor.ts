@@ -685,6 +685,22 @@ describe('OpenAPIOperationExecutor', function () {
       assert.strictEqual(contexts[1], contexts[0]);
     });
 
+    specify('should omit the source description a hand-built locator lacks', async function () {
+      const contexts: RequestContext[] = [];
+      const { executor } = makeExecutor({
+        requestInterceptor: (_request, context) => {
+          contexts.push(context);
+        },
+      });
+
+      await executor.execute(
+        { document: locator.document, jsonPointer: locator.jsonPointer },
+        { parameters: { status: 'available' } },
+      );
+
+      assert.notProperty(contexts[0].operation, 'sourceDescription');
+    });
+
     specify('should hand the interceptors the step passed in the options', async function () {
       const contexts: RequestContext[] = [];
       const { executor } = makeExecutor({
