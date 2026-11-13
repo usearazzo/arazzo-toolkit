@@ -9,6 +9,59 @@ JavaScript/TypeScript libraries and a command-line tool for **parsing**, **resol
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-3.0-40c463.svg)](https://github.com/usearazzo/arazzo-toolkit/blob/HEAD/CODE_OF_CONDUCT.md)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/usearazzo/arazzo-toolkit/blob/HEAD/LICENSE)
 
+<table>
+  <tr>
+    <td align="right" valign="middle">
+      <img src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/assets/tidelift.webp" alt="Tidelift" width="60" />
+    </td>
+    <td valign="middle">
+      <a href="https://tidelift.com/subscription/pkg/npm-.usearazzo-cli?utm_source=npm-usearazzo-cli&utm_medium=referral&utm_campaign=readme">
+        Get professionally supported @usearazzo/cli with Tidelift Subscription.
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td align="right" valign="middle">
+      <img src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/assets/tidelift.webp" alt="Tidelift" width="60" />
+    </td>
+    <td valign="middle">
+      <a href="https://tidelift.com/subscription/pkg/npm-.usearazzo-validator?utm_source=npm-usearazzo-validator&utm_medium=referral&utm_campaign=readme">
+        Get professionally supported @usearazzo/validator with Tidelift Subscription.
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td align="right" valign="middle">
+      <img src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/assets/tidelift.webp" alt="Tidelift" width="60" />
+    </td>
+    <td valign="middle">
+      <a href="https://tidelift.com/subscription/pkg/npm-.usearazzo-runner?utm_source=npm-usearazzo-runner&utm_medium=referral&utm_campaign=readme">
+        Get professionally supported @usearazzo/runner with Tidelift Subscription.
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td align="right" valign="middle">
+      <img src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/assets/tidelift.webp" alt="Tidelift" width="60" />
+    </td>
+    <td valign="middle">
+      <a href="https://tidelift.com/subscription/pkg/npm-.usearazzo-parser?utm_source=npm-usearazzo-parser&utm_medium=referral&utm_campaign=readme">
+        Get professionally supported @usearazzo/parser with Tidelift Subscription.
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td align="right" valign="middle">
+      <img src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/assets/tidelift.webp" alt="Tidelift" width="60" />
+    </td>
+    <td valign="middle">
+      <a href="https://tidelift.com/subscription/pkg/npm-.usearazzo-resolver?utm_source=npm-usearazzo-resolver&utm_medium=referral&utm_campaign=readme">
+        Get professionally supported @usearazzo/resolver with Tidelift Subscription.
+      </a>
+    </td>
+  </tr>
+</table>
+
 ## Packages
 
 This monorepo contains the following packages:

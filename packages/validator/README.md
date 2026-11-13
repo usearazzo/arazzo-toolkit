@@ -8,11 +8,25 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@usearazzo/validator"><img src="https://img.shields.io/npm/v/@usearazzo/validator.svg" alt="npm version"></a>
   <a href="https://github.com/usearazzo/arazzo-toolkit/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache 2.0"></a>
+  <a href="https://tidelift.com/subscription/pkg/npm-.usearazzo-validator?utm_source=npm-usearazzo-validator&utm_medium=referral&utm_campaign=readme"><img src="https://tidelift.com/badges/package/npm/@usearazzo%2Fvalidator" alt="Tidelift"></a>
 </p>
 
 <p align="center">
   <a href="https://usearazzo.com"><img alt="UseArazzo" width="96" src="https://usearazzo.com/assets/images/logos/usearazzo-logo.svg"></a>
 </p>
+
+<table>
+  <tr>
+    <td align="right" valign="middle">
+      <img src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/assets/tidelift.webp" alt="Tidelift" width="60" />
+    </td>
+    <td valign="middle">
+      <a href="https://tidelift.com/subscription/pkg/npm-.usearazzo-validator?utm_source=npm-usearazzo-validator&utm_medium=referral&utm_campaign=readme">
+        Get professionally supported @usearazzo/validator with Tidelift Subscription.
+      </a>
+    </td>
+  </tr>
+</table>
 
 ---
 
