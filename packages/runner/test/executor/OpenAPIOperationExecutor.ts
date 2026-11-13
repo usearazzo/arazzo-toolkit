@@ -692,12 +692,12 @@ describe('OpenAPIOperationExecutor', function () {
         },
       });
 
-      await executor.execute(locator, {
-        parameters: { status: 'available' },
-        step: { stepId: 'findPets', workflowId: 'linear' },
-      });
+      const step = { stepId: 'findPets', workflowId: 'linear' };
+
+      await executor.execute(locator, { parameters: { status: 'available' }, step });
 
       assert.deepEqual(contexts[0].step, { stepId: 'findPets', workflowId: 'linear' });
+      assert.notStrictEqual(contexts[0].step, step);
     });
 
     specify('should not attach userFetch or responseInterceptor to the request', async function () {

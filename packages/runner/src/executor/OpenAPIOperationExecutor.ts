@@ -369,7 +369,9 @@ class OpenAPIOperationExecutor {
         jsonPointer: locator.jsonPointer,
         ...(typeof declaredOperationId === 'string' ? { operationId: declaredOperationId } : {}),
       },
-      ...(step === undefined ? {} : { step }),
+      // a copy, so an interceptor editing it cannot rewrite the caller's object
+      // (the step executor reuses it to attribute errors)
+      ...(step === undefined ? {} : { step: { ...step } }),
     };
 
     // each step derives the next options rather than editing in place
