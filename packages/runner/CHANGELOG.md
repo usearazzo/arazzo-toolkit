@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.32](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.31...v1.0.1-alpha.32) (2026-11-13)
+
+### Bug Fixes
+
+- **runner:** keep a multipart content type that names a boundary ([#353](https://github.com/usearazzo/arazzo-toolkit/issues/353)) ([22b0a56](https://github.com/usearazzo/arazzo-toolkit/commit/22b0a5615d9670acbe19f3614523fe2feec3a29b))
+
 ## [1.0.1-alpha.31](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.30...v1.0.1-alpha.31) (2026-11-13)
 
 ### Features
