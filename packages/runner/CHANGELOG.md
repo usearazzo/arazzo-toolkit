@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.31](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.30...v1.0.1-alpha.31) (2026-11-13)
+
+### Features
+
+- **runner:** key executeOptions by source description name ([#352](https://github.com/usearazzo/arazzo-toolkit/issues/352)) ([77c088b](https://github.com/usearazzo/arazzo-toolkit/commit/77c088b2fab85aaf035687aa56131c55cbe96e8f)), closes [#36](https://github.com/usearazzo/arazzo-toolkit/issues/36)
+
 ## [1.0.1-alpha.30](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.29...v1.0.1-alpha.30) (2026-11-13)
 
 ### Features
