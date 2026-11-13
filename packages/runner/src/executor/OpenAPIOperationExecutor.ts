@@ -52,10 +52,10 @@ export interface RequestContextStep {
  * expanded URL.
  *
  * `operation` is always present: it is the operation's locator — its canonical
- * OpenAPI document URI and the JSON Pointer to it — plus the `operationId` the
- * document declares, if any, and the source description the step named it
- * through, when the locator carries one. `step` is present only when the request is issued
- * for an Arazzo step, i.e. through the step executor (and so the runner); an
+ * OpenAPI document URI, the JSON Pointer to it and, when the locator carries
+ * one, the source description it was located through — plus the `operationId`
+ * the document declares, if any. `step` is present only when the request is
+ * issued for an Arazzo step, i.e. through the step executor (and so the runner); an
  * {@link OpenAPIOperationExecutor} used on its own receives it only when its
  * caller passes `step` in the execute options. Absent fields are omitted, never
  * `undefined`.
