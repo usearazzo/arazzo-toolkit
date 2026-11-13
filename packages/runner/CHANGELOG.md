@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.30](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.29...v1.0.1-alpha.30) (2026-11-13)
+
+### Features
+
+- **runner:** pass request context to request interceptors ([#350](https://github.com/usearazzo/arazzo-toolkit/issues/350)) ([076dea3](https://github.com/usearazzo/arazzo-toolkit/commit/076dea3b38a1cd37fc2111ecbc91420bc4f7eb48)), closes [#36](https://github.com/usearazzo/arazzo-toolkit/issues/36)
+- **runner:** pass the source description to request interceptors ([#351](https://github.com/usearazzo/arazzo-toolkit/issues/351)) ([046ccd1](https://github.com/usearazzo/arazzo-toolkit/commit/046ccd1077f60bf50fca5403b96bde8c08d5f52e)), closes [#36](https://github.com/usearazzo/arazzo-toolkit/issues/36)
+
 ## [1.0.1-alpha.29](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.28...v1.0.1-alpha.29) (2026-11-11)
 
 ### Features
