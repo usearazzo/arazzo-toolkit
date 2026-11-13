@@ -8,7 +8,10 @@ import {
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
 import type DocumentRegistry from '../registry/DocumentRegistry.ts';
-import type { OpenAPIOperationExecuteOptions } from './OpenAPIOperationExecutor.ts';
+import type {
+  OpenAPIOperationExecuteOptions,
+  RequestContextStep,
+} from './OpenAPIOperationExecutor.ts';
 import type OpenAPIOperationResponse from '../client/OpenAPIOperationResponse.ts';
 import type {
   RuntimeExpressionContext,
@@ -196,11 +199,12 @@ export interface StepAttemptOutcome {
 /**
  * The execute options of a step: the opaque bag forwarded to the operation
  * executor, or a function returning it for the operation the step was located
- * to.
+ * to, called with the step it is located for.
  * @public
  */
 export type StepExecuteOptions =
-  Record<string, unknown> | ((locator: OpenAPIOperationLocator) => Record<string, unknown>);
+  | Record<string, unknown>
+  | ((locator: OpenAPIOperationLocator, step: RequestContextStep) => Record<string, unknown>);
 
 /**
  * Executes a single Arazzo step that invokes an OpenAPI operation.
@@ -267,8 +271,8 @@ class StepExecutor {
    * (e.g. a `server` to run the step against, or an `AbortSignal`). The
    * Arazzo-derived options (`operationId`, `parameters`, `requestBody`) always
    * take precedence over it. A function is called with the operation the step
-   * was located to and returns the bag, for options that depend on which API
-   * the step calls.
+   * was located to and the step's `stepId` / `workflowId`, and returns the bag,
+   * for options that depend on which API the step calls.
    *
    * A `signal` in that bag is honored here and not only at the transport: an
    * already-aborted signal throws with reason `ExecutionError.Aborted` instead of issuing a
@@ -313,7 +317,8 @@ class StepExecutor {
     // assembles into a standalone doc, and runs.
     const locator = await this.#locateOperation(step, scope);
     const operationOptions =
-      typeof executeOptions === 'function' ? executeOptions(locator) : executeOptions;
+      // a copy, so the function cannot rewrite the scope this step attributes its errors to
+      typeof executeOptions === 'function' ? executeOptions(locator, { ...scope }) : executeOptions;
 
     // resolve parameters and request body against the pre-request context.
     // keyed by '{in}.{name}' rather than bare name, so two parameters that

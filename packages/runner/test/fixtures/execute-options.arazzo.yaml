@@ -4,7 +4,8 @@ info:
   version: 1.0.0
 
 # `petsAPI` and `paymentsAPI` both declare a security scheme named `api_key`,
-# `petsAPIAgain` is a second name for the document `petsAPI` points at, and
+# `petsAPIAgain` and `petsAPIThird` are more names for the document `petsAPI`
+# points at, and
 # `noURL` is malformed on purpose: it points at no document.
 sourceDescriptions:
   - name: petsAPI
@@ -14,6 +15,9 @@ sourceDescriptions:
     url: ./execute-options-payments.openapi.json
     type: openapi
   - name: petsAPIAgain
+    url: ./execute-options-pets.openapi.json
+    type: openapi
+  - name: petsAPIThird
     url: ./execute-options-pets.openapi.json
     type: openapi
   - name: legacyAPI
@@ -54,6 +58,19 @@ workflows:
         operationId: $sourceDescriptions.legacyAPI.legacyWithBasic
       - stepId: legacyOAuth
         operationId: $sourceDescriptions.legacyAPI.legacyWithOAuth
+
+  # the same OpenAPI document through both of its names
+  - workflowId: twoNames
+    steps:
+      - stepId: listPets
+        operationId: $sourceDescriptions.petsAPI.listPets
+      - stepId: listPetsAgain
+        operationId: $sourceDescriptions.petsAPIAgain.listPets
+
+  - workflowId: thirdName
+    steps:
+      - stepId: listPets
+        operationId: $sourceDescriptions.petsAPIThird.listPets
 
   - workflowId: throughNested
     steps:

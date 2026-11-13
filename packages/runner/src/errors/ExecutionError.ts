@@ -13,7 +13,7 @@ import ArazzoRunnerError from './ArazzoRunnerError.ts';
 class ExecutionError extends ArazzoRunnerError {
   /** The run was cancelled through its `AbortSignal`; the signal's reason is the `cause`. */
   static readonly Aborted = 'aborted' as const;
-  /** Two `executeOptions` entries name source descriptions that point at the same document. */
+  /** A step without an `executeOptions` entry of its own reaches a document that several entries configure. */
   static readonly AmbiguousExecuteOptions = 'ambiguous-execute-options' as const;
   /** A step or a `goto`/`retry` action declares more than one mutually exclusive target. */
   static readonly AmbiguousTarget = 'ambiguous-target' as const;
