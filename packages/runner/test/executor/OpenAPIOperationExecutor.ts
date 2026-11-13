@@ -16,6 +16,7 @@ import {
   type HTTPClient,
   type OpenAPIOperationRequest,
   type OpenAPIOperationExecutorOptions,
+  type RequestContext,
   type OpenAPIOperationLocator,
   type OpenAPIDocument,
 } from '../../src/index.ts';
@@ -656,6 +657,61 @@ describe('OpenAPIOperationExecutor', function () {
         assert.strictEqual(requests[0].headers['x-trace'], 'call');
       },
     );
+
+    specify('should hand both interceptors the operation context', async function () {
+      const contexts: RequestContext[] = [];
+      const { executor } = makeExecutor({
+        requestInterceptor: (_request, context) => {
+          contexts.push(context);
+        },
+      });
+
+      await executor.execute(locator, {
+        parameters: { status: 'available' },
+        requestInterceptor: (_request, context) => {
+          contexts.push(context);
+        },
+      });
+
+      assert.lengthOf(contexts, 2);
+      assert.deepEqual(contexts[0], {
+        operation: {
+          documentURI: locator.document.uri,
+          jsonPointer: '/paths/~1pet~1findByStatus/get',
+          operationId: 'findPetsByStatus',
+        },
+      });
+      assert.strictEqual(contexts[1], contexts[0]);
+    });
+
+    specify('should hand the interceptors the step passed in the options', async function () {
+      const contexts: RequestContext[] = [];
+      const { executor } = makeExecutor({
+        requestInterceptor: (_request, context) => {
+          contexts.push(context);
+        },
+      });
+
+      await executor.execute(locator, {
+        parameters: { status: 'available' },
+        step: { stepId: 'findPets', workflowId: 'linear' },
+      });
+
+      assert.deepEqual(contexts[0].step, { stepId: 'findPets', workflowId: 'linear' });
+    });
+
+    specify('should not attach userFetch or responseInterceptor to the request', async function () {
+      const { executor, requests } = makeExecutor();
+
+      await executor.execute(locator, {
+        parameters: { status: 'available' },
+        userFetch: () => assert.fail('userFetch must not be used'),
+        responseInterceptor: () => assert.fail('responseInterceptor must not be used'),
+      });
+
+      assert.notProperty(requests[0], 'userFetch');
+      assert.notProperty(requests[0], 'responseInterceptor');
+    });
 
     specify('should capture the edits of an async replacing interceptor', async function () {
       // an async interceptor that returns a replacement request — the captured

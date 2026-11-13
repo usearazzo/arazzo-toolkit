@@ -141,6 +141,8 @@ export type {
   OpenAPIOperationExecuteOptionsBag,
   OpenAPIOperationSecurities,
   OpenAPIOperationSecurityCredential,
+  RequestContext,
+  RequestContextStep,
   RequestInterceptor,
 } from './executor/OpenAPIOperationExecutor.ts';
 export { default as SourceDescriptionsLocatorNormalizer } from './executor/SourceDescriptionsLocatorNormalizer.ts';

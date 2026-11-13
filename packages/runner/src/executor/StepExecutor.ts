@@ -338,15 +338,17 @@ class StepExecutor {
     const signal = readAbortSignal(operationOptions);
     throwIfAborted(signal, scope);
 
-    // the Arazzo-derived parameters and request body are spread after the opaque
-    // executeOptions bag so they take precedence over it. the operation executor
-    // then forces the operation target on top of this before executing.
+    // the Arazzo-derived parameters, request body and step identity are spread
+    // after the opaque executeOptions bag so they take precedence over it. the
+    // operation executor then forces the operation target on top of this
+    // before executing.
     let response: OpenAPIOperationResponse;
     try {
       response = await this.#operationExecutor.execute(locator, {
         ...operationOptions,
         parameters,
         ...this.#requestBodyOptions(requestBody),
+        step: scope,
       });
     } catch (error: unknown) {
       // a transport that honors the signal rejects the request it was told to
