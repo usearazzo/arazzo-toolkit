@@ -11,7 +11,11 @@ import type OpenAPIOperationRequest from './OpenAPIOperationRequest.ts';
  *   Arazzo outcome judged by a step's `successCriteria`, never an error;
  * - throw (or reject) only on transport failure — the executor wraps the
  *   error as a `ClientError`;
- * - honor `request.signal` when present.
+ * - honor `request.signal` when present;
+ * - encode a `FormData` body as `multipart/form-data` and set the
+ *   `Content-Type` with its boundary, as `fetch` does — the executor removes
+ *   the request's own multipart `Content-Type` for such a body, since only the
+ *   encoder knows the boundary.
  *
  * Response normalization (content-type dispatch, header mapping) happens on
  * the executor side for every client, so `$response.body` semantics stay
