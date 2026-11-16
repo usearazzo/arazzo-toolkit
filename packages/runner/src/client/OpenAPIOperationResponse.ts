@@ -35,11 +35,6 @@ class OpenAPIOperationResponse {
   readonly headers: Record<string, string>;
   readonly body: unknown;
   readonly request: OpenAPIOperationRequestInfo | undefined;
-  /**
-   * The body's size in bytes, as read: after the transport decoded any
-   * `Content-Encoding`, so a compressed body counts at its decoded size.
-   */
-  readonly size: number;
   readonly #content: string | Uint8Array;
 
   constructor(raw: {
@@ -60,11 +55,17 @@ class OpenAPIOperationResponse {
     this.body = raw.body;
     this.#content = raw.content;
     this.request = raw.request;
+  }
+
+  /**
+   * The body's size in bytes, as read: after the transport decoded any
+   * `Content-Encoding`, so a compressed body counts at its decoded size.
+   */
+  get size(): number {
     // a string content encodes back to exactly the bytes received
-    this.size =
-      typeof raw.content === 'string'
-        ? new TextEncoder().encode(raw.content).length
-        : raw.content.length;
+    return typeof this.#content === 'string'
+      ? new TextEncoder().encode(this.#content).length
+      : this.#content.length;
   }
 
   /**
