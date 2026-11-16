@@ -93,7 +93,7 @@ export interface StepExecutorOptions {
    */
   readonly operationExecutor: OpenAPIOperationExecutor;
   /**
-   * Receives the step executor's `debug` events: the operation each step
+   * Receives the step executor's events: the operation each step
    * attempt located. Siblings derived with {@link StepExecutor.forDocument}
    * report to the same observer. See {@link OpenAPIOperationEvent}.
    */
@@ -346,7 +346,6 @@ class StepExecutor {
     const { runId } = operationOptions;
     this.#events?.emit({
       type: 'operation-located',
-      level: 'debug',
       operation: {
         documentURI: locator.document.uri,
         jsonPointer: locator.jsonPointer,

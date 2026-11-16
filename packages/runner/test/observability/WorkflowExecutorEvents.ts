@@ -59,7 +59,7 @@ interface WorkflowFrame {
 }
 
 /**
- * Rebuilds a run's trace from its `info` events alone — the invariant the
+ * Rebuilds a run's trace from its workflow events alone — the invariant the
  * event vocabulary is held to. Memoized dependencies are looked up by the
  * workflow they resolved to, as the executor's own ledger does.
  */
@@ -512,23 +512,20 @@ describe('WorkflowExecutor events', function () {
       assert.isTrue(events.every((event) => event.path[0] === 'callsChild'));
     });
 
-    specify(
-      'should emit workflow normalization at debug level, once per workflow',
-      async function () {
-        const { events } = await record(composition, 'callsChildTwice', [200]);
+    specify('should emit workflow normalization once per workflow', async function () {
+      const { events } = await record(composition, 'callsChildTwice', [200]);
 
-        const debug = events.filter((event) => event.level === 'debug');
-        assert.deepEqual(
-          debug.map((event) => `${event.type} ${event.workflowId}`),
-          [
-            'workflow-normalize-start callsChildTwice',
-            'workflow-normalize-settled callsChildTwice',
-            'workflow-normalize-start fetchPet',
-            'workflow-normalize-settled fetchPet',
-          ],
-        );
-      },
-    );
+      const debug = events.filter((event) => event.type.startsWith('workflow-normalize-'));
+      assert.deepEqual(
+        debug.map((event) => `${event.type} ${event.workflowId}`),
+        [
+          'workflow-normalize-start callsChildTwice',
+          'workflow-normalize-settled callsChildTwice',
+          'workflow-normalize-start fetchPet',
+          'workflow-normalize-settled fetchPet',
+        ],
+      );
+    });
   });
 
   context('non-interference', function () {

@@ -287,7 +287,7 @@ export interface OpenAPIOperationExecutorOptions {
    */
   readonly documentAssembler?: OpenAPIDocumentAssembler;
   /**
-   * Receives the executor's `debug` events: the start and end of each
+   * Receives the executor's events: the start and end of each
    * operation's normalization, and its assembly. See
    * {@link OpenAPIOperationEvent}.
    */
@@ -504,7 +504,6 @@ class OpenAPIOperationExecutor {
   ): void {
     this.#events?.emit({
       type,
-      level: 'debug',
       ...context,
       ...(typeof runId === 'string' ? { runId } : {}),
     });

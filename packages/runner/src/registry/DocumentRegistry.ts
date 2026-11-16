@@ -21,7 +21,7 @@ import type { DocumentRegistryEvent } from '../observability/DocumentRegistryEve
 export interface DocumentRegistryOptions {
   readonly providers?: DocumentRegistryProvider[];
   /**
-   * Receives the registry's `debug` events: the start and end of every
+   * Receives the registry's events: the start and end of every
    * document load. Cache hits emit nothing. See {@link DocumentRegistryEvent}.
    */
   readonly observer?: ArazzoRunnerObserver<DocumentRegistryEvent>;
@@ -99,13 +99,13 @@ class DocumentRegistry {
    * caches it.
    */
   async #load(canonicalURI: string): Promise<APIDocument> {
-    this.#events?.emit({ type: 'document-load-start', level: 'debug', uri: canonicalURI });
+    this.#events?.emit({ type: 'document-load-start', uri: canonicalURI });
     for (const provider of this.#providers) {
       try {
         if (await provider.canProvide(canonicalURI)) {
           const document = await provider.provide(canonicalURI);
           this.#set(canonicalURI, document);
-          this.#events?.emit({ type: 'document-load-settled', level: 'debug', uri: canonicalURI });
+          this.#events?.emit({ type: 'document-load-settled', uri: canonicalURI });
           return document;
         }
       } catch (error: unknown) {

@@ -10,7 +10,6 @@ import type { ArazzoRunnerEventBase } from './ArazzoRunnerEvent.ts';
  */
 export interface DocumentLoadStartEvent extends ArazzoRunnerEventBase {
   readonly type: 'document-load-start';
-  readonly level: 'debug';
   /**
    * The canonical URI of the document.
    */
@@ -24,7 +23,6 @@ export interface DocumentLoadStartEvent extends ArazzoRunnerEventBase {
  */
 export interface DocumentLoadSettledEvent extends ArazzoRunnerEventBase {
   readonly type: 'document-load-settled';
-  readonly level: 'debug';
   readonly uri: string;
 }
 

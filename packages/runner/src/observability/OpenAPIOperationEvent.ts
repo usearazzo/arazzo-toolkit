@@ -8,7 +8,6 @@ import type { ArazzoRunnerEventBase } from './ArazzoRunnerEvent.ts';
  * @public
  */
 export interface OpenAPIOperationEventBase extends ArazzoRunnerEventBase, RequestContext {
-  readonly level: 'debug';
   /**
    * The `runId` of the {@link WorkflowExecutor.execute} call the operation
    * runs for, from the execute options. Absent when the executor is used

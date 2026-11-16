@@ -54,9 +54,6 @@ describe('ArazzoRunner events', function () {
         'operation-assembled',
       ],
     );
-    // the machinery is debug, the run itself info.
-    const debug = /^(document-|operation-|workflow-normalize-)/;
-    assert.isTrue(events.every((event) => (event.level === 'debug') === debug.test(event.type)));
   });
 
   specify("should stamp operation events with the run's runId and step", async function () {

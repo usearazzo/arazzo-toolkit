@@ -3,22 +3,10 @@ import type { OpenAPIOperationEvent } from './OpenAPIOperationEvent.ts';
 import type { WorkflowExecutionEvent } from './WorkflowExecutionEvent.ts';
 
 /**
- * How much detail an event is. `info` events trace the run itself: workflows,
- * steps, attempts and the decisions behind them. `debug` events trace the
- * machinery underneath: document loads, normalization and assembly.
- *
- * A level is detail, not severity: a failed step is an `info` event like a
- * successful one. Mapping outcomes to log severities is a consumer's choice.
- * @public
- */
-export type ArazzoRunnerEventLevel = 'info' | 'debug';
-
-/**
  * The fields every {@link ArazzoRunnerEvent} carries.
  * @public
  */
 export interface ArazzoRunnerEventBase {
-  readonly level: ArazzoRunnerEventLevel;
   /**
    * When the event happened, read from the emitting block's injected `now`
    * clock (`performance.now` by default). Timestamps of different blocks
@@ -30,6 +18,12 @@ export interface ArazzoRunnerEventBase {
 
 /**
  * Every event the runner's building blocks emit, discriminated by `type`.
+ *
+ * Events carry no level or severity, like the messages of Node's
+ * `diagnostics_channel`: what an event means to a log is for the consumer
+ * that logs it to decide. The workflow events describe the run itself; the
+ * `document-*`, `workflow-normalize-*` and `operation-*` events describe the
+ * machinery underneath it, the detail a debug log would show.
  * @public
  */
 export type ArazzoRunnerEvent =

@@ -124,7 +124,7 @@ export interface WorkflowExecutorOptions {
   /**
    * Receives the run's events as they happen: workflows, dependencies, steps,
    * attempts, criterion outcomes, selected actions, retry waits and retry
-   * references at `info` level, workflow normalization at `debug` level. Each
+   * references, plus the normalization of each workflow. Each
    * event is stamped with {@link WorkflowExecutorOptions.now}.
    *
    * Delivered synchronously and never awaited, so it cannot change a run's
@@ -814,7 +814,7 @@ class WorkflowExecutor {
     // stamped with `startedAt`, the reading `durationMs` counts from, though
     // emitted only now: a workflow whose definition fails the checks above
     // never starts.
-    this.#events?.emit({ type: 'workflow-start', level: 'info', ...frame, via }, startedAt);
+    this.#events?.emit({ type: 'workflow-start', ...frame, via }, startedAt);
 
     const dependencies = await this.#runDependencies(workflow, invocation, scope);
     if (dependencies.some((dependency) => this.#settledFailed(dependency))) {
@@ -854,7 +854,7 @@ class WorkflowExecutor {
       const retryReferences: RetryReferenceRecord[] = [];
       const stepFrame: StepFrame = { ...frame, stepId };
       const counter: AttemptCounter = { attempts: 0 };
-      this.#events?.emit({ type: 'step-start', level: 'info', ...stepFrame }, stepStartedAt);
+      this.#events?.emit({ type: 'step-start', ...stepFrame }, stepStartedAt);
       const attempt = this.#chargedAttempt(
         this.#observedAttempt(
           this.#stepAttempt(step, stepId, invocation, scope, subWorkflows),
@@ -885,13 +885,12 @@ class WorkflowExecutor {
           const decided = { ...stepFrame, attempt: counter.attempts };
           this.#events?.emit({
             type: 'action-selected',
-            level: 'info',
             ...decided,
             action: retry,
             transition: { kind: 'retry' },
           });
           if (delayMs > 0) {
-            this.#events?.emit({ type: 'retry-wait', level: 'info', ...decided, delayMs });
+            this.#events?.emit({ type: 'retry-wait', ...decided, delayMs });
           }
         },
       });
@@ -901,7 +900,6 @@ class WorkflowExecutor {
       });
       this.#events?.emit({
         type: 'action-selected',
-        level: 'info',
         ...stepFrame,
         attempt: attempts,
         action,
@@ -923,7 +921,6 @@ class WorkflowExecutor {
       this.#events?.emit(
         {
           type: 'step-settled',
-          level: 'info',
           ...stepFrame,
           successful: outcome.successful,
           attempts,
@@ -1045,7 +1042,6 @@ class WorkflowExecutor {
     this.#events?.emit(
       {
         type: 'workflow-settled',
-        level: 'info',
         runId: invocation.runId,
         workflowId: invocation.workflowId,
         path: invocation.callStack.path,
@@ -1140,15 +1136,15 @@ class WorkflowExecutor {
     return async () => {
       counter.attempts += 1;
       const attemptFrame = { ...stepFrame, attempt: counter.attempts };
-      this.#events?.emit({ type: 'step-attempt', level: 'info', ...attemptFrame });
+      this.#events?.emit({ type: 'step-attempt', ...attemptFrame });
       const outcome = await runAttempt();
       for (const criterion of outcome.successCriteria) {
         const event = { ...attemptFrame, kind: 'success', criterion } as const;
-        this.#events?.emit({ type: 'criterion-evaluated', level: 'info', ...event });
+        this.#events?.emit({ type: 'criterion-evaluated', ...event });
       }
       for (const criterion of outcome.actionCriteria) {
         const event = { ...attemptFrame, kind: 'action', criterion } as const;
-        this.#events?.emit({ type: 'criterion-evaluated', level: 'info', ...event });
+        this.#events?.emit({ type: 'criterion-evaluated', ...event });
       }
       return outcome;
     };
@@ -1231,7 +1227,7 @@ class WorkflowExecutor {
           kind: 'workflow',
           id: reference,
         } as const;
-        this.#events?.emit({ type: 'retry-reference-start', level: 'info', ...referenceFrame });
+        this.#events?.emit({ type: 'retry-reference-start', ...referenceFrame });
         const result = await this.#runReferencedWorkflow(
           reference,
           stepId,
@@ -1251,7 +1247,6 @@ class WorkflowExecutor {
         retryReferences.push({ kind: 'workflow', id: reference, successful, subWorkflow: result });
         this.#events?.emit({
           type: 'retry-reference-settled',
-          level: 'info',
           ...referenceFrame,
           successful,
         });
@@ -1272,7 +1267,7 @@ class WorkflowExecutor {
         kind: 'step',
         id: refStepId,
       } as const;
-      this.#events?.emit({ type: 'retry-reference-start', level: 'info', ...referenceFrame });
+      this.#events?.emit({ type: 'retry-reference-start', ...referenceFrame });
       // the referenced step's attempt is observed like any other, under its
       // own stepId and with a count of its own.
       const refOutcome = await this.#chargedAttempt(
@@ -1294,7 +1289,6 @@ class WorkflowExecutor {
       });
       this.#events?.emit({
         type: 'retry-reference-settled',
-        level: 'info',
         ...referenceFrame,
         successful: refOutcome.successful,
       });
@@ -1349,7 +1343,7 @@ class WorkflowExecutor {
         workflowId: dependency.locator.workflowId,
         documentURI: dependency.locator.document.uri,
       };
-      this.#events?.emit({ type: 'dependency-start', level: 'info', ...frame, dependency: target });
+      this.#events?.emit({ type: 'dependency-start', ...frame, dependency: target });
       // a dependency already completed in this run is satisfied, not repeated: a
       // precondition holds once met, and a diamond (two dependents sharing one
       // dependency) must not duplicate its live side effects. Every dependent
@@ -1373,7 +1367,6 @@ class WorkflowExecutor {
       state.setWorkflow(dependency.locator.workflowId, { inputs, outputs: result.outputs });
       this.#events?.emit({
         type: 'dependency-settled',
-        level: 'info',
         ...frame,
         dependency: target,
         memoized: memoized !== undefined,
@@ -1760,12 +1753,12 @@ class WorkflowExecutor {
       );
     }
     const frame = { runId: scope.runId, workflowId, path };
-    this.#events?.emit({ type: 'workflow-normalize-start', level: 'debug', ...frame });
+    this.#events?.emit({ type: 'workflow-normalize-start', ...frame });
     const workflow = await this.#normalizer.normalize(
       this.#extractor.extract(document, workflowId),
       document,
     );
-    this.#events?.emit({ type: 'workflow-normalize-settled', level: 'debug', ...frame });
+    this.#events?.emit({ type: 'workflow-normalize-settled', ...frame });
     scope.workflows.set(qualifiedId, workflow);
     return workflow;
   }

@@ -163,7 +163,6 @@ export type {
 export type {
   ArazzoRunnerEvent,
   ArazzoRunnerEventBase,
-  ArazzoRunnerEventLevel,
   ArazzoRunnerObserver,
 } from './observability/ArazzoRunnerEvent.ts';
 export type {

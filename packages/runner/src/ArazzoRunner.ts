@@ -72,9 +72,10 @@ export interface ArazzoRunnerLoadOptions
   readonly reference?: ArazzoRunnerReferenceOptions;
   /**
    * Receives the events of every building block the runner wires, stamped
-   * with `now`: the run's workflows and steps at `info` level, and document
-   * loads, workflow and operation normalization, operation location and
-   * assembly at `debug` level. See {@link ArazzoRunnerEvent}.
+   * with `now`: the run's workflows, steps and the decisions behind them, and
+   * the machinery underneath — document loads, workflow and operation
+   * normalization, operation location and assembly. See
+   * {@link ArazzoRunnerEvent}.
    *
    * Loads into a `registry` passed alongside are reported only if that
    * registry was given an observer of its own.
