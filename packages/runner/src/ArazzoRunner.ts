@@ -71,9 +71,13 @@ export interface ArazzoRunnerLoadOptions
    */
   readonly reference?: ArazzoRunnerReferenceOptions;
   /**
-   * Receives the run's events as they happen, stamped with `now`: its
-   * workflows, dependencies, steps and the decisions behind them. See
-   * {@link ArazzoRunnerEvent}.
+   * Receives the events of every building block the runner wires, stamped
+   * with `now`: the run's workflows and steps at `info` level, and document
+   * loads, workflow and operation normalization, operation location and
+   * assembly at `debug` level. See {@link ArazzoRunnerEvent}.
+   *
+   * Loads into a `registry` passed alongside are reported only if that
+   * registry was given an observer of its own.
    */
   readonly observer?: ArazzoRunnerObserver;
 }
@@ -126,6 +130,8 @@ class ArazzoRunner {
           new ArazzoDocumentRegistryProvider(referenceOptions),
           new OpenAPIDocumentRegistryProvider(referenceOptions),
         ],
+        observer: options.observer,
+        now: options.now,
       }),
       ...rest
     } = options;
@@ -171,16 +177,25 @@ class ArazzoRunner {
 
     // `resolve` only, whatever else the given object carries
     const referenceOptions = pick(['resolve'], reference ?? {});
+    const { observer, now } = workflowExecutorOptions;
     const operationExecutor = new OpenAPIOperationExecutor({
       httpClient,
       requestInterceptor,
+      observer,
+      now,
       operationNormalizer: new OpenAPIOperationNormalizer({
         openapi2: new OpenAPI2OperationNormalizer(referenceOptions),
         openapi30: new OpenAPI30OperationNormalizer(referenceOptions),
         openapi31: new OpenAPI31OperationNormalizer(referenceOptions),
       }),
     });
-    const stepExecutor = new StepExecutor({ document, registry, operationExecutor });
+    const stepExecutor = new StepExecutor({
+      document,
+      registry,
+      operationExecutor,
+      observer,
+      now,
+    });
 
     this.document = document;
     this.registry = registry;

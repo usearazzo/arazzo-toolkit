@@ -123,7 +123,7 @@ export interface WorkflowExecutorOptions {
   /**
    * Receives the run's events as they happen: workflows, dependencies, steps,
    * attempts, criterion outcomes, selected actions, retry waits and retry
-   * references, all at `info` level. Each
+   * references at `info` level, workflow normalization at `debug` level. Each
    * event is stamped with {@link WorkflowExecutorOptions.now}.
    *
    * Delivered synchronously and never awaited, so it cannot change a run's
@@ -635,6 +635,8 @@ class WorkflowExecutor {
       executeOptions: (locator, step) => ({
         ...this.#executeOptionsFor(executeOptions, locator, step),
         signal,
+        // set over any entry's own, like the signal: it names this run.
+        runId,
       }),
       dependencyInputs: options.dependencyInputs ?? {},
       runDependencies: options.runDependencies ?? true,
@@ -772,7 +774,7 @@ class WorkflowExecutor {
     // is waiting for.
     throwIfAborted(scope.signal, { workflowId, callStack: nested });
 
-    const workflow = await this.#resolveWorkflow(locator, scope);
+    const workflow = await this.#resolveWorkflow(locator, scope, nested.path);
     const state = new WorkflowExecutionState({ inputs });
     const invocation: WorkflowInvocation = {
       runId: scope.runId,
@@ -1733,6 +1735,7 @@ class WorkflowExecutor {
   async #resolveWorkflow(
     locator: ArazzoWorkflowLocator,
     scope: RunScope,
+    path: readonly string[],
   ): Promise<WorkflowElement> {
     const { document, workflowId } = locator;
     const qualifiedId = this.#qualifiedId(locator);
@@ -1745,10 +1748,13 @@ class WorkflowExecutor {
         { workflowId, reason: ExecutionError.WorkflowNotFound },
       );
     }
+    const frame = { runId: scope.runId, workflowId, path };
+    this.#events.emit({ type: 'workflow-normalize-start', level: 'debug', ...frame });
     const workflow = await this.#normalizer.normalize(
       this.#extractor.extract(document, workflowId),
       document,
     );
+    this.#events.emit({ type: 'workflow-normalize-settled', level: 'debug', ...frame });
     scope.workflows.set(qualifiedId, workflow);
     return workflow;
   }

@@ -10,6 +10,9 @@ import DocumentLoadError from '../errors/DocumentLoadError.ts';
 import InvalidEntryDocumentError from '../errors/InvalidEntryDocumentError.ts';
 import UnmatchedProviderError from '../errors/UnmatchedProviderError.ts';
 import * as constants from '../constants.ts';
+import EventChannel from '../observability/EventChannel.ts';
+import type { ArazzoRunnerObserver } from '../observability/ArazzoRunnerEvent.ts';
+import type { DocumentRegistryEvent } from '../observability/DocumentRegistryEvent.ts';
 
 /**
  * Options for the DocumentRegistry.
@@ -17,6 +20,16 @@ import * as constants from '../constants.ts';
  */
 export interface DocumentRegistryOptions {
   readonly providers?: DocumentRegistryProvider[];
+  /**
+   * Receives the registry's `debug` events: the start and end of every
+   * document load. Cache hits emit nothing. See {@link DocumentRegistryEvent}.
+   */
+  readonly observer?: ArazzoRunnerObserver<DocumentRegistryEvent>;
+  /**
+   * Reads the current time in milliseconds, stamped on each event. Defaults to
+   * `performance.now`.
+   */
+  readonly now?: () => number;
 }
 
 /**
@@ -31,12 +44,14 @@ class DocumentRegistry {
   readonly #documents: Map<string, APIDocument> = new Map();
   readonly #loading: Map<string, Promise<APIDocument>> = new Map();
   readonly #providers: DocumentRegistryProvider[];
+  readonly #events: EventChannel<DocumentRegistryEvent>;
 
   constructor(options: DocumentRegistryOptions = {}) {
     this.#providers = options.providers ?? [
       new ArazzoDocumentRegistryProvider(),
       new OpenAPIDocumentRegistryProvider(),
     ];
+    this.#events = new EventChannel({ observer: options.observer, now: options.now });
   }
 
   /**
@@ -84,11 +99,13 @@ class DocumentRegistry {
    * caches it.
    */
   async #load(canonicalURI: string): Promise<APIDocument> {
+    this.#events.emit({ type: 'document-load-start', level: 'debug', uri: canonicalURI });
     for (const provider of this.#providers) {
       try {
         if (await provider.canProvide(canonicalURI)) {
           const document = await provider.provide(canonicalURI);
           this.#set(canonicalURI, document);
+          this.#events.emit({ type: 'document-load-settled', level: 'debug', uri: canonicalURI });
           return document;
         }
       } catch (error: unknown) {

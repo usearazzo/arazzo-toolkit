@@ -417,6 +417,24 @@ describe('WorkflowExecutor events', function () {
       assert.deepEqual(child?.path, ['callsChild', 'fetchPet']);
       assert.isTrue(events.every((event) => event.path[0] === 'callsChild'));
     });
+
+    specify(
+      'should emit workflow normalization at debug level, once per workflow',
+      async function () {
+        const { events } = await record(composition, 'callsChildTwice', [200]);
+
+        const debug = events.filter((event) => event.level === 'debug');
+        assert.deepEqual(
+          debug.map((event) => `${event.type} ${event.workflowId}`),
+          [
+            'workflow-normalize-start callsChildTwice',
+            'workflow-normalize-settled callsChildTwice',
+            'workflow-normalize-start fetchPet',
+            'workflow-normalize-settled fetchPet',
+          ],
+        );
+      },
+    );
   });
 
   context('non-interference', function () {

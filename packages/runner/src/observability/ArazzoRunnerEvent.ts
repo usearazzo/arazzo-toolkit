@@ -1,3 +1,5 @@
+import type { DocumentRegistryEvent } from './DocumentRegistryEvent.ts';
+import type { OpenAPIOperationEvent } from './OpenAPIOperationEvent.ts';
 import type { WorkflowExecutionEvent } from './WorkflowExecutionEvent.ts';
 
 /**
@@ -25,7 +27,8 @@ export interface ArazzoRunnerEventBase {
  * Every event the runner's building blocks emit, discriminated by `type`.
  * @public
  */
-export type ArazzoRunnerEvent = WorkflowExecutionEvent;
+export type ArazzoRunnerEvent =
+  WorkflowExecutionEvent | DocumentRegistryEvent | OpenAPIOperationEvent;
 
 /**
  * Receives events as they happen. Each building block takes one through its

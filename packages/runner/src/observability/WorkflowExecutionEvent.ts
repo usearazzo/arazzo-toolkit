@@ -15,7 +15,8 @@ export interface WorkflowExecutionEventBase extends ArazzoRunnerEventBase {
   /**
    * Identifies the {@link WorkflowExecutor.execute} call the event belongs to,
    * unique within the process: every workflow, dependency and step of one
-   * call shares it, so the events of concurrent calls can be told apart.
+   * call shares it, so the events of concurrent calls can be told apart. The
+   * operation events of the call carry it too.
    */
   readonly runId: string;
   /**
@@ -223,6 +224,27 @@ export interface StepSettledEvent extends WorkflowExecutionStepEventBase {
 }
 
 /**
+ * The workflow is being normalized before its first run in this `execute`
+ * call: dereferenced (which may fetch externally referenced documents), with
+ * its parameters and actions inherited into its steps. A workflow already
+ * normalized earlier in the same call emits nothing.
+ * @public
+ */
+export interface WorkflowNormalizeStartEvent extends WorkflowExecutionEventBase {
+  readonly type: 'workflow-normalize-start';
+  readonly level: 'debug';
+}
+
+/**
+ * The workflow was normalized.
+ * @public
+ */
+export interface WorkflowNormalizeSettledEvent extends WorkflowExecutionEventBase {
+  readonly type: 'workflow-normalize-settled';
+  readonly level: 'debug';
+}
+
+/**
  * An event the {@link WorkflowExecutor} emits, discriminated by `type`.
  *
  * The `info` events fire at the boundaries the executor records in its
@@ -240,6 +262,8 @@ export interface StepSettledEvent extends WorkflowExecutionStepEventBase {
 export type WorkflowExecutionEvent =
   | WorkflowStartEvent
   | WorkflowSettledEvent
+  | WorkflowNormalizeStartEvent
+  | WorkflowNormalizeSettledEvent
   | DependencyStartEvent
   | DependencySettledEvent
   | StepStartEvent

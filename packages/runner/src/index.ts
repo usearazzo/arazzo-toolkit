@@ -172,6 +172,8 @@ export type {
   WorkflowExecutionDependency,
   WorkflowStartEvent,
   WorkflowSettledEvent,
+  WorkflowNormalizeStartEvent,
+  WorkflowNormalizeSettledEvent,
   DependencyStartEvent,
   DependencySettledEvent,
   StepStartEvent,
@@ -183,6 +185,19 @@ export type {
   RetryReferenceSettledEvent,
   StepSettledEvent,
 } from './observability/WorkflowExecutionEvent.ts';
+export type {
+  DocumentRegistryEvent,
+  DocumentLoadStartEvent,
+  DocumentLoadSettledEvent,
+} from './observability/DocumentRegistryEvent.ts';
+export type {
+  OpenAPIOperationEvent,
+  OpenAPIOperationEventBase,
+  OperationLocatedEvent,
+  OperationNormalizeStartEvent,
+  OperationNormalizeSettledEvent,
+  OperationAssembledEvent,
+} from './observability/OpenAPIOperationEvent.ts';
 
 /* Errors */
 export { default as ArazzoRunnerError } from './errors/ArazzoRunnerError.ts';
