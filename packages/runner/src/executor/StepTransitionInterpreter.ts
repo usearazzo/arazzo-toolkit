@@ -35,9 +35,9 @@ export function actionTargets(action: {
  * workflow; `transfer` hands control one-way to another workflow, which the
  * caller's run then ends on; `end` stops the run with `status: ended`; `break`
  * stops with `status: failed` (the failure default).
- * @internal
+ * @public
  */
-export type Transition =
+export type StepTransition =
   | { readonly kind: 'next' }
   | { readonly kind: 'goto'; readonly stepId: string }
   | { readonly kind: 'transfer'; readonly workflowId: string }
@@ -89,7 +89,7 @@ class StepTransitionInterpreter {
     action: SelectedAction | undefined,
     successful: boolean,
     context: StepTransitionContext,
-  ): Transition {
+  ): StepTransition {
     if (action === undefined) {
       // path default: next step on success, break-and-return on failure.
       return successful ? { kind: 'next' } : { kind: 'break' };

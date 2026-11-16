@@ -883,11 +883,21 @@ class WorkflowExecutor {
         ),
         onRetry: (retry, delayMs) => {
           const decided = { ...stepFrame, attempt: counter.attempts };
-          this.#events.emit({ type: 'action-selected', level: 'info', ...decided, action: retry });
+          this.#events.emit({
+            type: 'action-selected',
+            level: 'info',
+            ...decided,
+            action: retry,
+            transition: { kind: 'retry' },
+          });
           if (delayMs > 0) {
             this.#events.emit({ type: 'retry-wait', level: 'info', ...decided, delayMs });
           }
         },
+      });
+      const transition = this.#interpreter.interpret(action, outcome.successful, {
+        workflowId,
+        stepId,
       });
       this.#events.emit({
         type: 'action-selected',
@@ -895,6 +905,7 @@ class WorkflowExecutor {
         ...stepFrame,
         attempt: attempts,
         action,
+        transition,
       });
       state.setStepOutputs(outcome.stepId, outcome.outputs);
       const stepSettledAt = this.#now();
@@ -920,10 +931,6 @@ class WorkflowExecutor {
         stepSettledAt,
       );
 
-      const transition = this.#interpreter.interpret(action, outcome.successful, {
-        workflowId,
-        stepId,
-      });
       switch (transition.kind) {
         case 'next':
           index += 1;
@@ -961,7 +968,7 @@ class WorkflowExecutor {
           runOutcome = { kind: 'settled', status: 'failed' };
           break stepLoop;
         default: {
-          // exhaustiveness guard: a Transition kind added above without a case
+          // exhaustiveness guard: a StepTransition kind added above without a case
           // here would otherwise fall through silently instead of failing
           // loudly — `transition` is provably `never` once every kind above
           // has its own case, which TypeScript checks at compile time.

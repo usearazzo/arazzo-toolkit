@@ -1,6 +1,7 @@
 import type { SelectedAction } from '../action/ActionResolver.ts';
 import type { CriterionEvaluationRecord } from '../executor/StepExecutor.ts';
 import type { WorkflowCallVia } from '../executor/WorkflowCallStack.ts';
+import type { StepTransition } from '../executor/StepTransitionInterpreter.ts';
 import type {
   RetryReferenceRecord,
   WorkflowExecutionResult,
@@ -173,6 +174,13 @@ export interface ActionSelectedEvent extends WorkflowExecutionStepEventBase {
    * default path: the next step on success, a break on failure.
    */
   readonly action: SelectedAction | undefined;
+  /**
+   * What the run does next because of it, as plain data: `retry` re-runs the
+   * step, and the rest are the step's terminal transition — `next`, `goto` a
+   * step, `transfer` to a workflow, `end`, or `break`. With no `action`, it is
+   * the default path: `next` on success, `break` on failure.
+   */
+  readonly transition: StepTransition | { readonly kind: 'retry' };
 }
 
 /**

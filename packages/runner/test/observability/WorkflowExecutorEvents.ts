@@ -361,17 +361,41 @@ describe('WorkflowExecutor events', function () {
         .map((event) =>
           event.type === 'step-attempt'
             ? `attempt ${event.attempt}`
-            : `${event.attempt}: ${event.action === undefined ? 'default' : toValue(event.action.type)}`,
+            : `${event.attempt}: ${event.action === undefined ? 'default' : toValue(event.action.type)} -> ${event.transition.kind}`,
         );
       assert.deepEqual(decisions, [
         'attempt 1',
-        '1: retry',
+        '1: retry -> retry',
         'attempt 2',
-        '2: retry',
+        '2: retry -> retry',
         'attempt 3',
-        '3: default',
+        '3: default -> next',
       ]);
       assert.strictEqual(result.steps[0].attempts, 3);
+    });
+
+    specify('should say where each step went, default path included', async function () {
+      const transitions = async (
+        document: ArazzoDocument,
+        workflowId: string,
+        statuses: readonly CannedStatus[],
+      ): Promise<unknown[]> => {
+        const { events } = await record(document, workflowId, statuses);
+        return events.flatMap((event) =>
+          event.type === 'action-selected' && event.workflowId === workflowId
+            ? [event.transition]
+            : [],
+        );
+      };
+
+      assert.deepEqual(await transitions(controlFlow, 'failBreak', [500]), [{ kind: 'break' }]);
+      assert.deepEqual(await transitions(controlFlow, 'transfersToTarget', [200]), [
+        { kind: 'transfer', workflowId: 'transferTarget' },
+      ]);
+      assert.deepInclude(await transitions(controlFlow, 'gotoStep', [200]), {
+        kind: 'goto',
+        stepId: 'third',
+      });
     });
 
     specify('should mark a memoized dependency', async function () {

@@ -127,6 +127,7 @@ export type {
   RetryReferenceRecord,
 } from './executor/WorkflowExecutor.ts';
 export type { WorkflowCallVia } from './executor/WorkflowCallStack.ts';
+export type { StepTransition } from './executor/StepTransitionInterpreter.ts';
 export { default as StepExecutor } from './executor/StepExecutor.ts';
 export type {
   StepExecutorOptions,
