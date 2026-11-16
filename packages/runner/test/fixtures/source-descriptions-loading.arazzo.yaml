@@ -1,0 +1,56 @@
+arazzo: "1.1.0"
+info:
+  title: Source descriptions loaded on demand
+  version: "1.0.0"
+  summary: >-
+    Sources a $sourceDescriptions.{name}.{reference} expression loads itself:
+    OpenAPI documents that can be evicted from the registry, an AsyncAPI source
+    no provider loads (its file deliberately does not exist, so any attempt to
+    load it would fail), and sources that cannot be loaded — a missing file
+    (typed, untyped, with a non-string type, of Arazzo type) and a file no
+    provider can read.
+sourceDescriptions:
+  - name: petstoreAPI
+    url: ./petstore.openapi.json
+    type: openapi
+  - name: petstore31API
+    url: ./petstore.openapi-3-1.json
+    type: openapi
+  - name: multipartAPI
+    url: ./multipart.openapi.json
+    type: openapi
+  - name: dualLocationAPI
+    url: ./dual-location.openapi.json
+    type: openapi
+  - name: eventsAPI
+    url: ./missing-events.asyncapi.yaml
+    type: asyncapi
+  - name: missingAPI
+    url: ./missing.openapi.json
+    type: openapi
+  - name: untypedMissingAPI
+    url: ./missing-untyped.openapi.json
+  - name: numericTypeMissingAPI
+    url: ./missing-numeric-type.openapi.json
+    type: 1
+  - name: missingFlows
+    url: ./missing-flows.arazzo.yaml
+    type: arazzo
+  - name: unreadableAPI
+    url: ./unsupported.txt
+    type: openapi
+workflows:
+  - workflowId: readsUnloadedSources
+    steps:
+      - stepId: getPet
+        operationId: $sourceDescriptions.petstoreAPI.getPetById
+        parameters:
+          - name: petId
+            in: path
+            value: 7
+        successCriteria:
+          - condition: $statusCode == 200 && $sourceDescriptions.multipartAPI.uploadFile != null
+        outputs:
+          updatePet: $sourceDescriptions.petstore31API.updatePet
+    outputs:
+      updatePet: $steps.getPet.outputs.updatePet

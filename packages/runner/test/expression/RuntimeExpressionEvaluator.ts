@@ -11,6 +11,15 @@ import RuntimeExpressionError from '../../src/errors/RuntimeExpressionError.ts';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesPath = path.join(__dirname, '..', 'fixtures');
 
+const captureRejection = async (promise: Promise<unknown>): Promise<unknown> => {
+  try {
+    await promise;
+  } catch (error) {
+    return error;
+  }
+  return assert.fail('expected promise to reject, but it resolved');
+};
+
 describe('RuntimeExpressionEvaluator', function () {
   const baseContext: RuntimeExpressionContext = {
     request: {
@@ -39,111 +48,126 @@ describe('RuntimeExpressionEvaluator', function () {
       evaluator = new RuntimeExpressionEvaluator(baseContext);
     });
 
-    specify('should resolve $url', function () {
-      assert.strictEqual(evaluator.evaluate('$url'), 'https://api.example.com/pets/42');
+    specify('should resolve $url', async function () {
+      assert.strictEqual(await evaluator.evaluate('$url'), 'https://api.example.com/pets/42');
     });
 
-    specify('should resolve $method', function () {
-      assert.strictEqual(evaluator.evaluate('$method'), 'GET');
+    specify('should resolve $method', async function () {
+      assert.strictEqual(await evaluator.evaluate('$method'), 'GET');
     });
 
-    specify('should resolve $statusCode preserving number type', function () {
-      assert.strictEqual(evaluator.evaluate('$statusCode'), 200);
+    specify('should resolve $statusCode preserving number type', async function () {
+      assert.strictEqual(await evaluator.evaluate('$statusCode'), 200);
     });
 
-    specify('should resolve $request.header case-insensitively', function () {
-      assert.strictEqual(evaluator.evaluate('$request.header.content-type'), 'application/json');
+    specify('should resolve $request.header case-insensitively', async function () {
+      assert.strictEqual(
+        await evaluator.evaluate('$request.header.content-type'),
+        'application/json',
+      );
     });
 
-    specify('should resolve $request.query', function () {
-      assert.strictEqual(evaluator.evaluate('$request.query.page'), '2');
+    specify('should resolve $request.query', async function () {
+      assert.strictEqual(await evaluator.evaluate('$request.query.page'), '2');
     });
 
-    specify('should resolve $request.path', function () {
-      assert.strictEqual(evaluator.evaluate('$request.path.petId'), '42');
+    specify('should resolve $request.path', async function () {
+      assert.strictEqual(await evaluator.evaluate('$request.path.petId'), '42');
     });
 
-    specify('should resolve $request.body', function () {
-      assert.deepEqual(evaluator.evaluate('$request.body'), { name: 'Rex' });
+    specify('should resolve $request.body', async function () {
+      assert.deepEqual(await evaluator.evaluate('$request.body'), { name: 'Rex' });
     });
 
-    specify('should resolve $response.header case-insensitively', function () {
-      assert.strictEqual(evaluator.evaluate('$response.header.server'), 'nginx');
+    specify('should resolve $response.header case-insensitively', async function () {
+      assert.strictEqual(await evaluator.evaluate('$response.header.server'), 'nginx');
     });
 
-    specify('should resolve $response.body with a JSON Pointer preserving type', function () {
-      assert.strictEqual(evaluator.evaluate('$response.body#/pets/0/id'), 7);
+    specify('should resolve $response.body with a JSON Pointer preserving type', async function () {
+      assert.strictEqual(await evaluator.evaluate('$response.body#/pets/0/id'), 7);
     });
 
-    specify('should resolve $inputs preserving value type', function () {
-      assert.strictEqual(evaluator.evaluate('$inputs.username'), 'alice');
-      assert.strictEqual(evaluator.evaluate('$inputs.count'), 42);
-      assert.strictEqual(evaluator.evaluate('$inputs.active'), true);
+    specify('should resolve $inputs preserving value type', async function () {
+      assert.strictEqual(await evaluator.evaluate('$inputs.username'), 'alice');
+      assert.strictEqual(await evaluator.evaluate('$inputs.count'), 42);
+      assert.strictEqual(await evaluator.evaluate('$inputs.active'), true);
     });
 
-    specify('should resolve $outputs', function () {
-      assert.strictEqual(evaluator.evaluate('$outputs.token'), 'abc');
+    specify('should resolve $outputs', async function () {
+      assert.strictEqual(await evaluator.evaluate('$outputs.token'), 'abc');
     });
 
-    specify('should resolve $steps outputs', function () {
-      assert.deepEqual(evaluator.evaluate('$steps.getPet.outputs.pet'), { id: 7, name: 'Rex' });
+    specify('should resolve $steps outputs', async function () {
+      assert.deepEqual(await evaluator.evaluate('$steps.getPet.outputs.pet'), {
+        id: 7,
+        name: 'Rex',
+      });
     });
 
-    specify('should resolve $steps outputs with a JSON Pointer', function () {
-      assert.strictEqual(evaluator.evaluate('$steps.getPet.outputs.pet#/name'), 'Rex');
+    specify('should resolve $steps outputs with a JSON Pointer', async function () {
+      assert.strictEqual(await evaluator.evaluate('$steps.getPet.outputs.pet#/name'), 'Rex');
     });
 
-    specify('should resolve $workflows outputs', function () {
-      assert.strictEqual(evaluator.evaluate('$workflows.login.outputs.token'), 'xyz');
+    specify('should resolve $workflows outputs', async function () {
+      assert.strictEqual(await evaluator.evaluate('$workflows.login.outputs.token'), 'xyz');
     });
 
-    specify('should resolve $workflows inputs', function () {
-      assert.strictEqual(evaluator.evaluate('$workflows.login.inputs.user'), 'bob');
+    specify('should resolve $workflows inputs', async function () {
+      assert.strictEqual(await evaluator.evaluate('$workflows.login.inputs.user'), 'bob');
     });
 
-    specify('should resolve a null value rather than treating it as missing', function () {
-      assert.strictEqual(evaluator.evaluate('$inputs.empty'), null);
-      assert.strictEqual(evaluator.evaluate('$response.body#/nothing'), null);
+    specify('should resolve a null value rather than treating it as missing', async function () {
+      assert.strictEqual(await evaluator.evaluate('$inputs.empty'), null);
+      assert.strictEqual(await evaluator.evaluate('$response.body#/nothing'), null);
     });
 
-    specify('should not resolve prototype members', function () {
+    specify('should not resolve prototype members', async function () {
       const lenient = new RuntimeExpressionEvaluator(baseContext, { strict: false });
-      assert.isUndefined(lenient.evaluate('$inputs.constructor'));
-      assert.isUndefined(lenient.evaluate('$inputs.toString'));
+      assert.isUndefined(await lenient.evaluate('$inputs.constructor'));
+      assert.isUndefined(await lenient.evaluate('$inputs.toString'));
     });
 
-    specify('should throw for a source on the wrong message side', function () {
-      assert.throws(() => evaluator.evaluate('$response.query.page'), RuntimeExpressionError);
+    specify('should throw for a source on the wrong message side', async function () {
+      assert.instanceOf(
+        await captureRejection(evaluator.evaluate('$response.query.page')),
+        RuntimeExpressionError,
+      );
     });
 
-    specify('should throw for an unresolvable reference in strict mode', function () {
-      assert.throws(() => evaluator.evaluate('$inputs.missing'), RuntimeExpressionError);
+    specify('should throw for an unresolvable reference in strict mode', async function () {
+      assert.instanceOf(
+        await captureRejection(evaluator.evaluate('$inputs.missing')),
+        RuntimeExpressionError,
+      );
     });
 
-    specify('should throw for a JSON Pointer miss in strict mode', function () {
-      assert.throws(() => evaluator.evaluate('$response.body#/nope'), RuntimeExpressionError);
+    specify('should throw for a JSON Pointer miss in strict mode', async function () {
+      assert.instanceOf(
+        await captureRejection(evaluator.evaluate('$response.body#/nope')),
+        RuntimeExpressionError,
+      );
     });
 
     specify(
       'should return undefined for an unresolvable reference in non-strict mode',
-      function () {
+      async function () {
         const lenient = new RuntimeExpressionEvaluator(baseContext, { strict: false });
-        assert.isUndefined(lenient.evaluate('$inputs.missing'));
-        assert.isUndefined(lenient.evaluate('$response.body#/nope'));
+        assert.isUndefined(await lenient.evaluate('$inputs.missing'));
+        assert.isUndefined(await lenient.evaluate('$response.body#/nope'));
       },
     );
 
-    specify('should throw for an invalid expression regardless of strict mode', function () {
+    specify('should throw for an invalid expression regardless of strict mode', async function () {
       const lenient = new RuntimeExpressionEvaluator(baseContext, { strict: false });
-      assert.throws(() => lenient.evaluate('$bogus'), RuntimeExpressionError);
+      assert.instanceOf(await captureRejection(lenient.evaluate('$bogus')), RuntimeExpressionError);
     });
 
-    specify('should drill JSON Pointers into an ApiDOM element body', function () {
+    specify('should drill JSON Pointers into an ApiDOM element body', async function () {
       const apidom = new RuntimeExpressionEvaluator({
         response: { body: new ObjectElement({ pets: [{ id: 7 }] }) },
       });
-      assert.strictEqual(apidom.evaluate('$response.body#/pets/0/id'), 7);
-      assert.deepEqual(apidom.evaluate('$response.body'), { pets: [{ id: 7 }] });
+      assert.strictEqual(await apidom.evaluate('$response.body#/pets/0/id'), 7);
+      assert.deepEqual(await apidom.evaluate('$response.body'), { pets: [{ id: 7 }] });
     });
   });
 
@@ -163,34 +187,38 @@ describe('RuntimeExpressionEvaluator', function () {
       '$response.body',
       '$response.header.Server',
     ]) {
-      specify(`should reject ${expression} even when not strict`, function () {
+      specify(`should reject ${expression} even when not strict`, async function () {
         const evaluator = new RuntimeExpressionEvaluator(calledContext, { strict: false });
 
-        const error = assert.throws(
-          () => evaluator.evaluate(expression),
-          RuntimeExpressionError,
-          /step "child" calls workflow "fetchPet"/,
-        ) as unknown as RuntimeExpressionError;
+        const error = (await captureRejection(
+          evaluator.evaluate(expression),
+        )) as RuntimeExpressionError;
+
+        assert.instanceOf(error, RuntimeExpressionError);
+        assert.match(error.message, /step "child" calls workflow "fetchPet"/);
 
         assert.strictEqual(error.reason, 'unavailable-expression');
         assert.strictEqual(error.expression, expression);
       });
     }
 
-    specify('should reject an embedded HTTP-only expression when interpolating', function () {
+    specify('should reject an embedded HTTP-only expression when interpolating', async function () {
       const evaluator = new RuntimeExpressionEvaluator(calledContext, { strict: false });
 
-      assert.throws(() => evaluator.interpolate('code={$statusCode}'), RuntimeExpressionError);
+      assert.instanceOf(
+        await captureRejection(evaluator.interpolate('code={$statusCode}')),
+        RuntimeExpressionError,
+      );
     });
 
-    specify('should keep resolving every other root', function () {
+    specify('should keep resolving every other root', async function () {
       const evaluator = new RuntimeExpressionEvaluator(calledContext, { strict: false });
 
-      assert.strictEqual(evaluator.evaluate('$outputs.name'), 'Rex');
-      assert.strictEqual(evaluator.evaluate('$inputs.username'), 'alice');
+      assert.strictEqual(await evaluator.evaluate('$outputs.name'), 'Rex');
+      assert.strictEqual(await evaluator.evaluate('$inputs.username'), 'alice');
     });
 
-    specify('should leave HTTP-only expressions lenient without calledWorkflow', function () {
+    specify('should leave HTTP-only expressions lenient without calledWorkflow', async function () {
       // before an operation step's request (resolving parameters) there is no
       // exchange yet either; that miss stays an ordinary unresolved reference.
       const evaluator = new RuntimeExpressionEvaluator(
@@ -198,7 +226,7 @@ describe('RuntimeExpressionEvaluator', function () {
         { strict: false },
       );
 
-      assert.isUndefined(evaluator.evaluate('$statusCode'));
+      assert.isUndefined(await evaluator.evaluate('$statusCode'));
     });
   });
 
@@ -209,71 +237,77 @@ describe('RuntimeExpressionEvaluator', function () {
       evaluator = new RuntimeExpressionEvaluator(baseContext);
     });
 
-    specify('should replace an embedded expression with its string form', function () {
-      assert.strictEqual(evaluator.interpolate('Bearer {$outputs.token}'), 'Bearer abc');
+    specify('should replace an embedded expression with its string form', async function () {
+      assert.strictEqual(await evaluator.interpolate('Bearer {$outputs.token}'), 'Bearer abc');
     });
 
-    specify('should stringify a scalar value', function () {
-      assert.strictEqual(evaluator.interpolate('count={$inputs.count}'), 'count=42');
+    specify('should stringify a scalar value', async function () {
+      assert.strictEqual(await evaluator.interpolate('count={$inputs.count}'), 'count=42');
     });
 
-    specify('should JSON-serialize an object value', function () {
+    specify('should JSON-serialize an object value', async function () {
       assert.strictEqual(
-        evaluator.interpolate('pet={$steps.getPet.outputs.pet}'),
+        await evaluator.interpolate('pet={$steps.getPet.outputs.pet}'),
         'pet={"id":7,"name":"Rex"}',
       );
     });
 
-    specify('should replace every occurrence of a repeated expression', function () {
-      assert.strictEqual(evaluator.interpolate('{$outputs.token}-{$outputs.token}'), 'abc-abc');
+    specify('should replace every occurrence of a repeated expression', async function () {
+      assert.strictEqual(
+        await evaluator.interpolate('{$outputs.token}-{$outputs.token}'),
+        'abc-abc',
+      );
     });
 
-    specify('should replace multiple distinct expressions in order', function () {
+    specify('should replace multiple distinct expressions in order', async function () {
       assert.strictEqual(
-        evaluator.interpolate('user={$inputs.username}&count={$inputs.count}'),
+        await evaluator.interpolate('user={$inputs.username}&count={$inputs.count}'),
         'user=alice&count=42',
       );
     });
 
-    specify('should not interpolate any expression when the template is unparseable', function () {
-      // an unparseable brace segment (`{"x":1}`) makes the whole expression-string
-      // fail to parse, so `extract` returns nothing and the template is left as-is.
-      assert.strictEqual(
-        evaluator.interpolate('{"x":1}-{$inputs.username}'),
-        '{"x":1}-{$inputs.username}',
-      );
-    });
+    specify(
+      'should not interpolate any expression when the template is unparseable',
+      async function () {
+        // an unparseable brace segment (`{"x":1}`) makes the whole expression-string
+        // fail to parse, so `extract` returns nothing and the template is left as-is.
+        assert.strictEqual(
+          await evaluator.interpolate('{"x":1}-{$inputs.username}'),
+          '{"x":1}-{$inputs.username}',
+        );
+      },
+    );
 
-    specify('should not interpret replacement patterns in a resolved value', function () {
+    specify('should not interpret replacement patterns in a resolved value', async function () {
       const evil = new RuntimeExpressionEvaluator({ inputs: { v: 'A$&B' } });
-      assert.strictEqual(evil.interpolate('x={$inputs.v}'), 'x=A$&B');
+      assert.strictEqual(await evil.interpolate('x={$inputs.v}'), 'x=A$&B');
     });
 
     specify(
       'should not re-interpolate a resolved value that looks like an expression',
-      function () {
+      async function () {
         const nested = new RuntimeExpressionEvaluator({ inputs: { a: '{$inputs.b}', b: 'X' } });
-        assert.strictEqual(nested.interpolate('{$inputs.a}{$inputs.b}'), '{$inputs.b}X');
+        assert.strictEqual(await nested.interpolate('{$inputs.a}{$inputs.b}'), '{$inputs.b}X');
       },
     );
 
-    specify('should leave a string without embedded expressions unchanged', function () {
-      assert.strictEqual(evaluator.interpolate('application/json'), 'application/json');
+    specify('should leave a string without embedded expressions unchanged', async function () {
+      assert.strictEqual(await evaluator.interpolate('application/json'), 'application/json');
     });
 
-    specify('should leave a braced literal that is not an expression unchanged', function () {
-      assert.strictEqual(evaluator.interpolate('{"a":1}'), '{"a":1}');
+    specify('should leave a braced literal that is not an expression unchanged', async function () {
+      assert.strictEqual(await evaluator.interpolate('{"a":1}'), '{"a":1}');
     });
 
-    specify('should interpolate a braced body-pointer expression', function () {
-      assert.strictEqual(evaluator.interpolate('id={$response.body#/pets/0/id}'), 'id=7');
+    specify('should interpolate a braced body-pointer expression', async function () {
+      assert.strictEqual(await evaluator.interpolate('id={$response.body#/pets/0/id}'), 'id=7');
     });
 
     specify(
       'should render an unresolvable reference as empty string in non-strict mode',
-      function () {
+      async function () {
         const lenient = new RuntimeExpressionEvaluator(baseContext, { strict: false });
-        assert.strictEqual(lenient.interpolate('x={$inputs.missing}'), 'x=');
+        assert.strictEqual(await lenient.interpolate('x={$inputs.missing}'), 'x=');
       },
     );
   });
@@ -285,22 +319,22 @@ describe('RuntimeExpressionEvaluator', function () {
       evaluator = new RuntimeExpressionEvaluator(baseContext);
     });
 
-    specify('should resolve a bare expression to its typed value', function () {
-      assert.strictEqual(evaluator.resolve('$inputs.count'), 42);
-      assert.strictEqual(evaluator.resolve('$response.body#/pets/0/id'), 7);
+    specify('should resolve a bare expression to its typed value', async function () {
+      assert.strictEqual(await evaluator.resolve('$inputs.count'), 42);
+      assert.strictEqual(await evaluator.resolve('$response.body#/pets/0/id'), 7);
     });
 
-    specify('should treat a braced expression as string interpolation', function () {
-      assert.strictEqual(evaluator.resolve('{$inputs.count}'), '42');
-      assert.strictEqual(evaluator.resolve('{$inputs.active}'), 'true');
+    specify('should treat a braced expression as string interpolation', async function () {
+      assert.strictEqual(await evaluator.resolve('{$inputs.count}'), '42');
+      assert.strictEqual(await evaluator.resolve('{$inputs.active}'), 'true');
     });
 
-    specify('should interpolate a mixed template to a string', function () {
-      assert.strictEqual(evaluator.resolve('id-{$inputs.count}'), 'id-42');
+    specify('should interpolate a mixed template to a string', async function () {
+      assert.strictEqual(await evaluator.resolve('id-{$inputs.count}'), 'id-42');
     });
 
-    specify('should return a literal string unchanged', function () {
-      assert.strictEqual(evaluator.resolve('application/json'), 'application/json');
+    specify('should return a literal string unchanged', async function () {
+      assert.strictEqual(await evaluator.resolve('application/json'), 'application/json');
     });
   });
 
@@ -315,29 +349,32 @@ describe('RuntimeExpressionEvaluator', function () {
       );
     });
 
-    specify('should resolve a component from the entry document', function () {
+    specify('should resolve a component from the entry document', async function () {
       const evaluator = new RuntimeExpressionEvaluator(
         {},
         { document: entryDoc, registry, strict: false },
       );
-      const parameter = evaluator.evaluate('$components.parameters.petId') as {
+      const parameter = (await evaluator.evaluate('$components.parameters.petId')) as {
         name?: string;
         value?: string;
       };
       assert.strictEqual(parameter?.name, 'petId');
     });
 
-    specify('should return undefined for a missing component in non-strict mode', function () {
-      const evaluator = new RuntimeExpressionEvaluator(
-        {},
-        { document: entryDoc, registry, strict: false },
-      );
-      assert.isUndefined(evaluator.evaluate('$components.parameters.missing'));
-    });
+    specify(
+      'should return undefined for a missing component in non-strict mode',
+      async function () {
+        const evaluator = new RuntimeExpressionEvaluator(
+          {},
+          { document: entryDoc, registry, strict: false },
+        );
+        assert.isUndefined(await evaluator.evaluate('$components.parameters.missing'));
+      },
+    );
 
-    specify('should return undefined when no document is configured', function () {
+    specify('should return undefined when no document is configured', async function () {
       const evaluator = new RuntimeExpressionEvaluator({}, { strict: false });
-      assert.isUndefined(evaluator.evaluate('$components.parameters.petId'));
+      assert.isUndefined(await evaluator.evaluate('$components.parameters.petId'));
     });
   });
 
@@ -350,45 +387,45 @@ describe('RuntimeExpressionEvaluator', function () {
       entryDoc = await registry.acquireEntryDocument(
         path.join(fixturesPath, 'petstore-order-workflow.arazzo.yaml'),
       );
-      // the executor is responsible for having acquired the referenced document
-      await registry.acquire(entryDoc.resolveSourceDescriptionURI('petstoreAPI')!);
     });
 
-    specify('should resolve a referenced operation by operationId', function () {
+    specify('should resolve a referenced operation by operationId', async function () {
       const evaluator = new RuntimeExpressionEvaluator(
         {},
         { document: entryDoc, registry, strict: false },
       );
-      const operation = evaluator.evaluate('$sourceDescriptions.petstoreAPI.getPetById') as {
+      const operation = (await evaluator.evaluate(
+        '$sourceDescriptions.petstoreAPI.getPetById',
+      )) as {
         operationId?: string;
       };
       assert.strictEqual(operation?.operationId, 'getPetById');
     });
 
-    specify('should return undefined for an unknown source name', function () {
+    specify('should return undefined for an unknown source name', async function () {
       const evaluator = new RuntimeExpressionEvaluator(
         {},
         { document: entryDoc, registry, strict: false },
       );
-      assert.isUndefined(evaluator.evaluate('$sourceDescriptions.unknown.getPetById'));
+      assert.isUndefined(await evaluator.evaluate('$sourceDescriptions.unknown.getPetById'));
     });
 
-    specify('should return undefined for an unknown reference', function () {
+    specify('should return undefined for an unknown reference', async function () {
       const evaluator = new RuntimeExpressionEvaluator(
         {},
         { document: entryDoc, registry, strict: false },
       );
-      assert.isUndefined(evaluator.evaluate('$sourceDescriptions.petstoreAPI.doesNotExist'));
+      assert.isUndefined(await evaluator.evaluate('$sourceDescriptions.petstoreAPI.doesNotExist'));
     });
 
     specify(
       'should resolve the url field to the source URI, resolved to absolute form',
-      function () {
+      async function () {
         const evaluator = new RuntimeExpressionEvaluator(
           {},
           { document: entryDoc, registry, strict: false },
         );
-        const resolved = evaluator.evaluate('$sourceDescriptions.petstoreAPI.url');
+        const resolved = await evaluator.evaluate('$sourceDescriptions.petstoreAPI.url');
 
         // the fixture declares a relative url (`./petstore.openapi.json`); it
         // must resolve against the entry document's base URI to an absolute URI.
@@ -398,28 +435,31 @@ describe('RuntimeExpressionEvaluator', function () {
       },
     );
 
-    specify('should resolve the type field to its literal value', function () {
+    specify('should resolve the type field to its literal value', async function () {
       const evaluator = new RuntimeExpressionEvaluator(
         {},
         { document: entryDoc, registry, strict: false },
       );
-      assert.strictEqual(evaluator.evaluate('$sourceDescriptions.petstoreAPI.type'), 'openapi');
+      assert.strictEqual(
+        await evaluator.evaluate('$sourceDescriptions.petstoreAPI.type'),
+        'openapi',
+      );
     });
 
-    specify(
-      'should return undefined when the referenced document is not loaded',
-      async function () {
-        const freshRegistry = new DocumentRegistry();
-        const freshEntry = await freshRegistry.acquireEntryDocument(
-          path.join(fixturesPath, 'petstore-order-workflow.arazzo.yaml'),
-        );
-        const evaluator = new RuntimeExpressionEvaluator(
-          {},
-          { document: freshEntry, registry: freshRegistry, strict: false },
-        );
-        assert.isUndefined(evaluator.evaluate('$sourceDescriptions.petstoreAPI.getPetById'));
-      },
-    );
+    specify('should load the referenced document when it is not loaded yet', async function () {
+      const freshRegistry = new DocumentRegistry();
+      const freshEntry = await freshRegistry.acquireEntryDocument(
+        path.join(fixturesPath, 'petstore-order-workflow.arazzo.yaml'),
+      );
+      const evaluator = new RuntimeExpressionEvaluator(
+        {},
+        { document: freshEntry, registry: freshRegistry, strict: false },
+      );
+      const operation = (await evaluator.evaluate(
+        '$sourceDescriptions.petstoreAPI.getPetById',
+      )) as { operationId?: string };
+      assert.strictEqual(operation?.operationId, 'getPetById');
+    });
   });
 
   context('$sourceDescriptions field-name collisions', function () {
@@ -441,24 +481,29 @@ describe('RuntimeExpressionEvaluator', function () {
       );
     });
 
-    specify('should resolve an operationId named url to the operation', function () {
-      const operation = evaluator.evaluate('$sourceDescriptions.collisionAPI.url') as {
+    specify('should resolve an operationId named url to the operation', async function () {
+      const operation = (await evaluator.evaluate('$sourceDescriptions.collisionAPI.url')) as {
         operationId?: string;
       };
       assert.strictEqual(operation?.operationId, 'url');
     });
 
-    specify('should resolve a workflowId named type to the workflow', function () {
-      const workflow = evaluator.evaluate('$sourceDescriptions.collisionWorkflows.type') as {
+    specify('should resolve a workflowId named type to the workflow', async function () {
+      const workflow = (await evaluator.evaluate(
+        '$sourceDescriptions.collisionWorkflows.type',
+      )) as {
         workflowId?: string;
       };
       assert.strictEqual(workflow?.workflowId, 'type');
     });
 
-    specify('should still resolve non-colliding fields of the same source', function () {
-      assert.strictEqual(evaluator.evaluate('$sourceDescriptions.collisionAPI.type'), 'openapi');
+    specify('should still resolve non-colliding fields of the same source', async function () {
       assert.strictEqual(
-        evaluator.evaluate('$sourceDescriptions.collisionWorkflows.url'),
+        await evaluator.evaluate('$sourceDescriptions.collisionAPI.type'),
+        'openapi',
+      );
+      assert.strictEqual(
+        await evaluator.evaluate('$sourceDescriptions.collisionWorkflows.url'),
         entryDoc.resolveSourceDescriptionURI('collisionWorkflows'),
       );
     });
@@ -484,63 +529,76 @@ describe('RuntimeExpressionEvaluator', function () {
       );
     });
 
-    specify('should resolve $workflows step to the Step Object of the entry document', function () {
-      const step = evaluator.evaluate('$workflows.crossDocumentStep.steps.after') as {
-        stepId?: string;
-      };
-      assert.strictEqual(step?.stepId, 'after');
-    });
+    specify(
+      'should resolve $workflows step to the Step Object of the entry document',
+      async function () {
+        const step = (await evaluator.evaluate('$workflows.crossDocumentStep.steps.after')) as {
+          stepId?: string;
+        };
+        assert.strictEqual(step?.stepId, 'after');
+      },
+    );
 
-    specify('should resolve $sourceDescriptions workflow step in an Arazzo source', function () {
-      const step = evaluator.evaluate(
-        '$sourceDescriptions.childWorkflows.childFetch.steps.get',
-      ) as {
-        stepId?: string;
-        operationId?: string;
-      };
-      assert.strictEqual(step?.stepId, 'get');
-      assert.strictEqual(step?.operationId, 'getPetById');
-    });
+    specify(
+      'should resolve $sourceDescriptions workflow step in an Arazzo source',
+      async function () {
+        const step = (await evaluator.evaluate(
+          '$sourceDescriptions.childWorkflows.childFetch.steps.get',
+        )) as {
+          stepId?: string;
+          operationId?: string;
+        };
+        assert.strictEqual(step?.stepId, 'get');
+        assert.strictEqual(step?.operationId, 'getPetById');
+      },
+    );
 
     specify(
       'should still resolve a bare $sourceDescriptions workflowId to the Workflow Object',
-      function () {
-        const workflow = evaluator.evaluate('$sourceDescriptions.childWorkflows.childFetch') as {
+      async function () {
+        const workflow = (await evaluator.evaluate(
+          '$sourceDescriptions.childWorkflows.childFetch',
+        )) as {
           workflowId?: string;
         };
         assert.strictEqual(workflow?.workflowId, 'childFetch');
       },
     );
 
-    specify('should return undefined for an unknown step', function () {
-      assert.isUndefined(evaluator.evaluate('$workflows.crossDocumentStep.steps.missing'));
+    specify('should return undefined for an unknown step', async function () {
+      assert.isUndefined(await evaluator.evaluate('$workflows.crossDocumentStep.steps.missing'));
       assert.isUndefined(
-        evaluator.evaluate('$sourceDescriptions.childWorkflows.childFetch.steps.missing'),
+        await evaluator.evaluate('$sourceDescriptions.childWorkflows.childFetch.steps.missing'),
       );
     });
 
-    specify('should return undefined for an unknown workflow', function () {
-      assert.isUndefined(evaluator.evaluate('$workflows.missing.steps.after'));
+    specify('should return undefined for an unknown workflow', async function () {
+      assert.isUndefined(await evaluator.evaluate('$workflows.missing.steps.after'));
       assert.isUndefined(
-        evaluator.evaluate('$sourceDescriptions.childWorkflows.missing.steps.get'),
+        await evaluator.evaluate('$sourceDescriptions.childWorkflows.missing.steps.get'),
       );
     });
 
-    specify('should return undefined for a step reference into an OpenAPI source', function () {
-      assert.isUndefined(evaluator.evaluate('$sourceDescriptions.petstoreAPI.getPetById.steps.x'));
-    });
+    specify(
+      'should return undefined for a step reference into an OpenAPI source',
+      async function () {
+        assert.isUndefined(
+          await evaluator.evaluate('$sourceDescriptions.petstoreAPI.getPetById.steps.x'),
+        );
+      },
+    );
 
-    specify('should throw for an unknown step in strict mode', function () {
+    specify('should throw for an unknown step in strict mode', async function () {
       const strict = new RuntimeExpressionEvaluator({}, { document: entryDoc, registry });
-      assert.throws(
-        () => strict.evaluate('$workflows.crossDocumentStep.steps.missing'),
+      assert.instanceOf(
+        await captureRejection(strict.evaluate('$workflows.crossDocumentStep.steps.missing')),
         RuntimeExpressionError,
       );
     });
 
-    specify('should return undefined when no document is configured', function () {
+    specify('should return undefined when no document is configured', async function () {
       const bare = new RuntimeExpressionEvaluator({}, { strict: false });
-      assert.isUndefined(bare.evaluate('$workflows.crossDocumentStep.steps.after'));
+      assert.isUndefined(await bare.evaluate('$workflows.crossDocumentStep.steps.after'));
     });
   });
 
@@ -556,18 +614,18 @@ describe('RuntimeExpressionEvaluator', function () {
 
     // simple criterion `condition: $statusCode == 200` — the condition is a
     // simple expression, but `$statusCode` is the runtime expression within it.
-    specify('should resolve $statusCode as a number for a simple condition', function () {
-      assert.strictEqual(evaluator.evaluate('$statusCode'), 200);
+    specify('should resolve $statusCode as a number for a simple condition', async function () {
+      assert.strictEqual(await evaluator.evaluate('$statusCode'), 200);
     });
 
     // regex criterion `context: $statusCode` / `condition: '^200$'`
-    specify('should resolve the $statusCode context of a regex criterion', function () {
-      assert.strictEqual(evaluator.evaluate('$statusCode'), 200);
+    specify('should resolve the $statusCode context of a regex criterion', async function () {
+      assert.strictEqual(await evaluator.evaluate('$statusCode'), 200);
     });
 
     // jsonpath criterion `context: $response.body` / `condition: $[?count(@.pets) > 0]`
-    specify('should resolve the $response.body context of a jsonpath criterion', function () {
-      assert.deepEqual(evaluator.evaluate('$response.body'), {
+    specify('should resolve the $response.body context of a jsonpath criterion', async function () {
+      assert.deepEqual(await evaluator.evaluate('$response.body'), {
         pets: [{ id: 7, name: 'Rex' }],
         total: 1,
         nothing: null,
@@ -575,22 +633,22 @@ describe('RuntimeExpressionEvaluator', function () {
     });
 
     // failure action criterion `condition: $statusCode == 503`
-    specify('should resolve $statusCode for a failure-action condition', function () {
+    specify('should resolve $statusCode for a failure-action condition', async function () {
       const failed = new RuntimeExpressionEvaluator({ response: { statusCode: 503 } });
-      assert.strictEqual(failed.evaluate('$statusCode'), 503);
+      assert.strictEqual(await failed.evaluate('$statusCode'), 503);
     });
 
     // components criterion `condition: $statusCode == 401`
-    specify('should resolve $statusCode for a components condition', function () {
+    specify('should resolve $statusCode for a components condition', async function () {
       const unauthorized = new RuntimeExpressionEvaluator({ response: { statusCode: 401 } });
-      assert.strictEqual(unauthorized.evaluate('$statusCode'), 401);
+      assert.strictEqual(await unauthorized.evaluate('$statusCode'), 401);
     });
 
     // the braced form used in the JSON `{$statusCode == 401}` is a string
     // template; the runtime expression alone still resolves to its typed value.
-    specify('should preserve the number type so a condition compares correctly', function () {
-      assert.strictEqual(evaluator.evaluate('$statusCode'), 200);
-      assert.notStrictEqual(evaluator.evaluate('$statusCode') as unknown, '200');
+    specify('should preserve the number type so a condition compares correctly', async function () {
+      assert.strictEqual(await evaluator.evaluate('$statusCode'), 200);
+      assert.notStrictEqual((await evaluator.evaluate('$statusCode')) as unknown, '200');
     });
   });
 });

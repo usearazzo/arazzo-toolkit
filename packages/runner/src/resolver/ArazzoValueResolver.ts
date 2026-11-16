@@ -2,11 +2,14 @@ import { toValue } from '@speclynx/apidom-core';
 import { test as isRuntimeExpression } from '@swaggerexpert/arazzo-runtime-expression';
 
 /**
- * Resolves a runtime expression to its value.
+ * Resolves a runtime expression to its value, or to a Promise of it.
  *
  * Bridged to a lenient runtime expression evaluator
  * (`(expression) => runtimeExpressionEvaluator.evaluate(expression)`), so an
- * unresolvable reference yields `undefined` rather than throwing.
+ * unresolvable reference yields `undefined` rather than throwing; a
+ * `$sourceDescriptions` document that cannot be loaded still rejects with the
+ * load error (see `RuntimeExpressionEvaluator.evaluate`). The result
+ * is awaited, so a synchronous resolver works too.
  * @public
  */
 export type RuntimeExpressionResolver = (expression: string) => unknown;
@@ -30,7 +33,10 @@ abstract class ArazzoValueResolver {
   /**
    * Resolves one authored value element by the rule above.
    */
-  protected resolveValue(element: unknown, resolve: RuntimeExpressionResolver): unknown {
+  protected async resolveValue(
+    element: unknown,
+    resolve: RuntimeExpressionResolver,
+  ): Promise<unknown> {
     const value = toValue(element);
     return typeof value === 'string' && isRuntimeExpression(value) ? resolve(value) : value;
   }

@@ -78,7 +78,9 @@ export interface StepExecutorOptions {
    */
   readonly document: ArazzoDocument;
   /**
-   * The document registry holding the already-loaded source documents.
+   * The document registry the source documents are acquired from — returned
+   * from its cache, or loaded when an operation, a workflow or a
+   * `$sourceDescriptions` expression first needs them.
    */
   readonly registry: DocumentRegistry;
   /**
@@ -324,12 +326,12 @@ class StepExecutor {
     // keyed by '{in}.{name}' rather than bare name, so two parameters that
     // legally differ only in their location each reach their own place.
     const preContext = state.toContext();
-    const parameters = this.#parameterResolver.resolve(
+    const parameters = await this.#parameterResolver.resolve(
       step.parameters,
       (expression) => this.#evaluate(preContext, expression),
       scope,
     );
-    const requestBody = this.#requestBodyResolver.resolve(
+    const requestBody = await this.#requestBodyResolver.resolve(
       step.requestBody,
       (expression) => this.#evaluate(preContext, expression),
       scope,
@@ -372,14 +374,14 @@ class StepExecutor {
       this.#requestContext(response),
       this.#responseContext(response),
     );
-    const successCriteria = this.evaluateCriteria(step, postContext, workflowId);
+    const successCriteria = await this.evaluateCriteria(step, postContext, workflowId);
     const successful = successCriteria.every((criterion) => criterion.met);
-    const outputs = this.#outputResolver.resolve(
+    const outputs = await this.#outputResolver.resolve(
       step.outputs,
       (expression) => this.#evaluate(postContext, expression),
       scope,
     );
-    const { matchedActions, actionCriteria } = this.selectActions(
+    const { matchedActions, actionCriteria } = await this.selectActions(
       step,
       successful,
       postContext,
@@ -489,19 +491,22 @@ class StepExecutor {
    * names the step's workflow on a thrown error, as for
    * {@link StepExecutor.execute}.
    */
-  evaluateCriteria(
+  async evaluateCriteria(
     step: StepElement,
     context: RuntimeExpressionContext,
     workflowId?: string,
-  ): CriterionEvaluationRecord[] {
+  ): Promise<CriterionEvaluationRecord[]> {
     this.assertSuccessCriteria(step, workflowId);
     const criteria = step.successCriteria;
     if (criteria === undefined) return [];
 
-    // assertSuccessCriteria above guarantees every entry is a Criterion Object
-    return ([...criteria] as CriterionElement[]).map((criterion) =>
-      this.#evaluateCriterion(criterion, context),
-    );
+    // assertSuccessCriteria above guarantees every entry is a Criterion Object.
+    // evaluated one after another, in list order, like the actions' criteria.
+    const records: CriterionEvaluationRecord[] = [];
+    for (const criterion of [...criteria] as CriterionElement[]) {
+      records.push(await this.#evaluateCriterion(criterion, context));
+    }
+    return records;
   }
 
   /**
@@ -527,16 +532,16 @@ class StepExecutor {
    * `workflowId` names the step's workflow on a thrown error, as for
    * {@link StepExecutor.execute}.
    */
-  selectActions(
+  async selectActions(
     step: StepElement,
     successful: boolean,
     context: RuntimeExpressionContext,
     workflowId?: string,
-  ): Pick<StepExecutionResult, 'matchedActions' | 'actionCriteria'> {
+  ): Promise<Pick<StepExecutionResult, 'matchedActions' | 'actionCriteria'>> {
     const actionCriteria: CriterionEvaluationRecord[] = [];
-    const isCriterionMet: CriterionPredicate = (criterion, action) => {
+    const isCriterionMet: CriterionPredicate = async (criterion, action) => {
       const record: CriterionEvaluationRecord = {
-        ...this.#evaluateCriterion(criterion, context),
+        ...(await this.#evaluateCriterion(criterion, context)),
         actionName: toValue(action.name) as string,
       };
       actionCriteria.push(record);
@@ -548,8 +553,8 @@ class StepExecutor {
     };
 
     const matchedActions = successful
-      ? this.#actionResolver.resolveOnSuccess(step.onSuccess, isCriterionMet, scope)
-      : this.#actionResolver.resolveOnFailure(step.onFailure, isCriterionMet, scope);
+      ? await this.#actionResolver.resolveOnSuccess(step.onSuccess, isCriterionMet, scope)
+      : await this.#actionResolver.resolveOnFailure(step.onFailure, isCriterionMet, scope);
 
     return { matchedActions, actionCriteria };
   }
@@ -577,13 +582,13 @@ class StepExecutor {
    * condition that cannot be evaluated is unmet and records why; any other
    * error propagates.
    */
-  #evaluateCriterion(
+  async #evaluateCriterion(
     criterion: CriterionElement,
     context: RuntimeExpressionContext,
-  ): CriterionEvaluationRecord {
+  ): Promise<CriterionEvaluationRecord> {
     const condition = toValue(criterion.condition) as string;
     try {
-      const { met, error } = this.#criterionEvaluator.evaluate(criterion, (expression) =>
+      const { met, error } = await this.#criterionEvaluator.evaluate(criterion, (expression) =>
         this.#evaluate(context, expression),
       );
       if (error === undefined) return { condition, met };
@@ -611,7 +616,7 @@ class StepExecutor {
    * `$components` / `$sourceDescriptions` resolution to the document and
    * registry.
    */
-  #evaluate(context: RuntimeExpressionContext, expression: string): unknown {
+  #evaluate(context: RuntimeExpressionContext, expression: string): Promise<unknown> {
     return new RuntimeExpressionEvaluator(context, {
       strict: false,
       document: this.#document,

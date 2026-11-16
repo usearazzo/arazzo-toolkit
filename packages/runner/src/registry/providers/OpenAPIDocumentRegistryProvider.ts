@@ -57,6 +57,8 @@ export const providerOptionsOverride: OpenAPIDocumentRegistryProviderOptions = {
  * @public
  */
 class OpenAPIDocumentRegistryProvider extends DocumentRegistryProvider {
+  override readonly sourceDescriptionType = 'openapi';
+
   readonly #options: OpenAPIDocumentRegistryProviderOptions;
 
   constructor(options: OpenAPIDocumentRegistryProviderOptions = {}) {

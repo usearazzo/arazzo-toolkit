@@ -28,6 +28,16 @@ export type DocumentRegistryProviderOptions = PartialDeep<ApiDOMReferenceOptions
  */
 abstract class DocumentRegistryProvider {
   /**
+   * The Source Description Object `type` this provider loads (`openapi`,
+   * `arazzo`, …), or `undefined` when it does not say — then it may load a
+   * source of any type.
+   *
+   * Lets the registry tell, without fetching anything, whether a source of a
+   * given type can be loaded at all (`DocumentRegistry.canLoad`).
+   */
+  readonly sourceDescriptionType?: string;
+
+  /**
    * Checks if the content at the URI can be handled by this provider.
    */
   abstract canProvide(uri: string): Promise<boolean>;

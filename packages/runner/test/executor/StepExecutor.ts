@@ -1109,34 +1109,28 @@ describe('StepExecutor', function () {
       assert.strictEqual(error.stepId, 's');
     });
 
-    specify('should name the workflow from evaluateCriteria', function () {
+    specify('should name the workflow from evaluateCriteria', async function () {
       const { executor } = makeExecutor();
       const step = refractStep({ stepId: 's', successCriteria: 'not-a-list' }) as StepElement;
 
-      try {
-        executor.evaluateCriteria(step, {}, 'wf');
-        assert.fail('expected evaluateCriteria to throw');
-      } catch (error) {
-        assert.instanceOf(error, ResolverError);
-        assert.strictEqual((error as ResolverError).reason, 'malformed-criteria');
-        assert.strictEqual((error as ResolverError).workflowId, 'wf');
-        assert.strictEqual((error as ResolverError).stepId, 's');
-      }
+      const error = await caught(executor.evaluateCriteria(step, {}, 'wf'));
+
+      assert.instanceOf(error, ResolverError);
+      assert.strictEqual(error.reason, 'malformed-criteria');
+      assert.strictEqual(error.workflowId, 'wf');
+      assert.strictEqual(error.stepId, 's');
     });
 
-    specify('should name the workflow from selectActions', function () {
+    specify('should name the workflow from selectActions', async function () {
       const { executor } = makeExecutor();
       const step = refractStep({ stepId: 's', onSuccess: 'not-a-list' }) as StepElement;
 
-      try {
-        executor.selectActions(step, true, {}, 'wf');
-        assert.fail('expected selectActions to throw');
-      } catch (error) {
-        assert.instanceOf(error, ResolverError);
-        assert.strictEqual((error as ResolverError).reason, 'malformed-actions');
-        assert.strictEqual((error as ResolverError).workflowId, 'wf');
-        assert.strictEqual((error as ResolverError).stepId, 's');
-      }
+      const error = await caught(executor.selectActions(step, true, {}, 'wf'));
+
+      assert.instanceOf(error, ResolverError);
+      assert.strictEqual(error.reason, 'malformed-actions');
+      assert.strictEqual(error.workflowId, 'wf');
+      assert.strictEqual(error.stepId, 's');
     });
   });
 });

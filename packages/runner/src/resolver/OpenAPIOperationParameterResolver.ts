@@ -57,11 +57,11 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
    *
    * `scope` names the step in a thrown {@link ResolverError}.
    */
-  resolve(
+  async resolve(
     parameters: StepParametersElement | undefined,
     resolve: RuntimeExpressionResolver,
     scope: StepScope,
-  ): Record<string, unknown> {
+  ): Promise<Record<string, unknown>> {
     const delivery = new ParameterDelivery();
     if (parameters === undefined) return delivery.toRecord();
     // present but scalar: walking it would fail as a bare
@@ -124,7 +124,7 @@ class OpenAPIOperationParameterResolver extends StepParameterResolver {
         );
       }
 
-      delivery.set(key, this.resolveValue(parameter.value, resolve));
+      delivery.set(key, await this.resolveValue(parameter.value, resolve));
     }
 
     return delivery.toRecord();

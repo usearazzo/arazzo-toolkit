@@ -32,35 +32,44 @@ describe('ActionResolver', function () {
     isCriterionElement(criterion) && toValue(criterion.condition) === 'pass';
   const always: CriterionPredicate = () => true;
 
+  const captureRejection = async (promise: Promise<unknown>): Promise<unknown> => {
+    try {
+      await promise;
+    } catch (error) {
+      return error;
+    }
+    return assert.fail('expected promise to reject, but it resolved');
+  };
+
   const onSuccess = (...actions: unknown[]): StepOnSuccessElement =>
     new StepOnSuccessElement(actions.map((a) => refractSuccessAction(a)));
   const onFailure = (...actions: unknown[]): StepOnFailureElement =>
     new StepOnFailureElement(actions.map((a) => refractFailureAction(a)));
 
   context('selection', function () {
-    specify('should select the first action whose criteria all pass', function () {
+    specify('should select the first action whose criteria all pass', async function () {
       const actions = onSuccess(
         { name: 'a', type: 'goto', stepId: 'first', criteria: [{ condition: 'fail' }] },
         { name: 'b', type: 'goto', stepId: 'second', criteria: [{ condition: 'pass' }] },
         { name: 'c', type: 'goto', stepId: 'third', criteria: [{ condition: 'pass' }] },
       );
 
-      const selected = resolver.resolveOnSuccess(actions, byCondition, scope)[0];
+      const selected = (await resolver.resolveOnSuccess(actions, byCondition, scope))[0];
       assert.isTrue(isSuccessActionElement(selected));
       assert.strictEqual(toValue(selected?.stepId), 'second');
     });
 
-    specify('should require all of an action criteria to pass', function () {
+    specify('should require all of an action criteria to pass', async function () {
       const actions = onSuccess({
         name: 'a',
         type: 'end',
         criteria: [{ condition: 'pass' }, { condition: 'fail' }],
       });
 
-      assert.isUndefined(resolver.resolveOnSuccess(actions, byCondition, scope)[0]);
+      assert.isUndefined((await resolver.resolveOnSuccess(actions, byCondition, scope))[0]);
     });
 
-    specify('should evaluate every criterion of an action, with the action', function () {
+    specify('should evaluate every criterion of an action, with the action', async function () {
       const actions = onSuccess({
         name: 'a',
         type: 'end',
@@ -72,61 +81,66 @@ describe('ActionResolver', function () {
         return byCondition(criterion, action);
       };
 
-      assert.isEmpty(resolver.resolveOnSuccess(actions, recording, scope));
+      assert.isEmpty(await resolver.resolveOnSuccess(actions, recording, scope));
       assert.deepEqual(seen, [
         ['a', 'fail'],
         ['a', 'pass'],
       ]);
     });
 
-    specify('should treat an action with no criteria as always matching', function () {
-      const selected = resolver.resolveOnSuccess(
-        onSuccess({ name: 'a', type: 'end' }),
-        byCondition,
-        scope,
+    specify('should treat an action with no criteria as always matching', async function () {
+      const selected = (
+        await resolver.resolveOnSuccess(onSuccess({ name: 'a', type: 'end' }), byCondition, scope)
       )[0];
 
       assert.strictEqual(toValue(selected?.type), 'end');
     });
 
-    specify('should treat an action with an empty criteria list as matching', function () {
-      const selected = resolver.resolveOnSuccess(
-        onSuccess({ name: 'a', type: 'end', criteria: [] }),
-        byCondition,
-        scope,
+    specify('should treat an action with an empty criteria list as matching', async function () {
+      const selected = (
+        await resolver.resolveOnSuccess(
+          onSuccess({ name: 'a', type: 'end', criteria: [] }),
+          byCondition,
+          scope,
+        )
       )[0];
 
       assert.strictEqual(toValue(selected?.type), 'end');
     });
 
-    specify('should return undefined when no action matches', function () {
+    specify('should return undefined when no action matches', async function () {
       const actions = onSuccess({ name: 'a', type: 'end', criteria: [{ condition: 'fail' }] });
 
-      assert.isUndefined(resolver.resolveOnSuccess(actions, byCondition, scope)[0]);
+      assert.isUndefined((await resolver.resolveOnSuccess(actions, byCondition, scope))[0]);
     });
 
-    specify('should return undefined when the action list is absent', function () {
-      assert.isUndefined(resolver.resolveOnSuccess(undefined, always, scope)[0]);
+    specify('should return undefined when the action list is absent', async function () {
+      assert.isUndefined((await resolver.resolveOnSuccess(undefined, always, scope))[0]);
     });
   });
 
   context('selected action element', function () {
-    const select = (action: unknown, predicate = always): SelectedAction | undefined =>
-      resolver.resolveOnFailure(onFailure(action), predicate, scope)[0];
+    const select = async (
+      action: unknown,
+      predicate = always,
+    ): Promise<SelectedAction | undefined> =>
+      (await resolver.resolveOnFailure(onFailure(action), predicate, scope))[0];
 
-    specify('should return the goto action element with its target', function () {
-      const selected = resolver.resolveOnSuccess(
-        onSuccess({ name: 'a', type: 'goto', stepId: 'next' }),
-        always,
-        scope,
+    specify('should return the goto action element with its target', async function () {
+      const selected = (
+        await resolver.resolveOnSuccess(
+          onSuccess({ name: 'a', type: 'goto', stepId: 'next' }),
+          always,
+          scope,
+        )
       )[0];
 
       assert.strictEqual(toValue(selected?.type), 'goto');
       assert.strictEqual(toValue(selected?.stepId), 'next');
     });
 
-    specify('should return the retry action element with its bounds', function () {
-      const selected = select({ name: 'a', type: 'retry', retryAfter: 3, retryLimit: 5 });
+    specify('should return the retry action element with its bounds', async function () {
+      const selected = await select({ name: 'a', type: 'retry', retryAfter: 3, retryLimit: 5 });
 
       assert.isTrue(isFailureActionElement(selected));
       assert.strictEqual(toValue(selected?.type), 'retry');
@@ -134,37 +148,37 @@ describe('ActionResolver', function () {
       assert.strictEqual(toValue((selected as { retryLimit?: unknown }).retryLimit), 5);
     });
 
-    specify('should return the workflow-transfer action element', function () {
-      const selected = select({ name: 'a', type: 'goto', workflowId: 'wf' });
+    specify('should return the workflow-transfer action element', async function () {
+      const selected = await select({ name: 'a', type: 'goto', workflowId: 'wf' });
 
       assert.strictEqual(toValue(selected?.workflowId), 'wf');
     });
 
-    specify('should throw ResolverError for a present but non-list action list', function () {
+    specify('should throw ResolverError for a present but non-list action list', async function () {
       // walking it would fail as a bare `TypeError: actions is not iterable`.
-      const error = assert.throws(
-        () => resolver.resolveOnFailure('not-a-list' as never, byCondition, scope),
-        ResolverError,
-        /is present but is not a list/,
-      ) as unknown as ResolverError;
+      const error = (await captureRejection(
+        resolver.resolveOnFailure('not-a-list' as never, byCondition, scope),
+      )) as ResolverError;
 
+      assert.instanceOf(error, ResolverError);
+      assert.match(error.message, /is present but is not a list/);
       assert.strictEqual(error.reason, 'malformed-actions');
       assert.strictEqual(error.stepId, stepId);
     });
 
     specify(
       "should throw ResolverError for an action's present but non-list criteria",
-      function () {
+      async function () {
         const actions = new StepOnSuccessElement([
           refractSuccessAction({ name: 'a', type: 'end', criteria: 'not-a-list' }),
         ]);
 
-        const error = assert.throws(
-          () => resolver.resolveOnSuccess(actions, byCondition, scope),
-          ResolverError,
-          /is present but is not a list/,
-        ) as unknown as ResolverError;
+        const error = (await captureRejection(
+          resolver.resolveOnSuccess(actions, byCondition, scope),
+        )) as ResolverError;
 
+        assert.instanceOf(error, ResolverError);
+        assert.match(error.message, /is present but is not a list/);
         assert.strictEqual(error.reason, 'malformed-criteria');
         assert.strictEqual(error.target, 'criteria');
         assert.strictEqual(error.stepId, stepId);
@@ -173,15 +187,18 @@ describe('ActionResolver', function () {
 
     specify(
       'should throw ResolverError for a well-formed list entry that is not a Success/Failure Action Object',
-      function () {
+      async function () {
         const actions = onSuccess({ name: 'a', type: 'end' }, 'not-an-action');
 
-        const error = assert.throws(
-          () => resolver.resolveOnSuccess(actions, always, scope),
-          ResolverError,
-          /contains an entry that is not a Success\/Failure Action Object/,
-        ) as unknown as ResolverError;
+        const error = (await captureRejection(
+          resolver.resolveOnSuccess(actions, always, scope),
+        )) as ResolverError;
 
+        assert.instanceOf(error, ResolverError);
+        assert.match(
+          error.message,
+          /contains an entry that is not a Success\/Failure Action Object/,
+        );
         assert.strictEqual(error.reason, 'malformed-action-entry');
         assert.strictEqual(error.target, 'onSuccess');
         assert.strictEqual(error.stepId, stepId);
@@ -190,17 +207,17 @@ describe('ActionResolver', function () {
 
     specify(
       'should throw ResolverError for an action criteria entry that is not a Criterion Object',
-      function () {
+      async function () {
         const actions = new StepOnSuccessElement([
           refractSuccessAction({ name: 'a', type: 'end', criteria: ['not-a-criterion'] }),
         ]);
 
-        const error = assert.throws(
-          () => resolver.resolveOnSuccess(actions, byCondition, scope),
-          ResolverError,
-          /contains an entry that is not a Criterion Object/,
-        ) as unknown as ResolverError;
+        const error = (await captureRejection(
+          resolver.resolveOnSuccess(actions, byCondition, scope),
+        )) as ResolverError;
 
+        assert.instanceOf(error, ResolverError);
+        assert.match(error.message, /contains an entry that is not a Criterion Object/);
         assert.strictEqual(error.reason, 'malformed-criterion');
         assert.strictEqual(error.target, 'criteria');
         assert.strictEqual(error.stepId, stepId);
