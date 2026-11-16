@@ -386,14 +386,14 @@ class OpenAPIOperationExecutor {
       ...(step === undefined ? {} : { step: { ...step } }),
     };
 
-    this.#events?.emit({ type: 'operation-normalize-start', ...context, runId });
+    this.#events?.emit({ type: 'openapi-operation-normalize-start', ...context, runId });
     const normalizedOperation = await this.#operationNormalizer.normalize(
       operation,
       locator.document,
     );
-    this.#events?.emit({ type: 'operation-normalize-settled', ...context, runId });
+    this.#events?.emit({ type: 'openapi-operation-normalize-settled', ...context, runId });
     const assembled = this.#documentAssembler.assemble(normalizedOperation, locator.document);
-    this.#events?.emit({ type: 'operation-assembled', ...context, runId });
+    this.#events?.emit({ type: 'openapi-operation-assembled', ...context, runId });
 
     const rest = omit(
       [

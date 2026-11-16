@@ -193,9 +193,9 @@ export type {
 export type {
   OpenAPIOperationEvent,
   OpenAPIOperationEventBase,
-  OperationNormalizeStartEvent,
-  OperationNormalizeSettledEvent,
-  OperationAssembledEvent,
+  OpenAPIOperationNormalizeStartEvent,
+  OpenAPIOperationNormalizeSettledEvent,
+  OpenAPIOperationAssembledEvent,
 } from './observability/OpenAPIOperationEvent.ts';
 
 /* Errors */

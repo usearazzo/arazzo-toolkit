@@ -21,7 +21,7 @@ export interface ArazzoRunnerEventBase {
  *
  * Events carry no level or severity, like Node's `diagnostics_channel`
  * messages: how to log an event is the logging consumer's decision. The
- * `document-*`, `workflow-normalize-*` and `operation-*` events describe the
+ * `document-*`, `workflow-normalize-*` and `openapi-operation-*` events describe the
  * machinery under a run, the detail a debug log would show.
  * @public
  */

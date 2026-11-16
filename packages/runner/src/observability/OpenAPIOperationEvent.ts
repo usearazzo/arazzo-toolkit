@@ -21,16 +21,16 @@ export interface OpenAPIOperationEventBase extends ArazzoRunnerEventBase, Reques
  * externally referenced documents) and inheriting its path-level fields.
  * @public
  */
-export interface OperationNormalizeStartEvent extends OpenAPIOperationEventBase {
-  readonly type: 'operation-normalize-start';
+export interface OpenAPIOperationNormalizeStartEvent extends OpenAPIOperationEventBase {
+  readonly type: 'openapi-operation-normalize-start';
 }
 
 /**
  * The operation was normalized.
  * @public
  */
-export interface OperationNormalizeSettledEvent extends OpenAPIOperationEventBase {
-  readonly type: 'operation-normalize-settled';
+export interface OpenAPIOperationNormalizeSettledEvent extends OpenAPIOperationEventBase {
+  readonly type: 'openapi-operation-normalize-settled';
 }
 
 /**
@@ -38,8 +38,8 @@ export interface OperationNormalizeSettledEvent extends OpenAPIOperationEventBas
  * request is built from.
  * @public
  */
-export interface OperationAssembledEvent extends OpenAPIOperationEventBase {
-  readonly type: 'operation-assembled';
+export interface OpenAPIOperationAssembledEvent extends OpenAPIOperationEventBase {
+  readonly type: 'openapi-operation-assembled';
 }
 
 /**
@@ -47,4 +47,6 @@ export interface OperationAssembledEvent extends OpenAPIOperationEventBase {
  * @public
  */
 export type OpenAPIOperationEvent =
-  OperationNormalizeStartEvent | OperationNormalizeSettledEvent | OperationAssembledEvent;
+  | OpenAPIOperationNormalizeStartEvent
+  | OpenAPIOperationNormalizeSettledEvent
+  | OpenAPIOperationAssembledEvent;
