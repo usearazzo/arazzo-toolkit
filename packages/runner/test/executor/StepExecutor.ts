@@ -568,14 +568,16 @@ describe('StepExecutor', function () {
         const result = await executor.execute(step, state());
 
         // the first unmet criterion does not stop the others, in either list.
+        // each record also carries what its condition saw.
+        const saw = { $statusCode: 200 };
         assert.deepEqual(result.successCriteria, [
-          { condition: '$statusCode == 201', met: false },
-          { condition: '$statusCode == 202', met: false },
-          { condition: '$statusCode == 200', met: true },
+          { condition: '$statusCode == 201', met: false, values: saw },
+          { condition: '$statusCode == 202', met: false, values: saw },
+          { condition: '$statusCode == 200', met: true, values: saw },
         ]);
         assert.deepEqual(result.actionCriteria, [
-          { condition: '$statusCode == 500', met: false, actionName: 'onServerError' },
-          { condition: '$statusCode == 200', met: true, actionName: 'onServerError' },
+          { condition: '$statusCode == 500', met: false, values: saw, actionName: 'onServerError' },
+          { condition: '$statusCode == 200', met: true, values: saw, actionName: 'onServerError' },
         ]);
         assert.strictEqual(toValue(result.action?.name), 'fallback');
       },
