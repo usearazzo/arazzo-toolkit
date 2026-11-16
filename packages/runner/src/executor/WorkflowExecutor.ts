@@ -1,5 +1,6 @@
 import { toValue } from '@speclynx/apidom-core';
 import { isPlainObject } from 'ramda-adjunct';
+import ShortUniqueId from 'short-unique-id';
 import { isArrayElement, isObjectElement, isStringElement } from '@speclynx/apidom-datamodel';
 import {
   isFailureActionElement,
@@ -561,11 +562,11 @@ class WorkflowExecutor {
   static readonly #DEFAULT_MAX_WORKFLOW_DEPTH = 32;
   static readonly #DEFAULT_NOW = (): number => performance.now();
   /**
-   * Runs started by any executor in this process, so every `runId` is unique
-   * within it without a random source (`crypto.randomUUID` is missing from
-   * browser pages not served over HTTPS).
+   * Generates each run's `runId`: random rather than counted, so the events
+   * of runs in different processes stay apart once collected in one place.
+   * It needs no Web Crypto, which browsers offer only on secure pages.
    */
-  static #runs = 0;
+  static readonly #RUN_IDS = new ShortUniqueId({ length: 12 });
   static readonly #EXECUTE_OPTION_KEYS: ReadonlySet<string> = new Set([
     'inputs',
     'executeOptions',
@@ -622,8 +623,7 @@ class WorkflowExecutor {
 
     const { signal } = options;
     const executeOptions = this.#executeOptionsByName(options.executeOptions ?? {});
-    WorkflowExecutor.#runs += 1;
-    const runId = `run-${WorkflowExecutor.#runs}`;
+    const runId = `run-${WorkflowExecutor.#RUN_IDS.randomUUID()}`;
     const scope: RunScope = {
       runId,
       // the signal is put into every step's opaque bag, because that bag is

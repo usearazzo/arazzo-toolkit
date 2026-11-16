@@ -13,10 +13,10 @@ import type { ArazzoRunnerEventBase } from './ArazzoRunnerEvent.ts';
  */
 export interface WorkflowExecutionEventBase extends ArazzoRunnerEventBase {
   /**
-   * Identifies the {@link WorkflowExecutor.execute} call the event belongs to,
-   * unique within the process: every workflow, dependency and step of one
-   * call shares it, so the events of concurrent calls can be told apart. The
-   * operation events of the call carry it too.
+   * A random id of the {@link WorkflowExecutor.execute} call the event
+   * belongs to. Every workflow, dependency and step of one call shares it, so
+   * the events of concurrent calls, or of runs in different processes, can be
+   * told apart. The operation events of the call carry it too.
    */
   readonly runId: string;
   /**
