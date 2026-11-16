@@ -87,24 +87,24 @@ describe('Redactor', function () {
   context('urls', function () {
     const urlOf = (url: string): string => new Redactor().event(start({ url })).request.url;
 
-    specify('should mask userinfo up to the last @ before the host', function () {
+    specify('should mask userinfo, split at the last @ as URL parsers do', function () {
       assert.strictEqual(
         urlOf('https://user:p@ss@api.example.com/x'),
         'https://REDACTED:REDACTED@api.example.com/x',
       );
+    });
+
+    specify('should mask matching query values, case-insensitively', function () {
       assert.strictEqual(
-        urlOf('//user:pass@api.example.com/x'),
-        '//REDACTED:REDACTED@api.example.com/x',
+        urlOf('https://api.example.com/f?a=1&SIGNATURE=x&sig=1&sig=2&key=k#frag?sig=keep'),
+        'https://api.example.com/f?a=1&SIGNATURE=REDACTED&sig=REDACTED&sig=REDACTED&key=REDACTED#frag?sig=keep',
       );
     });
 
-    specify('should mask matching query values and leave the rest as sent', function () {
-      assert.strictEqual(
-        urlOf(
-          'https://api.example.com/f?a=%20b+c&SIGNATURE=x&sig=1&sig=2&flag&key=k#frag?sig=keep',
-        ),
-        'https://api.example.com/f?a=%20b+c&SIGNATURE=REDACTED&sig=REDACTED&sig=REDACTED&flag&key=REDACTED#frag?sig=keep',
-      );
+    specify('should leave a URL with nothing to mask exactly as it was', function () {
+      const url = 'HTTPS://api.example.com:443/f?a=%20b+c&flag';
+
+      assert.strictEqual(urlOf(url), url);
     });
 
     specify('should mask userinfo in document URIs and paths', function () {

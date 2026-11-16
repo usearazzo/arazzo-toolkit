@@ -57,7 +57,8 @@ export interface RedactorOptions {
  * matches a pattern (headers, query parameters, body and output fields, at
  * any depth), and a criterion value whose runtime expression reads a
  * matching name (`$inputs.password`, `$response.body#/access_token`). Every
- * URL has its userinfo masked and its matching query values. A request or
+ * absolute URL has its userinfo masked and its matching query values, as the
+ * `URL` constructor parses it. A request or
  * response body that is JSON or a URL-encoded form is masked field by field
  * and cut to {@link Redactor.BODY_LIMIT} characters; any other body is
  * masked whole. A credential under a name no pattern matches is carried as
@@ -112,8 +113,7 @@ class Redactor {
   }
 
   #walk(value: unknown): unknown {
-    if (typeof value === 'string')
-      return /^(?:[a-z][a-z\d+.-]*:)?\/\//i.test(value) ? this.#url(value) : value;
+    if (typeof value === 'string') return URL.canParse(value) ? this.#url(value) : value;
     if (Array.isArray(value)) return value.map((item) => this.#walk(item));
     if (!isPlainObject(value)) return value;
 
@@ -138,29 +138,31 @@ class Redactor {
 
   /**
    * Whether a name matches a pattern. A runtime expression is matched by the
-   * last name it reads.
+   * field name it reads.
    */
   #masks(name: string): boolean {
-    const target = name.startsWith('$') ? Redactor.#lastName(name) : name;
+    const target = name.startsWith('$') ? Redactor.#fieldName(name) : name;
     return target !== undefined && this.#patterns.some((pattern) => pattern.test(target));
   }
 
   /**
-   * The URL with its userinfo and matching query values masked, worked on as
-   * a string so the rest keeps the encoding it was sent with.
+   * The absolute URL with its userinfo and matching query values masked. A
+   * URL with nothing to mask comes back exactly as it was, not normalized.
    */
-  #url(url: string): string {
-    // up to the last `@` before the path, as URL parsers split userinfo
-    const withoutUserinfo = url.replace(
-      /^((?:[a-z][a-z\d+.-]*:)?\/\/)[^/?#]*@/i,
-      `$1${Redactor.CENSOR}:${Redactor.CENSOR}@`,
-    );
-    const queryStart = withoutUserinfo.indexOf('?');
-    if (queryStart === -1) return withoutUserinfo;
-    const fragmentStart = withoutUserinfo.indexOf('#', queryStart);
-    const queryEnd = fragmentStart === -1 ? withoutUserinfo.length : fragmentStart;
-    const query = this.#form(withoutUserinfo.slice(queryStart + 1, queryEnd));
-    return `${withoutUserinfo.slice(0, queryStart + 1)}${query}${withoutUserinfo.slice(queryEnd)}`;
+  #url(value: string): string {
+    const url = new URL(value);
+    let masked = false;
+    if (url.username !== '' || url.password !== '') {
+      url.username = Redactor.CENSOR;
+      url.password = Redactor.CENSOR;
+      masked = true;
+    }
+    const query = this.#params(url.search);
+    if (query !== undefined) {
+      url.search = query;
+      masked = true;
+    }
+    return masked ? url.href : value;
   }
 
   /**
@@ -183,7 +185,7 @@ class Redactor {
         mediaType?.type === 'application' &&
         mediaType.subtype === 'x-www-form-urlencoded'
       ) {
-        masked = this.#form(body);
+        masked = this.#params(body) ?? body;
       } else masked = Redactor.CENSOR;
     }
 
@@ -194,18 +196,17 @@ class Redactor {
   }
 
   /**
-   * `name=value` pairs joined by `&`, with matching values masked.
+   * URL-encoded `name=value` pairs with matching values masked, or
+   * `undefined` when none matches, so the caller keeps the text as it was.
    */
-  #form(pairs: string): string {
-    return pairs
-      .split('&')
-      .map((pair) => {
-        const separator = pair.indexOf('=');
-        if (separator === -1) return pair;
-        const name = pair.slice(0, separator);
-        return this.#masks(Redactor.#decode(name)) ? `${name}=${Redactor.CENSOR}` : pair;
-      })
-      .join('&');
+  #params(text: string): string | undefined {
+    const params = [...new URLSearchParams(text)];
+    if (!params.some(([name]) => this.#masks(name))) return undefined;
+    const masked = params.map(([name, value]) => [
+      name,
+      this.#masks(name) ? Redactor.CENSOR : value,
+    ]);
+    return new URLSearchParams(masked).toString();
   }
 
   static #contentType(headers: Readonly<Record<string, string>>): MediaType | undefined {
@@ -219,11 +220,13 @@ class Redactor {
   }
 
   /**
-   * The last name a runtime expression reads: its JSON Pointer's last token,
-   * else the header, query, path, input, output or component name; none for
-   * `$statusCode` and the like, or an expression that does not parse.
+   * The field name a runtime expression reads: `password` for
+   * `$inputs.password`, `Authorization` for `$request.header.Authorization`,
+   * `access_token` for `$response.body#/access_token` (a JSON Pointer's last
+   * token). `undefined` for one that reads no named field (`$statusCode`) or
+   * does not parse.
    */
-  static #lastName(expression: string): string | undefined {
+  static #fieldName(expression: string): string | undefined {
     let tree: ExpressionNode | undefined;
     try {
       tree = parseExpression(expression).tree as ExpressionNode | undefined;
@@ -246,14 +249,6 @@ class Redactor {
   static #compile(pattern: string): RegExp {
     const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
     return new RegExp(`^${escaped}$`, 'i');
-  }
-
-  static #decode(component: string): string {
-    try {
-      return decodeURIComponent(component.replace(/\+/g, ' '));
-    } catch {
-      return component;
-    }
   }
 }
 
