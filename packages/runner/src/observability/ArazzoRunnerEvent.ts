@@ -19,34 +19,31 @@ export interface ArazzoRunnerEventBase {
 /**
  * Every event the runner's building blocks emit, discriminated by `type`.
  *
- * Events carry no level or severity, like the messages of Node's
- * `diagnostics_channel`: what an event means to a log is for the consumer
- * that logs it to decide. The workflow events describe the run itself; the
+ * Events carry no level or severity, like Node's `diagnostics_channel`
+ * messages: how to log an event is the logging consumer's decision. The
  * `document-*`, `workflow-normalize-*` and `operation-*` events describe the
- * machinery underneath it, the detail a debug log would show.
+ * machinery under a run, the detail a debug log would show.
  * @public
  */
 export type ArazzoRunnerEvent =
   WorkflowExecutionEvent | DocumentRegistryEvent | OpenAPIOperationEvent;
 
 /**
- * Receives events as they happen. Each building block takes one through its
- * `observer` option, typed to the events that block emits; an observer of
- * every {@link ArazzoRunnerEvent} fits them all.
+ * Receives events as they happen. Each building block takes one as its
+ * `observer` option, typed to the events it emits; an observer of every
+ * {@link ArazzoRunnerEvent} fits them all.
  *
- * It is called synchronously and never awaited, so observing cannot slow
- * down, reorder or otherwise change a run; a returned promise is ignored. A
- * handler that throws aborts the work in progress with that error: the
- * observer is the caller's own code, and swallowing its errors would hide its
- * bugs.
+ * It is called synchronously and never awaited, so it cannot slow down or
+ * reorder a run. A handler that throws aborts the run with that error. A
+ * returned promise is ignored, rejection included: an async observer handles
+ * its own errors.
  *
- * Each event is a frozen snapshot: its plain objects and arrays are copies
- * the run does not use, so changing one cannot reach the run (and, frozen,
- * throws). The one exception is an ApiDOM element, such as
- * {@link ActionSelectedEvent.action}: it is the document's own element,
- * shared with the trace, and must be treated as read-only.
+ * Each event is a frozen copy of its plain data, so changing it cannot reach
+ * the run. Anything else is shared and must be treated as read-only: the
+ * ApiDOM element in {@link ActionSelectedEvent.action}, or a `Map` or class
+ * instance a custom HTTP client put into a response body.
  *
- * A building block without an observer builds no events at all.
+ * A building block without an observer builds no events.
  * @public
  */
 export type ArazzoRunnerObserver<E extends ArazzoRunnerEvent = ArazzoRunnerEvent> = (

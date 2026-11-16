@@ -21,8 +21,8 @@ import type { DocumentRegistryEvent } from '../observability/DocumentRegistryEve
 export interface DocumentRegistryOptions {
   readonly providers?: DocumentRegistryProvider[];
   /**
-   * Receives the registry's events: the start and end of every
-   * document load. Cache hits emit nothing. See {@link DocumentRegistryEvent}.
+   * Receives the registry's events: the start and end of every document
+   * load. Cache hits emit nothing. See {@link DocumentRegistryEvent}.
    */
   readonly observer?: ArazzoRunnerObserver<DocumentRegistryEvent>;
   /**

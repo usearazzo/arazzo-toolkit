@@ -156,9 +156,9 @@ export interface CriterionEvaluatedEvent extends WorkflowExecutionStepEventBase 
 }
 
 /**
- * The action an attempt resolved to. Fired once for every attempt: with the
- * `retry` action that re-runs the step, or, for the last attempt, with the
- * step's terminal action.
+ * The action an attempt resolved to: the `retry` that re-runs the step, or,
+ * for its last attempt, the step's terminal action. The attempt a `retry`
+ * reference makes at another step selects none.
  * @public
  */
 export interface ActionSelectedEvent extends WorkflowExecutionStepEventBase {
@@ -245,16 +245,16 @@ export interface WorkflowNormalizeSettledEvent extends WorkflowExecutionEventBas
 /**
  * An event the {@link WorkflowExecutor} emits, discriminated by `type`.
  *
- * All but the `workflow-normalize-*` events fire at the boundaries the executor records in its
- * {@link WorkflowExecutionResult} trace, plus the criterion and action
- * decisions behind every step outcome, so folding a run's events rebuilds its
- * trace. A `*-start` / `*-settled` pair of a workflow or step is stamped with
- * the clock readings its `durationMs` is computed from: the two timestamps
- * differ by exactly that `durationMs`.
+ * The events other than `workflow-normalize-*` mark the boundaries the
+ * {@link WorkflowExecutionResult} trace records, plus the criterion and
+ * action decisions behind each step, so folding a run's events rebuilds its
+ * trace. A workflow's or step's start and settled events are stamped with the
+ * readings its `durationMs` comes from, so their timestamps differ by exactly
+ * that.
  *
  * A run that throws (an authoring error, a cancellation, a throwing observer)
- * leaves the workflows and steps it unwinds through without a settled event;
- * the rejection of `execute` is the signal.
+ * leaves the workflows and steps it unwinds through unsettled; the rejection
+ * of `execute` is the signal.
  * @public
  */
 export type WorkflowExecutionEvent =

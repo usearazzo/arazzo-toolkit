@@ -287,9 +287,8 @@ export interface OpenAPIOperationExecutorOptions {
    */
   readonly documentAssembler?: OpenAPIDocumentAssembler;
   /**
-   * Receives the executor's events: the start and end of each
-   * operation's normalization, and its assembly. See
-   * {@link OpenAPIOperationEvent}.
+   * Receives the executor's events: the start and end of each operation's
+   * normalization, and its assembly. See {@link OpenAPIOperationEvent}.
    */
   readonly observer?: ArazzoRunnerObserver<OpenAPIOperationEvent>;
   /**

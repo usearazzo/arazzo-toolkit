@@ -122,14 +122,12 @@ export interface WorkflowExecutorOptions {
    */
   readonly now?: () => number;
   /**
-   * Receives the run's events as they happen: workflows, dependencies, steps,
+   * Receives the run's events, stamped with
+   * {@link WorkflowExecutorOptions.now}: workflows, dependencies, steps,
    * attempts, criterion outcomes, selected actions, retry waits and retry
-   * references, plus the normalization of each workflow. Each
-   * event is stamped with {@link WorkflowExecutorOptions.now}.
-   *
-   * Delivered synchronously and never awaited, so it cannot change a run's
-   * result, ordering or timing. A handler that throws aborts the run with
-   * that error. See {@link WorkflowExecutionEvent}.
+   * references, plus each workflow's normalization. See
+   * {@link WorkflowExecutionEvent}, and {@link ArazzoRunnerObserver} for how
+   * events are delivered.
    */
   readonly observer?: ArazzoRunnerObserver<WorkflowExecutionEvent>;
 }
@@ -1129,20 +1127,19 @@ class WorkflowExecutor {
   ): () => Promise<StepAttemptOutcome> {
     // the count only names attempts in events, so an unobserved run needs none
     // of this.
-    if (this.#events === undefined) return runAttempt;
+    const events = this.#events;
+    if (events === undefined) return runAttempt;
 
     return async () => {
       counter.attempts += 1;
       const attemptFrame = { ...stepFrame, attempt: counter.attempts };
-      this.#events?.emit({ type: 'step-attempt', ...attemptFrame });
+      events.emit({ type: 'step-attempt', ...attemptFrame });
       const outcome = await runAttempt();
       for (const criterion of outcome.successCriteria) {
-        const event = { ...attemptFrame, kind: 'success', criterion } as const;
-        this.#events?.emit({ type: 'criterion-evaluated', ...event });
+        events.emit({ type: 'criterion-evaluated', ...attemptFrame, kind: 'success', criterion });
       }
       for (const criterion of outcome.actionCriteria) {
-        const event = { ...attemptFrame, kind: 'action', criterion } as const;
-        this.#events?.emit({ type: 'criterion-evaluated', ...event });
+        events.emit({ type: 'criterion-evaluated', ...attemptFrame, kind: 'action', criterion });
       }
       return outcome;
     };

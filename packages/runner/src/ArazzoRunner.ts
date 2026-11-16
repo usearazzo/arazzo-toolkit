@@ -73,9 +73,8 @@ export interface ArazzoRunnerLoadOptions
   /**
    * Receives the events of every building block the runner wires, stamped
    * with `now`: the run's workflows, steps and the decisions behind them, and
-   * the machinery underneath — document loads, workflow and operation
-   * normalization, and request assembly. See
-   * {@link ArazzoRunnerEvent}.
+   * the machinery under them (document loads, workflow and operation
+   * normalization, request assembly). See {@link ArazzoRunnerEvent}.
    *
    * Loads into a `registry` passed alongside are reported only if that
    * registry was given an observer of its own.
