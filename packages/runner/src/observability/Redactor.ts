@@ -38,15 +38,10 @@ interface MediaType {
  */
 export interface RedactorOptions {
   /**
-   * Wildcard patterns of the names whose values are masked: header names,
-   * query parameter names, body and output field names at any depth, and the
-   * last name a criterion value is read by (`$inputs.password`,
-   * `$response.header.X-Api-Key`). `*` matches any run of characters;
-   * matching is case-insensitive and against the whole name, so `*token*`
-   * matches `access_token` and `X-Auth-Token`.
-   *
-   * The list replaces {@link Redactor.defaultFields}; spread it to extend it.
-   * An empty list masks nothing by name.
+   * Wildcard patterns of the names whose values are masked. `*` matches any
+   * run of characters; matching is case-insensitive and against the whole
+   * name, so `*token*` matches `access_token` and `X-Auth-Token`. The list
+   * replaces {@link Redactor.defaultFields}; spread it to extend it.
    */
   readonly fields?: readonly string[];
 }
@@ -54,20 +49,19 @@ export interface RedactorOptions {
 /**
  * Masks credentials in events before they leave the process.
  *
- * Events carry what the run saw, credentials included, the same as the
- * request a request interceptor receives: an observer is the caller's own
- * code. Pass every event through {@link Redactor.event} before logging it,
- * exporting it or writing it anywhere.
+ * Events carry what the run saw, credentials included, like the request a
+ * request interceptor receives. Pass every event through
+ * {@link Redactor.event} before logging, exporting or writing it.
  *
- * Masking goes by name, so a credential under a name no pattern matches is
- * carried as it is: add a pattern for it. Masked are the values of matching
- * header and query parameter names, of matching fields in JSON and
- * URL-encoded form bodies and in workflow outputs, criterion values read by a
- * matching name, and, whatever the patterns, the userinfo of every URL. A
- * body that is neither JSON nor a URL-encoded form is masked whole, as it
- * cannot be masked field by field, and a masked body longer than
- * {@link Redactor.BODY_LIMIT} characters is cut. The masked value is
- * `REDACTED`.
+ * It masks by name, whatever the event: the value of any field whose name
+ * matches a pattern (headers, query parameters, body and output fields, at
+ * any depth), and a criterion value whose runtime expression reads a
+ * matching name (`$inputs.password`, `$response.body#/access_token`). Every
+ * URL has its userinfo masked and its matching query values. A request or
+ * response body that is JSON or a URL-encoded form is masked field by field
+ * and cut to {@link Redactor.BODY_LIMIT} characters; any other body is
+ * masked whole. A credential under a name no pattern matches is carried as
+ * it is. The masked value is `REDACTED`.
  * @public
  */
 class Redactor {
@@ -104,11 +98,6 @@ class Redactor {
     'X-Goog-Signature',
   ]);
 
-  /**
-   * The HTTP headers whose value is a URL.
-   */
-  static readonly #URL_HEADERS: ReadonlySet<string> = new Set(['location', 'content-location']);
-
   readonly #patterns: readonly RegExp[];
 
   constructor(options: RedactorOptions = {}) {
@@ -116,110 +105,56 @@ class Redactor {
   }
 
   /**
-   * A copy of the event with its credentials masked. An event that carries
-   * nothing to mask comes back as it is.
+   * A masked copy of the event.
    */
   event<E extends ArazzoRunnerEvent>(event: E): E {
-    const masked = this.#masked(event as ArazzoRunnerEvent);
-    if ('path' in masked) {
-      return { ...masked, path: masked.path.map((entry) => this.#url(entry)) } as unknown as E;
-    }
-    return masked as unknown as E;
+    return this.#walk(event) as E;
   }
 
-  #masked(event: ArazzoRunnerEvent): ArazzoRunnerEvent {
-    switch (event.type) {
-      case 'workflow-settled':
-        return { ...event, outputs: this.#value(event.outputs) as Record<string, unknown> };
-      case 'criterion-evaluated':
-        return {
-          ...event,
-          criterion: { ...event.criterion, values: this.#expressions(event.criterion.values) },
-        };
-      case 'dependency-start':
-      case 'dependency-settled':
-        return {
-          ...event,
-          dependency: { ...event.dependency, documentURI: this.#url(event.dependency.documentURI) },
-        };
-      case 'document-load-start':
-      case 'document-load-settled':
-        return { ...event, uri: this.#url(event.uri) };
-      case 'openapi-operation-request-start': {
-        const { request } = event;
-        return {
-          ...this.#operation(event),
-          request: {
-            ...request,
-            url: this.#url(request.url),
-            headers: this.#headers(request.headers),
-            ...('body' in request ? { body: this.#body(request.body, request.headers) } : {}),
-          },
-        };
-      }
-      case 'openapi-operation-request-settled': {
-        const { response } = event;
-        return {
-          ...this.#operation(event),
-          response: {
-            ...response,
-            headers: this.#headers(response.headers),
-            ...('body' in response ? { body: this.#body(response.body, response.headers) } : {}),
-          },
-        };
-      }
-      case 'openapi-operation-normalize-start':
-      case 'openapi-operation-normalize-settled':
-      case 'openapi-operation-assembled':
-        return this.#operation(event);
-      default:
-        return event;
-    }
-  }
+  #walk(value: unknown): unknown {
+    if (typeof value === 'string')
+      return /^(?:[a-z][a-z\d+.-]*:)?\/\//i.test(value) ? this.#url(value) : value;
+    if (Array.isArray(value)) return value.map((item) => this.#walk(item));
+    if (!isPlainObject(value)) return value;
 
-  /**
-   * An OpenAPI operation event with the document URI it names masked.
-   */
-  #operation<E extends Extract<ArazzoRunnerEvent, { operation: { documentURI: string } }>>(
-    event: E,
-  ): E {
-    return {
-      ...event,
-      operation: { ...event.operation, documentURI: this.#url(event.operation.documentURI) },
-    };
-  }
-
-  #masks(name: string): boolean {
-    return this.#patterns.some((pattern) => pattern.test(name));
-  }
-
-  /**
-   * Headers with masked values replaced, and the URL a `Location` or
-   * `Content-Location` header carries masked like a request URL.
-   */
-  #headers(headers: Readonly<Record<string, string>>): Record<string, string> {
-    const redacted: Record<string, string> = {};
-    for (const [name, value] of Object.entries(headers)) {
-      if (this.#masks(name)) redacted[name] = Redactor.CENSOR;
-      else if (Redactor.#URL_HEADERS.has(name.toLowerCase())) redacted[name] = this.#url(value);
-      else redacted[name] = value;
+    const object = value as Record<string, unknown>;
+    const redacted: Record<string, unknown> = {};
+    for (const [name, item] of Object.entries(object)) {
+      let masked: unknown;
+      if (this.#masks(name)) masked = Redactor.CENSOR;
+      else if (name === 'body' && isPlainObject(object.headers)) {
+        masked = this.#body(item, object.headers as Record<string, string>);
+      } else masked = this.#walk(item);
+      // defined, not assigned, so an own `__proto__` key stays data
+      Object.defineProperty(redacted, name, {
+        value: masked,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     }
     return redacted;
   }
 
   /**
-   * The URL with its userinfo and masked query values replaced. Worked on as
-   * a string, not through `URL`, so the rest keeps the encoding it was sent
-   * with; a value that is no URL comes back as it was.
+   * Whether a name matches a pattern. A runtime expression is matched by the
+   * last name it reads.
+   */
+  #masks(name: string): boolean {
+    const target = name.startsWith('$') ? Redactor.#lastName(name) : name;
+    return target !== undefined && this.#patterns.some((pattern) => pattern.test(target));
+  }
+
+  /**
+   * The URL with its userinfo and matching query values masked, worked on as
+   * a string so the rest keeps the encoding it was sent with.
    */
   #url(url: string): string {
-    // up to the last `@` before the path, as URL parsers split userinfo from
-    // the host; a scheme-relative `//user@host` counts too.
+    // up to the last `@` before the path, as URL parsers split userinfo
     const withoutUserinfo = url.replace(
       /^((?:[a-z][a-z\d+.-]*:)?\/\/)[^/?#]*@/i,
       `$1${Redactor.CENSOR}:${Redactor.CENSOR}@`,
     );
-
     const queryStart = withoutUserinfo.indexOf('?');
     if (queryStart === -1) return withoutUserinfo;
     const fragmentStart = withoutUserinfo.indexOf('#', queryStart);
@@ -229,48 +164,28 @@ class Redactor {
   }
 
   /**
-   * A copy of `value` with the values of masked fields replaced, at any depth.
-   */
-  #value(value: unknown): unknown {
-    if (Array.isArray(value)) return value.map((item) => this.#value(item));
-    if (!isPlainObject(value)) return value;
-
-    const redacted: Record<string, unknown> = {};
-    for (const [name, item] of Object.entries(value as Record<string, unknown>)) {
-      Redactor.#define(redacted, name, this.#masks(name) ? Redactor.CENSOR : this.#value(item));
-    }
-    return redacted;
-  }
-
-  /**
-   * Criterion values keyed by the runtime expression that read them, masked
-   * whole when the expression's last name matches (`$inputs.password`,
-   * `$request.header.Authorization`, `$response.body#/token`), otherwise
-   * field by field; `$url` is masked like a URL.
-   */
-  #expressions(values: Readonly<Record<string, unknown>>): Record<string, unknown> {
-    const redacted: Record<string, unknown> = {};
-    for (const [expression, value] of Object.entries(values)) {
-      const name = Redactor.#lastName(expression);
-      let masked: unknown;
-      if (name !== undefined && this.#masks(name)) masked = Redactor.CENSOR;
-      else if (expression === '$url' && typeof value === 'string') masked = this.#url(value);
-      else masked = this.#value(value);
-      Redactor.#define(redacted, expression, masked);
-    }
-    return redacted;
-  }
-
-  /**
-   * A body masked for an event: a parsed value or a JSON or URL-encoded form
-   * text masked field by field and cut to {@link Redactor.BODY_LIMIT}
-   * characters, any other body masked whole.
+   * A body masked by what its `Content-Type` says it is, and cut to the limit.
    */
   #body(body: unknown, headers: Readonly<Record<string, string>>): unknown {
     let masked: unknown;
-    if (isPlainObject(body) || Array.isArray(body)) masked = this.#value(body);
-    else if (typeof body === 'string') masked = this.#text(body, Redactor.#contentType(headers));
-    else masked = body === undefined || body === null || body === '' ? body : Redactor.CENSOR;
+    if (body === undefined || body === null || body === '') masked = body;
+    else if (typeof body !== 'string')
+      masked = isPlainObject(body) || Array.isArray(body) ? this.#walk(body) : Redactor.CENSOR;
+    else {
+      const mediaType = Redactor.#contentType(headers);
+      if (mediaType?.subtype === 'json' || mediaType?.suffix === 'json') {
+        try {
+          masked = JSON.stringify(this.#walk(JSON.parse(body)));
+        } catch {
+          masked = Redactor.CENSOR;
+        }
+      } else if (
+        mediaType?.type === 'application' &&
+        mediaType.subtype === 'x-www-form-urlencoded'
+      ) {
+        masked = this.#form(body);
+      } else masked = Redactor.CENSOR;
+    }
 
     const text = typeof masked === 'string' ? masked : JSON.stringify(masked);
     return text !== undefined && text.length > Redactor.BODY_LIMIT
@@ -278,24 +193,8 @@ class Redactor {
       : masked;
   }
 
-  #text(text: string, mediaType: MediaType | undefined): string {
-    if (text === '') return text;
-    if (mediaType?.subtype === 'json' || mediaType?.suffix === 'json') {
-      try {
-        return JSON.stringify(this.#value(JSON.parse(text)));
-      } catch {
-        return Redactor.CENSOR;
-      }
-    }
-    if (mediaType?.type === 'application' && mediaType.subtype === 'x-www-form-urlencoded') {
-      return this.#form(text);
-    }
-    return Redactor.CENSOR;
-  }
-
   /**
-   * `name=value` pairs joined by `&`, with masked values replaced and every
-   * other pair left as it was.
+   * `name=value` pairs joined by `&`, with matching values masked.
    */
   #form(pairs: string): string {
     return pairs
@@ -309,22 +208,6 @@ class Redactor {
       .join('&');
   }
 
-  /**
-   * Defines, rather than assigns, so an own `__proto__` key stays data.
-   */
-  static #define(target: Record<string, unknown>, name: string, value: unknown): void {
-    Object.defineProperty(target, name, {
-      value,
-      enumerable: true,
-      writable: true,
-      configurable: true,
-    });
-  }
-
-  /**
-   * The media type the `Content-Type` header names, whatever the header's
-   * case; `undefined` without one or for one that does not parse.
-   */
   static #contentType(headers: Readonly<Record<string, string>>): MediaType | undefined {
     const name = Object.keys(headers).find((key) => key.toLowerCase() === 'content-type');
     if (name === undefined) return undefined;
@@ -336,10 +219,9 @@ class Redactor {
   }
 
   /**
-   * The last name a runtime expression reads: the last token of its JSON
-   * Pointer when it has one, else the header, query, path, input, output or
-   * component name it names. `undefined` for an expression that names none
-   * (`$statusCode`) or does not parse.
+   * The last name a runtime expression reads: its JSON Pointer's last token,
+   * else the header, query, path, input, output or component name; none for
+   * `$statusCode` and the like, or an expression that does not parse.
    */
   static #lastName(expression: string): string | undefined {
     let tree: ExpressionNode | undefined;
@@ -348,19 +230,16 @@ class Redactor {
     } catch {
       return undefined;
     }
-    if (tree === undefined) return undefined;
-
-    const reference = tree.source?.reference;
-    const pointer = tree.jsonPointer ?? reference?.jsonPointer;
-    const token = pointer?.referenceTokens.at(-1)?.value;
+    const reference = tree?.source?.reference;
+    const token = (tree?.jsonPointer ?? reference?.jsonPointer)?.referenceTokens.at(-1)?.value;
     if (token !== undefined) return unescapeToken(token);
     return (
       reference?.token ??
       reference?.name ??
-      tree.name ??
-      tree.outputName ??
-      tree.fieldName ??
-      tree.componentName
+      tree?.name ??
+      tree?.outputName ??
+      tree?.fieldName ??
+      tree?.componentName
     );
   }
 

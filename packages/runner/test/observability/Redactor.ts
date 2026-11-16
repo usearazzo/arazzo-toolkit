@@ -1,7 +1,12 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { assert } from 'chai';
 
 import {
+  ArazzoRunner,
   Redactor,
+  type ArazzoRunnerEvent,
   type CriterionEvaluatedEvent,
   type DocumentLoadStartEvent,
   type OpenAPIOperationRequestSettledEvent,
@@ -228,6 +233,31 @@ describe('Redactor', function () {
         $url: 'https://REDACTED:REDACTED@api.example.com/x',
       });
     });
+  });
+
+  specify('should leave every field of a run without credentials as it was', async function () {
+    // a generic walk masks any matching name; no event's own field may match.
+    const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
+    const events: ArazzoRunnerEvent[] = [];
+    const runner = await ArazzoRunner.load(
+      path.join(fixtures, 'workflow-control-flow.arazzo.yaml'),
+      {
+        httpClient: async () =>
+          new Response(JSON.stringify({ id: 7, name: 'Rex' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+        captureBodies: true,
+        observer: (event) => events.push(event),
+      },
+    );
+
+    await runner.execute('retryWithWorkflowReference', { inputs: { status: 'available' } });
+    await runner.execute('linear', { inputs: { status: 'available' } });
+
+    const redactor = new Redactor();
+    assert.isAbove(new Set(events.map((event) => event.type)).size, 15);
+    for (const event of events) assert.deepEqual(redactor.event(event), event, event.type);
   });
 
   specify('should keep its defaults frozen', function () {
