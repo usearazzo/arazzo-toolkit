@@ -3,6 +3,9 @@ import type { ArazzoRunnerEventBase } from './ArazzoRunnerEvent.ts';
 /**
  * The registry started loading a document it had neither cached nor already
  * loading. Cache hits emit nothing.
+ *
+ * Registry events carry no `runId`: the registry is shared, and one load can
+ * serve several runs at once.
  * @public
  */
 export interface DocumentLoadStartEvent extends ArazzoRunnerEventBase {

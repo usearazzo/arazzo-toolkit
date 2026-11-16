@@ -1,3 +1,5 @@
+import { isPlainObject } from 'ramda-adjunct';
+
 import type { ArazzoRunnerEvent, ArazzoRunnerObserver } from './ArazzoRunnerEvent.ts';
 
 /**
@@ -12,23 +14,60 @@ export type UnstampedEvent<E> = E extends unknown ? Omit<E, 'timestamp'> : never
  * @internal
  */
 export interface EventChannelOptions<E extends ArazzoRunnerEvent> {
-  readonly observer?: ArazzoRunnerObserver<E> | undefined;
+  readonly observer: ArazzoRunnerObserver<E>;
   readonly now?: (() => number) | undefined;
 }
 
 /**
  * Delivers a building block's events to its observer: stamps each with the
- * block's clock and hands it over synchronously, without awaiting anything.
- * With no observer it does nothing, not even read the clock.
+ * block's clock, snapshots it, and hands it over synchronously, without
+ * awaiting anything.
+ *
+ * A block holds a channel only when it was given an observer (see
+ * {@link EventChannel.open}), and emits through `this.#events?.emit(...)`: with
+ * no channel, optional chaining skips evaluating the event too, so an
+ * unobserved run builds no events at all.
  * @internal
  */
 class EventChannel<E extends ArazzoRunnerEvent> {
   static readonly #DEFAULT_NOW = (): number => performance.now();
 
-  readonly #observer: ArazzoRunnerObserver<E> | undefined;
+  /**
+   * A channel to `options.observer`, or `undefined` when there is none.
+   */
+  static open<E extends ArazzoRunnerEvent>(options: {
+    readonly observer?: ArazzoRunnerObserver<E> | undefined;
+    readonly now?: (() => number) | undefined;
+  }): EventChannel<E> | undefined {
+    const { observer, now } = options;
+    return observer === undefined ? undefined : new EventChannel({ observer, now });
+  }
+
+  /**
+   * A frozen deep copy of the plain objects and arrays in `value`; anything
+   * else, an ApiDOM element above all, is shared as it is. The run keeps
+   * using the objects an event describes (the trace's records, the outputs,
+   * the context a request interceptor receives, the transition it acts on),
+   * so handing out the originals would let an observer change the run.
+   */
+  static #snapshot(value: unknown, copies: WeakMap<object, unknown>): unknown {
+    if (!Array.isArray(value) && !isPlainObject(value)) return value;
+
+    const seen = copies.get(value as object);
+    if (seen !== undefined) return seen;
+
+    const copy: Record<string, unknown> | unknown[] = Array.isArray(value) ? [] : {};
+    copies.set(value as object, copy);
+    for (const [key, item] of Object.entries(value as object)) {
+      (copy as Record<string, unknown>)[key] = EventChannel.#snapshot(item, copies);
+    }
+    return Object.freeze(copy);
+  }
+
+  readonly #observer: ArazzoRunnerObserver<E>;
   readonly #now: () => number;
 
-  constructor(options: EventChannelOptions<E> = {}) {
+  constructor(options: EventChannelOptions<E>) {
     this.#observer = options.observer;
     this.#now = options.now ?? EventChannel.#DEFAULT_NOW;
   }
@@ -39,8 +78,8 @@ class EventChannel<E extends ArazzoRunnerEvent> {
    * recorded duration exactly); otherwise the clock is read now.
    */
   emit(event: UnstampedEvent<E>, timestamp?: number): void {
-    if (this.#observer === undefined) return;
-    this.#observer({ ...event, timestamp: timestamp ?? this.#now() } as unknown as E);
+    const stamped = { ...event, timestamp: timestamp ?? this.#now() };
+    this.#observer(EventChannel.#snapshot(stamped, new WeakMap()) as E);
   }
 }
 

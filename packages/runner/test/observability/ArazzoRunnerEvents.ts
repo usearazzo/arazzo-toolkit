@@ -12,6 +12,7 @@ import {
   type DocumentRegistryEvent,
   type HTTPClient,
   type OpenAPIOperationEvent,
+  type RequestContext,
 } from '../../src/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -74,6 +75,28 @@ describe('ArazzoRunner events', function () {
     assert.isNotEmpty(operations);
     assert.isTrue(operations.every((event) => event.runId === start?.runId));
     assert.deepEqual(operations[0].step, { workflowId: 'linear', stepId: 'findPets' });
+  });
+
+  specify("should not share an interceptor's request context with events", async function () {
+    const contexts: RequestContext[] = [];
+    const events: ArazzoRunnerEvent[] = [];
+    const runner = await ArazzoRunner.load(entryPath, {
+      httpClient,
+      requestInterceptor: (request, context) => {
+        contexts.push(context);
+        return request;
+      },
+      observer: (event) => events.push(event),
+    });
+
+    await runner.execute('linear', { inputs: { status: 'available' } });
+
+    const normalized = events.find(
+      (event): event is OpenAPIOperationEvent => event.type === 'operation-normalize-start',
+    );
+    assert.isTrue(Object.isFrozen(normalized?.operation));
+    assert.notStrictEqual(normalized?.operation, contexts[0].operation);
+    assert.isFalse(Object.isFrozen(contexts[0].operation));
   });
 
   specify('should not report documents the registry already holds', async function () {

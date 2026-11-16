@@ -253,7 +253,7 @@ class StepExecutor {
   readonly #actionResolver = new ActionResolver();
   readonly #observer: ArazzoRunnerObserver<OpenAPIOperationEvent> | undefined;
   readonly #now: (() => number) | undefined;
-  readonly #events: EventChannel<OpenAPIOperationEvent>;
+  readonly #events: EventChannel<OpenAPIOperationEvent> | undefined;
 
   constructor(options: StepExecutorOptions) {
     this.#document = options.document;
@@ -262,7 +262,7 @@ class StepExecutor {
     this.#operationExecutor = options.operationExecutor;
     this.#observer = options.observer;
     this.#now = options.now;
-    this.#events = new EventChannel({ observer: options.observer, now: options.now });
+    this.#events = EventChannel.open({ observer: options.observer, now: options.now });
   }
 
   /**
@@ -344,7 +344,7 @@ class StepExecutor {
       // a copy, so the function cannot rewrite the scope this step attributes its errors to
       typeof executeOptions === 'function' ? executeOptions(locator, { ...scope }) : executeOptions;
     const { runId } = operationOptions;
-    this.#events.emit({
+    this.#events?.emit({
       type: 'operation-located',
       level: 'debug',
       operation: {

@@ -137,7 +137,9 @@ export interface StepAttemptEvent extends WorkflowExecutionStepEventBase {
   readonly type: 'step-attempt';
   readonly level: 'info';
   /**
-   * The attempt number, starting at 1. Each `retry` increments it.
+   * The attempt number, starting at 1. Each `retry` increments it. The
+   * attempt a `retry` reference makes at another step is that reference's
+   * own, so it is always 1, under the referenced step's `stepId`.
    */
   readonly attempt: number;
 }
@@ -171,7 +173,8 @@ export interface ActionSelectedEvent extends WorkflowExecutionStepEventBase {
   readonly attempt: number;
   /**
    * The selected action. `undefined` when none matched, so the step takes the
-   * default path: the next step on success, a break on failure.
+   * default path: the next step on success, a break on failure. It is the
+   * document's own element, shared with the trace: read it, never change it.
    */
   readonly action: SelectedAction | undefined;
   /**

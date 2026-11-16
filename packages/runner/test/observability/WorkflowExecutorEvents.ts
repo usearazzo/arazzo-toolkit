@@ -7,6 +7,7 @@ import { toValue } from '@speclynx/apidom-core';
 import {
   DocumentRegistry,
   ArazzoDocument,
+  ExecutionError,
   WorkflowExecutor,
   StepExecutor,
   OpenAPIOperationExecutor,
@@ -27,6 +28,7 @@ const fixturesPath = path.join(__dirname, '..', 'fixtures');
 const inputs = { status: 'available', value: 'x', petId: 7, seed: 1 };
 const controlFlowPath = path.join(fixturesPath, 'workflow-control-flow.arazzo.yaml');
 const compositionPath = path.join(fixturesPath, 'workflow-composition.arazzo.yaml');
+const crossDocumentPath = path.join(fixturesPath, 'cross-document.arazzo.yaml');
 
 type CannedStatus = 200 | 500 | 503;
 
@@ -211,14 +213,23 @@ describe('WorkflowExecutor events', function () {
   let registry: DocumentRegistry;
   let controlFlow: ArazzoDocument;
   let composition: ArazzoDocument;
+  let crossDocument: ArazzoDocument;
+  const documents = (): Record<string, ArazzoDocument> => ({
+    'control-flow': controlFlow,
+    composition,
+    'cross-document': crossDocument,
+  });
 
   before(async function () {
     registry = new DocumentRegistry();
     controlFlow = await registry.acquireEntryDocument(controlFlowPath);
-    composition = await registry.acquire(compositionPath).then((document) => {
+    const acquire = async (uri: string): Promise<ArazzoDocument> => {
+      const document = await registry.acquire(uri);
       assert.isTrue(ArazzoDocument.is(document));
       return document as ArazzoDocument;
-    });
+    };
+    composition = await acquire(compositionPath);
+    crossDocument = await acquire(crossDocumentPath);
   });
 
   /**
@@ -301,12 +312,20 @@ describe('WorkflowExecutor events', function () {
     ['composition', 'dependsOnTransferringPrereq', [200]],
     ['composition', 'dependent', [200]],
     ['composition', 'deepOne', [200]],
+    ['cross-document', 'crossDocumentStep', [200]],
+    ['cross-document', 'crossDocumentDependsOn', [200]],
+    ['cross-document', 'crossDocumentRetryStepInside', [500, 200]],
+    ['cross-document', 'crossDocumentRetryReference', [500, 200]],
+    ['cross-document', 'crossDocumentGoto', [200]],
+    ['cross-document', 'crossDocumentGotoWithDeps', [200]],
+    ['cross-document', 'collisionCaller', [200]],
+    ['cross-document', 'deepEntry', [200]],
   ];
 
   context('fold', function () {
     runs.forEach(([fixture, workflowId, statuses]) => {
       specify(`should rebuild the trace of ${fixture} "${workflowId}"`, async function () {
-        const document = fixture === 'control-flow' ? controlFlow : composition;
+        const document = documents()[fixture];
         const { result, events } = await record(document, workflowId, statuses);
 
         assert.deepEqual(fold(events), result);
@@ -316,7 +335,7 @@ describe('WorkflowExecutor events', function () {
     specify('should cover every control-flow feature the trace records', async function () {
       const results: WorkflowExecutionResult[] = [];
       for (const [fixture, workflowId, statuses] of runs) {
-        const document = fixture === 'control-flow' ? controlFlow : composition;
+        const document = documents()[fixture];
         results.push(...allResults((await record(document, workflowId, statuses)).result));
       }
       const steps = results.flatMap((result) => result.steps);
@@ -432,6 +451,57 @@ describe('WorkflowExecutor events', function () {
       }
     });
 
+    specify('should name a foreign workflow by its document in the path', async function () {
+      const { events } = await record(crossDocument, 'crossDocumentStep', [200]);
+
+      const foreign = events.find(
+        (event) => event.type === 'workflow-start' && event.via === 'step',
+      );
+      assert.lengthOf(foreign?.path ?? [], 2);
+      assert.strictEqual(foreign?.path[0], 'crossDocumentStep');
+      assert.match(foreign?.path[1] ?? '', /cross-document-child\.arazzo\.yaml#childFetch$/);
+    });
+
+    specify('should leave a cancelled run without settled events', async function () {
+      const events: WorkflowExecutionEvent[] = [];
+      const controller = new AbortController();
+      const executor = new WorkflowExecutor({
+        document: controlFlow,
+        registry,
+        stepExecutor: new StepExecutor({
+          document: controlFlow,
+          registry,
+          operationExecutor: new OpenAPIOperationExecutor({
+            httpClient: async () => {
+              controller.abort();
+              return new Response(JSON.stringify({ id: 7, name: 'Rex' }), {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              });
+            },
+          }),
+        }),
+        observer: (event) => events.push(event),
+      });
+
+      let caught: unknown;
+      try {
+        await executor.execute('linear', { inputs, signal: controller.signal });
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.instanceOf(caught, ExecutionError);
+      // the step in flight still settles, the run stops at the next boundary,
+      // and the rejection of execute is the only closing signal.
+      assert.deepEqual(events.map((event) => event.type).slice(-3), [
+        'action-selected',
+        'step-settled',
+        'step-start',
+      ]);
+      assert.isFalse(events.some((event) => event.type === 'workflow-settled'));
+    });
+
     specify('should tag every event with the path of the workflows in progress', async function () {
       const { events } = await record(composition, 'callsChild', [200]);
 
@@ -462,6 +532,44 @@ describe('WorkflowExecutor events', function () {
   });
 
   context('non-interference', function () {
+    specify('should hand out frozen copies of what the run keeps', async function () {
+      const { result, events } = await record(controlFlow, 'linear', [200]);
+      const find = <T extends WorkflowExecutionEvent['type']>(
+        type: T,
+      ): Extract<WorkflowExecutionEvent, { type: T }> =>
+        events.find((event) => event.type === type) as Extract<WorkflowExecutionEvent, { type: T }>;
+
+      const settled = find('workflow-settled');
+      assert.isTrue(Object.isFrozen(settled));
+      assert.isTrue(Object.isFrozen(settled.outputs));
+      assert.isTrue(Object.isFrozen(settled.path));
+      assert.notStrictEqual(settled.outputs, result.outputs);
+      assert.deepEqual(settled.outputs, result.outputs);
+      assert.isFalse(Object.isFrozen(result.outputs));
+
+      const criterion = find('criterion-evaluated').criterion;
+      assert.isTrue(Object.isFrozen(criterion));
+      assert.notStrictEqual(criterion, result.steps[0].successCriteria[0]);
+      assert.isTrue(Object.isFrozen(find('action-selected').transition));
+    });
+
+    specify('should abort the run when an observer changes an event', async function () {
+      const { executor } = makeExecutor(controlFlow, [200], (event) => {
+        if (event.type === 'workflow-settled') {
+          (event.outputs as Record<string, unknown>).name = 'Tampered';
+        }
+      });
+
+      let caught: unknown;
+      try {
+        await executor.execute('linear', { inputs });
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.instanceOf(caught, TypeError);
+    });
+
     specify('should not change the result', async function () {
       const observed = await record(controlFlow, 'retryWithWorkflowReference', [503, 200]);
       const { executor } = makeExecutor(controlFlow, [503, 200]);

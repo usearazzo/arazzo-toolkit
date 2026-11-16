@@ -588,7 +588,7 @@ class WorkflowExecutor {
   readonly #retryRunner: StepRetryRunner;
   readonly #interpreter = new StepTransitionInterpreter();
   readonly #workflowLocatorNormalizer: ArazzoWorkflowLocatorNormalizer;
-  readonly #events: EventChannel<WorkflowExecutionEvent>;
+  readonly #events: EventChannel<WorkflowExecutionEvent> | undefined;
 
   constructor(options: WorkflowExecutorOptions) {
     this.#document = options.document;
@@ -599,7 +599,7 @@ class WorkflowExecutor {
     this.#maxWorkflowDepth =
       options.maxWorkflowDepth ?? WorkflowExecutor.#DEFAULT_MAX_WORKFLOW_DEPTH;
     this.#now = options.now ?? WorkflowExecutor.#DEFAULT_NOW;
-    this.#events = new EventChannel({ observer: options.observer, now: this.#now });
+    this.#events = EventChannel.open({ observer: options.observer, now: this.#now });
     this.#stepExecutor = options.stepExecutor;
     this.#retryRunner = new StepRetryRunner({ sleep: options.sleep });
   }
@@ -814,7 +814,7 @@ class WorkflowExecutor {
     // stamped with `startedAt`, the reading `durationMs` counts from, though
     // emitted only now: a workflow whose definition fails the checks above
     // never starts.
-    this.#events.emit({ type: 'workflow-start', level: 'info', ...frame, via }, startedAt);
+    this.#events?.emit({ type: 'workflow-start', level: 'info', ...frame, via }, startedAt);
 
     const dependencies = await this.#runDependencies(workflow, invocation, scope);
     if (dependencies.some((dependency) => this.#settledFailed(dependency))) {
@@ -854,7 +854,7 @@ class WorkflowExecutor {
       const retryReferences: RetryReferenceRecord[] = [];
       const stepFrame: StepFrame = { ...frame, stepId };
       const counter: AttemptCounter = { attempts: 0 };
-      this.#events.emit({ type: 'step-start', level: 'info', ...stepFrame }, stepStartedAt);
+      this.#events?.emit({ type: 'step-start', level: 'info', ...stepFrame }, stepStartedAt);
       const attempt = this.#chargedAttempt(
         this.#observedAttempt(
           this.#stepAttempt(step, stepId, invocation, scope, subWorkflows),
@@ -883,7 +883,7 @@ class WorkflowExecutor {
         ),
         onRetry: (retry, delayMs) => {
           const decided = { ...stepFrame, attempt: counter.attempts };
-          this.#events.emit({
+          this.#events?.emit({
             type: 'action-selected',
             level: 'info',
             ...decided,
@@ -891,7 +891,7 @@ class WorkflowExecutor {
             transition: { kind: 'retry' },
           });
           if (delayMs > 0) {
-            this.#events.emit({ type: 'retry-wait', level: 'info', ...decided, delayMs });
+            this.#events?.emit({ type: 'retry-wait', level: 'info', ...decided, delayMs });
           }
         },
       });
@@ -899,7 +899,7 @@ class WorkflowExecutor {
         workflowId,
         stepId,
       });
-      this.#events.emit({
+      this.#events?.emit({
         type: 'action-selected',
         level: 'info',
         ...stepFrame,
@@ -920,7 +920,7 @@ class WorkflowExecutor {
         ...(subWorkflows.length > 0 ? { subWorkflows } : {}),
         ...(retryReferences.length > 0 ? { retryReferences } : {}),
       });
-      this.#events.emit(
+      this.#events?.emit(
         {
           type: 'step-settled',
           level: 'info',
@@ -1042,7 +1042,7 @@ class WorkflowExecutor {
             status: outcome.status,
             settledStatus: outcome.status,
           };
-    this.#events.emit(
+    this.#events?.emit(
       {
         type: 'workflow-settled',
         level: 'info',
@@ -1133,18 +1133,22 @@ class WorkflowExecutor {
     stepFrame: StepFrame,
     counter: AttemptCounter,
   ): () => Promise<StepAttemptOutcome> {
+    // the count only names attempts in events, so an unobserved run needs none
+    // of this.
+    if (this.#events === undefined) return runAttempt;
+
     return async () => {
       counter.attempts += 1;
       const attemptFrame = { ...stepFrame, attempt: counter.attempts };
-      this.#events.emit({ type: 'step-attempt', level: 'info', ...attemptFrame });
+      this.#events?.emit({ type: 'step-attempt', level: 'info', ...attemptFrame });
       const outcome = await runAttempt();
       for (const criterion of outcome.successCriteria) {
         const event = { ...attemptFrame, kind: 'success', criterion } as const;
-        this.#events.emit({ type: 'criterion-evaluated', level: 'info', ...event });
+        this.#events?.emit({ type: 'criterion-evaluated', level: 'info', ...event });
       }
       for (const criterion of outcome.actionCriteria) {
         const event = { ...attemptFrame, kind: 'action', criterion } as const;
-        this.#events.emit({ type: 'criterion-evaluated', level: 'info', ...event });
+        this.#events?.emit({ type: 'criterion-evaluated', level: 'info', ...event });
       }
       return outcome;
     };
@@ -1227,7 +1231,7 @@ class WorkflowExecutor {
           kind: 'workflow',
           id: reference,
         } as const;
-        this.#events.emit({ type: 'retry-reference-start', level: 'info', ...referenceFrame });
+        this.#events?.emit({ type: 'retry-reference-start', level: 'info', ...referenceFrame });
         const result = await this.#runReferencedWorkflow(
           reference,
           stepId,
@@ -1245,7 +1249,7 @@ class WorkflowExecutor {
         });
         const successful = !this.#settledFailed(result);
         retryReferences.push({ kind: 'workflow', id: reference, successful, subWorkflow: result });
-        this.#events.emit({
+        this.#events?.emit({
           type: 'retry-reference-settled',
           level: 'info',
           ...referenceFrame,
@@ -1268,7 +1272,7 @@ class WorkflowExecutor {
         kind: 'step',
         id: refStepId,
       } as const;
-      this.#events.emit({ type: 'retry-reference-start', level: 'info', ...referenceFrame });
+      this.#events?.emit({ type: 'retry-reference-start', level: 'info', ...referenceFrame });
       // the referenced step's attempt is observed like any other, under its
       // own stepId and with a count of its own.
       const refOutcome = await this.#chargedAttempt(
@@ -1288,7 +1292,7 @@ class WorkflowExecutor {
         successful: refOutcome.successful,
         ...(refSubWorkflows.length > 0 ? { subWorkflow: refSubWorkflows[0] } : {}),
       });
-      this.#events.emit({
+      this.#events?.emit({
         type: 'retry-reference-settled',
         level: 'info',
         ...referenceFrame,
@@ -1345,7 +1349,7 @@ class WorkflowExecutor {
         workflowId: dependency.locator.workflowId,
         documentURI: dependency.locator.document.uri,
       };
-      this.#events.emit({ type: 'dependency-start', level: 'info', ...frame, dependency: target });
+      this.#events?.emit({ type: 'dependency-start', level: 'info', ...frame, dependency: target });
       // a dependency already completed in this run is satisfied, not repeated: a
       // precondition holds once met, and a diamond (two dependents sharing one
       // dependency) must not duplicate its live side effects. Every dependent
@@ -1367,7 +1371,7 @@ class WorkflowExecutor {
       // never ran. Keyed by the bare id even for a cross-document dependency:
       // `$workflows.{id}` is the only form an expression can read it back by.
       state.setWorkflow(dependency.locator.workflowId, { inputs, outputs: result.outputs });
-      this.#events.emit({
+      this.#events?.emit({
         type: 'dependency-settled',
         level: 'info',
         ...frame,
@@ -1756,12 +1760,12 @@ class WorkflowExecutor {
       );
     }
     const frame = { runId: scope.runId, workflowId, path };
-    this.#events.emit({ type: 'workflow-normalize-start', level: 'debug', ...frame });
+    this.#events?.emit({ type: 'workflow-normalize-start', level: 'debug', ...frame });
     const workflow = await this.#normalizer.normalize(
       this.#extractor.extract(document, workflowId),
       document,
     );
-    this.#events.emit({ type: 'workflow-normalize-settled', level: 'debug', ...frame });
+    this.#events?.emit({ type: 'workflow-normalize-settled', level: 'debug', ...frame });
     scope.workflows.set(qualifiedId, workflow);
     return workflow;
   }

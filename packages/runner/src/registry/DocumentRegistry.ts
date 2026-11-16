@@ -44,14 +44,14 @@ class DocumentRegistry {
   readonly #documents: Map<string, APIDocument> = new Map();
   readonly #loading: Map<string, Promise<APIDocument>> = new Map();
   readonly #providers: DocumentRegistryProvider[];
-  readonly #events: EventChannel<DocumentRegistryEvent>;
+  readonly #events: EventChannel<DocumentRegistryEvent> | undefined;
 
   constructor(options: DocumentRegistryOptions = {}) {
     this.#providers = options.providers ?? [
       new ArazzoDocumentRegistryProvider(),
       new OpenAPIDocumentRegistryProvider(),
     ];
-    this.#events = new EventChannel({ observer: options.observer, now: options.now });
+    this.#events = EventChannel.open({ observer: options.observer, now: options.now });
   }
 
   /**
@@ -99,13 +99,13 @@ class DocumentRegistry {
    * caches it.
    */
   async #load(canonicalURI: string): Promise<APIDocument> {
-    this.#events.emit({ type: 'document-load-start', level: 'debug', uri: canonicalURI });
+    this.#events?.emit({ type: 'document-load-start', level: 'debug', uri: canonicalURI });
     for (const provider of this.#providers) {
       try {
         if (await provider.canProvide(canonicalURI)) {
           const document = await provider.provide(canonicalURI);
           this.#set(canonicalURI, document);
-          this.#events.emit({ type: 'document-load-settled', level: 'debug', uri: canonicalURI });
+          this.#events?.emit({ type: 'document-load-settled', level: 'debug', uri: canonicalURI });
           return document;
         }
       } catch (error: unknown) {
