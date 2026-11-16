@@ -3,6 +3,27 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.33](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.32...v1.0.1-alpha.33) (2026-11-16)
+
+### Bug Fixes
+
+- **runner:** resolve $sourceDescriptions targets through acquire ([#354](https://github.com/usearazzo/arazzo-toolkit/issues/354)), closes [#74](https://github.com/usearazzo/arazzo-toolkit/issues/74)
+
+### BREAKING CHANGES
+
+- **runner:** DocumentRegistry.get is removed; use acquire.
+  RuntimeExpressionEvaluator.evaluate, interpolate and resolve return
+  Promises. So do CriterionEvaluator.evaluate,
+  SimpleCriterionEvaluator.evaluate, ActionResolver.resolveOnSuccess and
+  resolveOnFailure, the abstract StepParameterResolver.resolve and the
+  protected ArazzoValueResolver.resolveValue, the resolve method of
+  OpenAPIOperationParameterResolver, WorkflowParameterResolver,
+  OutputResolver and RequestBodyResolver, and StepExecutor.evaluateCriteria
+  and selectActions. Resolver callbacks and CriterionPredicate may return
+  a Promise. A $sourceDescriptions reference whose document cannot be
+  loaded rejects with the load error unless it names a Source Description
+  field.
+
 ## [1.0.1-alpha.32](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.31...v1.0.1-alpha.32) (2026-11-13)
 
 **Note:** Version bump only for package @usearazzo/parser
