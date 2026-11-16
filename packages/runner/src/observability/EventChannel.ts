@@ -59,7 +59,14 @@ class EventChannel<E extends ArazzoRunnerEvent> {
     const copy: Record<string, unknown> | unknown[] = Array.isArray(value) ? [] : {};
     copies.set(value as object, copy);
     for (const [key, item] of Object.entries(value as object)) {
-      (copy as Record<string, unknown>)[key] = EventChannel.#snapshot(item, copies);
+      // defined, not assigned: assigning an own `__proto__` key (JSON.parse
+      // makes one) would set the copy's prototype instead of copying it.
+      Object.defineProperty(copy, key, {
+        value: EventChannel.#snapshot(item, copies),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     }
     return Object.freeze(copy);
   }

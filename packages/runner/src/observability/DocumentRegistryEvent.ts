@@ -17,8 +17,9 @@ export interface DocumentLoadStartEvent extends ArazzoRunnerEventBase {
 }
 
 /**
- * The registry loaded and cached a document. A load that fails throws and
- * emits no settled event.
+ * The registry loaded a document, which it caches right after. A load that
+ * fails throws and emits no settled event; an observer that throws here
+ * leaves the document uncached.
  * @public
  */
 export interface DocumentLoadSettledEvent extends ArazzoRunnerEventBase {

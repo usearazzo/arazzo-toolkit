@@ -144,11 +144,17 @@ describe('ArazzoRunner events', function () {
       assert.isTrue(events.every((event) => event.uri === events[0].uri));
     });
 
-    specify("should reject with the observer's own error after a load", async function () {
+    specify("should reject with the observer's own error and not cache", async function () {
       const thrown = new Error('observer bug');
+      const events: DocumentRegistryEvent[] = [];
+      let failNext = true;
       const registry = new DocumentRegistry({
         observer: (event) => {
-          if (event.type === 'document-load-settled') throw thrown;
+          events.push(event);
+          if (event.type === 'document-load-settled' && failNext) {
+            failNext = false;
+            throw thrown;
+          }
         },
       });
 
@@ -158,8 +164,19 @@ describe('ArazzoRunner events', function () {
       } catch (error) {
         caught = error;
       }
+      await registry.acquire(openAPIPath);
 
       assert.strictEqual(caught, thrown);
+      // the aborted load left nothing cached, so the second acquire loaded it again.
+      assert.deepEqual(
+        events.map((event) => event.type),
+        [
+          'document-load-start',
+          'document-load-settled',
+          'document-load-start',
+          'document-load-settled',
+        ],
+      );
     });
 
     specify('should report an OpenAPIOperationExecutor without run or step', async function () {

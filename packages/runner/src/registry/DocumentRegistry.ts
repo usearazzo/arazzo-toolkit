@@ -105,7 +105,6 @@ class DocumentRegistry {
       try {
         if (await provider.canProvide(canonicalURI)) {
           document = await provider.provide(canonicalURI);
-          this.#set(canonicalURI, document);
         }
       } catch (error: unknown) {
         // a document that cannot be read or loaded fails in ApiDOM or the parser;
@@ -117,8 +116,10 @@ class DocumentRegistry {
         });
       }
       if (document !== undefined) {
-        // outside the try: an observer's own error is not a failed load.
+        // outside the try, so an observer's own error is not a failed load, and
+        // before caching, so a run it aborts leaves no half-registered document.
         this.#events?.emit({ type: 'document-load-settled', uri: canonicalURI });
+        this.#set(canonicalURI, document);
         return document;
       }
     }
