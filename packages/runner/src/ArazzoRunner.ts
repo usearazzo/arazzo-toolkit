@@ -21,6 +21,7 @@ import WorkflowExecutor, {
   type WorkflowExecutionResult,
 } from './executor/WorkflowExecutor.ts';
 import InvalidEntryDocumentError from './errors/InvalidEntryDocumentError.ts';
+import type { ArazzoRunnerObserver } from './observability/ArazzoRunnerEvent.ts';
 
 /**
  * The options of ApiDOM reference the runner accepts: its `resolve` options,
@@ -69,6 +70,16 @@ export interface ArazzoRunnerLoadOptions
    * same options.
    */
   readonly reference?: ArazzoRunnerReferenceOptions;
+  /**
+   * Receives the events of every building block the runner wires, stamped
+   * with `now`: the run's workflows, steps and the decisions behind them, and
+   * the machinery under them (document loads, workflow and operation
+   * normalization, request assembly). See {@link ArazzoRunnerEvent}.
+   *
+   * Loads into a `registry` passed alongside are reported only if that
+   * registry was given an observer of its own.
+   */
+  readonly observer?: ArazzoRunnerObserver;
 }
 
 /**
@@ -119,6 +130,8 @@ class ArazzoRunner {
           new ArazzoDocumentRegistryProvider(referenceOptions),
           new OpenAPIDocumentRegistryProvider(referenceOptions),
         ],
+        observer: options.observer,
+        now: options.now,
       }),
       ...rest
     } = options;
@@ -164,9 +177,12 @@ class ArazzoRunner {
 
     // `resolve` only, whatever else the given object carries
     const referenceOptions = pick(['resolve'], reference ?? {});
+    const { observer, now } = workflowExecutorOptions;
     const operationExecutor = new OpenAPIOperationExecutor({
       httpClient,
       requestInterceptor,
+      observer,
+      now,
       operationNormalizer: new OpenAPIOperationNormalizer({
         openapi2: new OpenAPI2OperationNormalizer(referenceOptions),
         openapi30: new OpenAPI30OperationNormalizer(referenceOptions),

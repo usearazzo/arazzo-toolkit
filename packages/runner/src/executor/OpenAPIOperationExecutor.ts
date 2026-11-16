@@ -34,6 +34,9 @@ import type {
   OpenAPIOperationLocator,
   OpenAPIOperationSourceDescription,
 } from './OpenAPIOperationLocatorNormalizer.ts';
+import EventChannel from '../observability/EventChannel.ts';
+import type { ArazzoRunnerObserver } from '../observability/ArazzoRunnerEvent.ts';
+import type { OpenAPIOperationEvent } from '../observability/OpenAPIOperationEvent.ts';
 
 /**
  * The Arazzo step a request is issued for: its `stepId`, and the `workflowId`
@@ -208,6 +211,12 @@ export interface OpenAPIOperationExecuteOptions {
   readonly securities?: OpenAPIOperationSecurities;
   readonly signal?: AbortSignal;
   /**
+   * Identifies the run this call belongs to, stamped on the executor's events
+   * (see {@link OpenAPIOperationEventBase.runId}). Consumed by the executor,
+   * never sent. The workflow executor sets it for every step.
+   */
+  readonly runId?: string;
+  /**
    * Runs after the executor-level interceptor, for this call only.
    */
   readonly requestInterceptor?: RequestInterceptor;
@@ -277,6 +286,16 @@ export interface OpenAPIOperationExecutorOptions {
    * fresh {@link OpenAPIDocumentAssembler}.
    */
   readonly documentAssembler?: OpenAPIDocumentAssembler;
+  /**
+   * Receives the executor's events: the start and end of each operation's
+   * normalization, and its assembly. See {@link OpenAPIOperationEvent}.
+   */
+  readonly observer?: ArazzoRunnerObserver<OpenAPIOperationEvent>;
+  /**
+   * Reads the current time in milliseconds, stamped on each event. Defaults to
+   * `performance.now`.
+   */
+  readonly now?: () => number;
 }
 
 /**
@@ -308,6 +327,7 @@ class OpenAPIOperationExecutor {
   readonly #operationExtractor: OpenAPIOperationExtractor;
   readonly #operationNormalizer: OpenAPIOperationNormalizer;
   readonly #documentAssembler: OpenAPIDocumentAssembler;
+  readonly #events: EventChannel<OpenAPIOperationEvent> | undefined;
 
   constructor(options: OpenAPIOperationExecutorOptions = {}) {
     this.#httpClient = options.httpClient ?? httpClientFetch;
@@ -317,6 +337,7 @@ class OpenAPIOperationExecutor {
     this.#operationExtractor = options.operationExtractor ?? new OpenAPIOperationExtractor();
     this.#operationNormalizer = options.operationNormalizer ?? new OpenAPIOperationNormalizer();
     this.#documentAssembler = options.documentAssembler ?? new OpenAPIDocumentAssembler();
+    this.#events = EventChannel.open({ observer: options.observer, now: options.now });
   }
 
   /**
@@ -346,27 +367,10 @@ class OpenAPIOperationExecutor {
       toValue(operation.meta.get('path')) as string,
       toValue(operation.meta.get('http-method')) as string,
     ) as string;
-    const normalizedOperation = await this.#operationNormalizer.normalize(
-      operation,
-      locator.document,
-    );
-    const assembled = this.#documentAssembler.assemble(normalizedOperation, locator.document);
-
     // the interceptor and step are consumed here, the target always comes from
     // the locator, and the transport is the httpClient, so none of these
     // reach buildRequest
-    const { requestInterceptor, step } = executeOptions;
-    const rest = omit(
-      [
-        'requestInterceptor',
-        'step',
-        'operationId',
-        'operationPath',
-        'userFetch',
-        'responseInterceptor',
-      ],
-      executeOptions,
-    );
+    const { requestInterceptor, step, runId } = executeOptions;
     const declaredOperationId = toValue(operation.operationId);
     const context: RequestContext = {
       operation: {
@@ -381,6 +385,28 @@ class OpenAPIOperationExecutor {
       // (the step executor reuses it to attribute errors)
       ...(step === undefined ? {} : { step: { ...step } }),
     };
+
+    this.#events?.emit({ type: 'operation-normalize-start', ...context, runId });
+    const normalizedOperation = await this.#operationNormalizer.normalize(
+      operation,
+      locator.document,
+    );
+    this.#events?.emit({ type: 'operation-normalize-settled', ...context, runId });
+    const assembled = this.#documentAssembler.assemble(normalizedOperation, locator.document);
+    this.#events?.emit({ type: 'operation-assembled', ...context, runId });
+
+    const rest = omit(
+      [
+        'requestInterceptor',
+        'step',
+        'runId',
+        'operationId',
+        'operationPath',
+        'userFetch',
+        'responseInterceptor',
+      ],
+      executeOptions,
+    );
 
     // each step derives the next options rather than editing in place
     const withServer = this.#applyServerOptions(rest, normalizedOperation, locator.document);
