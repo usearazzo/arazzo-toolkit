@@ -542,6 +542,27 @@ describe('StepExecutor', function () {
   });
 
   context('criterion records', function () {
+    specify('should record a whole body as a placeholder with its size', async function () {
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        successCriteria: [
+          { context: '$response.body', condition: '$[0].id', type: 'jsonpath' },
+          { condition: '$response.body#/0/id == 7' },
+        ],
+      }) as StepElement;
+      const { executor } = makeExecutor();
+
+      const result = await executor.execute(step, state());
+
+      assert.deepEqual(result.successCriteria[0].values, {
+        '$response.body': `[body, size=${JSON.stringify([{ id: 7 }]).length}]`,
+      });
+      // a pointer into the body reads one value, recorded as it is.
+      assert.deepEqual(result.successCriteria[1].values, { '$response.body#/0/id': 7 });
+    });
+
     specify(
       'should record every successCriterion, then the action criteria by action name',
       async function () {
