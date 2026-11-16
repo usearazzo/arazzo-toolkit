@@ -71,18 +71,21 @@ export interface StepRetryRunContext {
    * `outcome` is the attempt that just failed and fired the action: by the
    * time the reference runs, after the `retryAfter` wait, it is the only place
    * that attempt's {@link StepAttemptOutcome.actionContext} survives, and the
-   * action's `parameters` resolve against it.
+   * action's `parameters` resolve against it. `attempt` is that attempt's
+   * number.
    */
   readonly runReference?: (
     action: FailureActionElement,
     outcome: StepAttemptOutcome,
+    attempt: number,
   ) => Promise<void>;
   /**
    * Told that a `retry` action fired, before its `retryAfter` wait: the action,
-   * and the wait in milliseconds (`0` for none). Called synchronously and not
-   * awaited; it only observes the decision.
+   * the wait in milliseconds (`0` for none), and the number of the attempt
+   * that fired it. Called synchronously and not awaited; it only observes the
+   * decision.
    */
-  readonly onRetry?: (action: FailureActionElement, delayMs: number) => void;
+  readonly onRetry?: (action: FailureActionElement, delayMs: number, attempt: number) => void;
 }
 
 /**
@@ -162,10 +165,11 @@ class StepRetryRunner {
 
   /**
    * Runs `attempt` until the step succeeds, a terminal failure action is reached,
-   * or its retries are exhausted.
+   * or its retries are exhausted. Each call is given its attempt number,
+   * starting at 1.
    */
   async run(
-    attempt: () => Promise<StepAttemptOutcome>,
+    attempt: (attempt: number) => Promise<StepAttemptOutcome>,
     context: StepRetryRunContext,
   ): Promise<StepRetryResult> {
     // attempts already spent on each retry action, keyed by the action element.
@@ -180,7 +184,7 @@ class StepRetryRunner {
     let attempts = 0;
 
     for (;;) {
-      const outcome = await attempt();
+      const outcome = await attempt(attempts + 1);
       attempts += 1;
 
       if (outcome.successful) {
@@ -211,9 +215,9 @@ class StepRetryRunner {
         // sleep(0) for immediate retries, and never hand a custom sleep a
         // zero/negative/NaN value.
         const delayMs = this.#retryAfterMs(action);
-        context.onRetry?.(action, delayMs);
+        context.onRetry?.(action, delayMs, attempts);
         if (delayMs > 0) await this.#sleep(delayMs, context.signal);
-        if (runReference !== undefined) await runReference(action, outcome);
+        if (runReference !== undefined) await runReference(action, outcome, attempts);
         fired = true;
         break;
       }

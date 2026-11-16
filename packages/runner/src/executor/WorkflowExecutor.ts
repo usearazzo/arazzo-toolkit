@@ -473,7 +473,6 @@ interface RunScope {
  * travel together into everything it delegates to.
  */
 interface WorkflowInvocation {
-  readonly runId: string;
   readonly workflowId: string;
   /**
    * The Arazzo document the workflow belongs to — the base its workflow
@@ -494,24 +493,26 @@ interface WorkflowInvocation {
    * named from the ones the run pulled in on its own.
    */
   readonly via: WorkflowCallVia;
+  /**
+   * The fields every event of this invocation carries.
+   */
+  readonly frame: WorkflowFrame;
 }
 
 /**
- * What step-scoped events of one step share.
+ * What every event of one workflow invocation shares.
  */
-interface StepFrame {
+interface WorkflowFrame {
   readonly runId: string;
   readonly workflowId: string;
   readonly path: readonly string[];
-  readonly stepId: string;
 }
 
 /**
- * The attempts made at one step so far: counted where each attempt begins,
- * and read by the events that describe the attempt in progress.
+ * What every step-scoped event of one step shares.
  */
-interface AttemptCounter {
-  attempts: number;
+interface StepFrame extends WorkflowFrame {
+  readonly stepId: string;
 }
 
 /**
@@ -772,19 +773,19 @@ class WorkflowExecutor {
     // is waiting for.
     throwIfAborted(scope.signal, { workflowId, callStack: nested });
 
-    const frame = { runId: scope.runId, workflowId, path: nested.path };
+    const frame: WorkflowFrame = { runId: scope.runId, workflowId, path: nested.path };
     // emitted before normalization, so its events nest inside this workflow's.
     this.#events?.emit({ type: 'workflow-start', ...frame, via }, startedAt);
 
-    const workflow = await this.#resolveWorkflow(locator, scope, nested.path);
+    const workflow = await this.#resolveWorkflow(locator, scope, frame);
     const state = new WorkflowExecutionState({ inputs });
     const invocation: WorkflowInvocation = {
-      runId: scope.runId,
       workflowId,
       document: locator.document,
       state,
       callStack: nested,
       via,
+      frame,
     };
 
     // validated before any prerequisite runs: a malformed `steps` is an
@@ -849,13 +850,11 @@ class WorkflowExecutor {
       // that invoked it, not to the step's own target.
       const retryReferences: RetryReferenceRecord[] = [];
       const stepFrame: StepFrame = { ...frame, stepId };
-      const counter: AttemptCounter = { attempts: 0 };
       this.#events?.emit({ type: 'step-start', ...stepFrame }, stepStartedAt);
       const attempt = this.#chargedAttempt(
         this.#observedAttempt(
           this.#stepAttempt(step, stepId, invocation, scope, subWorkflows),
           stepFrame,
-          counter,
         ),
         invocation,
         scope,
@@ -869,16 +868,9 @@ class WorkflowExecutor {
         stepId,
         workflowId,
         signal: scope.signal,
-        runReference: this.#retryReference(
-          steps,
-          stepFrame,
-          counter,
-          invocation,
-          scope,
-          retryReferences,
-        ),
-        onRetry: (retry, delayMs) => {
-          const decided = { ...stepFrame, attempt: counter.attempts };
+        runReference: this.#retryReference(steps, stepFrame, invocation, scope, retryReferences),
+        onRetry: (retry, delayMs, attempt) => {
+          const decided = { ...stepFrame, attempt };
           this.#events?.emit({
             type: 'action-selected',
             ...decided,
@@ -1038,9 +1030,7 @@ class WorkflowExecutor {
     this.#events?.emit(
       {
         type: 'workflow-settled',
-        runId: invocation.runId,
-        workflowId: invocation.workflowId,
-        path: invocation.callStack.path,
+        ...invocation.frame,
         status: result.status,
         settledStatus: result.settledStatus,
         outputs: result.outputs,
@@ -1095,17 +1085,17 @@ class WorkflowExecutor {
    * reference, which is itself one more step attempt against this same run.
    */
   #chargedAttempt(
-    runAttempt: () => Promise<StepAttemptOutcome>,
+    runAttempt: (attempt: number) => Promise<StepAttemptOutcome>,
     invocation: WorkflowInvocation,
     scope: RunScope,
     stepId: string,
-  ): () => Promise<StepAttemptOutcome> {
+  ): (attempt: number) => Promise<StepAttemptOutcome> {
     const { workflowId, callStack } = invocation;
-    return async () => {
+    return async (attempt) => {
       throwIfAborted(scope.signal, { workflowId, stepId, callStack });
       this.#chargeBudget(scope, invocation, stepId);
       try {
-        return await runAttempt();
+        return await runAttempt(attempt);
       } catch (error: unknown) {
         throwIfAborted(scope.signal, { workflowId, stepId, callStack });
         throw error;
@@ -1116,23 +1106,17 @@ class WorkflowExecutor {
   /**
    * Wraps a step-attempt thunk with the events of an attempt: `step-attempt`
    * as it begins, then a `criterion-evaluated` for each criterion it
-   * evaluated, success criteria first. It counts the attempt in `counter`, so
-   * the events fired while the attempt settles (the action it resolved to, a
-   * retry wait, a retry reference) name it.
+   * evaluated, success criteria first.
    */
   #observedAttempt(
     runAttempt: () => Promise<StepAttemptOutcome>,
     stepFrame: StepFrame,
-    counter: AttemptCounter,
-  ): () => Promise<StepAttemptOutcome> {
-    // the count only names attempts in events, so an unobserved run needs none
-    // of this.
+  ): (attempt: number) => Promise<StepAttemptOutcome> {
     const events = this.#events;
     if (events === undefined) return runAttempt;
 
-    return async () => {
-      counter.attempts += 1;
-      const attemptFrame = { ...stepFrame, attempt: counter.attempts };
+    return async (attempt) => {
+      const attemptFrame = { ...stepFrame, attempt };
       events.emit({ type: 'step-attempt', ...attemptFrame });
       const outcome = await runAttempt();
       for (const criterion of outcome.successCriteria) {
@@ -1191,15 +1175,14 @@ class WorkflowExecutor {
   #retryReference(
     steps: readonly StepElement[],
     stepFrame: StepFrame,
-    counter: AttemptCounter,
     invocation: WorkflowInvocation,
     scope: RunScope,
     retryReferences: RetryReferenceRecord[],
-  ): (action: FailureActionElement, outcome: StepAttemptOutcome) => Promise<void> {
+  ): (action: FailureActionElement, outcome: StepAttemptOutcome, attempt: number) => Promise<void> {
     const { workflowId, state, callStack } = invocation;
     const { stepId } = stepFrame;
 
-    return async (action: FailureActionElement, outcome: StepAttemptOutcome): Promise<void> => {
+    return async (action, outcome, attempt) => {
       throwIfAborted(scope.signal, { workflowId, stepId, callStack });
 
       const { hasStepId, hasWorkflowId } = actionTargets(action);
@@ -1218,7 +1201,7 @@ class WorkflowExecutor {
         this.#chargeBudget(scope, invocation, stepId);
         const referenceFrame = {
           ...stepFrame,
-          attempt: counter.attempts,
+          attempt,
           kind: 'workflow',
           id: reference,
         } as const;
@@ -1258,7 +1241,7 @@ class WorkflowExecutor {
       const refSubWorkflows: WorkflowExecutionResult[] = [];
       const referenceFrame = {
         ...stepFrame,
-        attempt: counter.attempts,
+        attempt,
         kind: 'step',
         id: refStepId,
       } as const;
@@ -1269,12 +1252,11 @@ class WorkflowExecutor {
         this.#observedAttempt(
           this.#stepAttempt(refStep, refStepId, invocation, scope, refSubWorkflows),
           { ...stepFrame, stepId: refStepId },
-          { attempts: 0 },
         ),
         invocation,
         scope,
         refStepId,
-      )();
+      )(1);
       state.setStepOutputs(refOutcome.stepId, refOutcome.outputs);
       retryReferences.push({
         kind: 'step',
@@ -1329,7 +1311,7 @@ class WorkflowExecutor {
     // prerequisites had already fired live requests.
     const dependencyRefs = await this.#dependencyRefs(workflow, invocation);
 
-    const frame = { runId: scope.runId, workflowId: invocation.workflowId, path: callStack.path };
+    const { frame } = invocation;
     const results: WorkflowExecutionResult[] = [];
     for (const dependency of dependencyRefs) {
       const qualifiedId = this.#qualifiedId(dependency.locator);
@@ -1734,7 +1716,7 @@ class WorkflowExecutor {
   async #resolveWorkflow(
     locator: ArazzoWorkflowLocator,
     scope: RunScope,
-    path: readonly string[],
+    frame: WorkflowFrame,
   ): Promise<WorkflowElement> {
     const { document, workflowId } = locator;
     const qualifiedId = this.#qualifiedId(locator);
@@ -1747,7 +1729,6 @@ class WorkflowExecutor {
         { workflowId, reason: ExecutionError.WorkflowNotFound },
       );
     }
-    const frame = { runId: scope.runId, workflowId, path };
     this.#events?.emit({ type: 'workflow-normalize-start', ...frame });
     const workflow = await this.#normalizer.normalize(
       this.#extractor.extract(document, workflowId),
