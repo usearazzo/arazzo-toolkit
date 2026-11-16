@@ -116,9 +116,9 @@ export interface CriterionEvaluationRecord {
    * `simple` condition, or the `context` of a `regex`, `jsonpath` or `xpath`
    * one. What the criterion actually saw, e.g. `{ "$statusCode": 404 }`.
    *
-   * A whole body (`$response.body`, `$request.body`) is recorded as a
-   * placeholder naming its size in bytes, `[body, size=332423]`, so
-   * the trace never holds a body; a parsed body is sized by its JSON form.
+   * A whole body (`$response.body`, `$request.body`) is recorded as the
+   * placeholder `[body]`, so the trace never holds a body; the body and its
+   * size are in the attempt's `openapi-operation-request-settled` event.
    */
   readonly values: Readonly<Record<string, unknown>>;
   /**
@@ -602,7 +602,7 @@ class StepExecutor {
     const resolve = async (expression: string): Promise<unknown> => {
       const value = await this.#evaluate(context, expression);
       const wholeBody = expression === '$response.body' || expression === '$request.body';
-      values[expression] = wholeBody ? `[body, size=${StepExecutor.#byteSize(value)}]` : value;
+      values[expression] = wholeBody ? '[body]' : value;
       return value;
     };
     try {
@@ -626,18 +626,6 @@ class StepExecutor {
       }
       throw error;
     }
-  }
-
-  /**
-   * The size in bytes of a body as a criterion read it: of its text, its
-   * bytes, or, for a parsed body, its JSON form.
-   */
-  static #byteSize(body: unknown): number {
-    if (body === undefined || body === null) return 0;
-    if (body instanceof Blob) return body.size;
-    if (body instanceof Uint8Array || body instanceof ArrayBuffer) return body.byteLength;
-    const text = typeof body === 'string' ? body : (JSON.stringify(body) ?? '');
-    return new TextEncoder().encode(text).length;
   }
 
   /**
