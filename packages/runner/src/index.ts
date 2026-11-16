@@ -193,7 +193,6 @@ export type {
 export type {
   OpenAPIOperationEvent,
   OpenAPIOperationEventBase,
-  OperationLocatedEvent,
   OperationNormalizeStartEvent,
   OperationNormalizeSettledEvent,
   OperationAssembledEvent,

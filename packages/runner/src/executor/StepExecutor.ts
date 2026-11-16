@@ -37,9 +37,6 @@ import ExecutionError from '../errors/ExecutionError.ts';
 import ResolverError from '../errors/ResolverError.ts';
 import RuntimeExpressionError from '../errors/RuntimeExpressionError.ts';
 import { readAbortSignal, throwIfAborted } from './abort.ts';
-import EventChannel from '../observability/EventChannel.ts';
-import type { ArazzoRunnerObserver } from '../observability/ArazzoRunnerEvent.ts';
-import type { OpenAPIOperationEvent } from '../observability/OpenAPIOperationEvent.ts';
 
 /**
  * The mutually exclusive fields by which a step names its target. A step may
@@ -92,17 +89,6 @@ export interface StepExecutorOptions {
    * the step executor is agnostic to how the operation reaches the live API.
    */
   readonly operationExecutor: OpenAPIOperationExecutor;
-  /**
-   * Receives the step executor's events: the operation each step
-   * attempt located. Siblings derived with {@link StepExecutor.forDocument}
-   * report to the same observer. See {@link OpenAPIOperationEvent}.
-   */
-  readonly observer?: ArazzoRunnerObserver<OpenAPIOperationEvent>;
-  /**
-   * Reads the current time in milliseconds, stamped on each event. Defaults to
-   * `performance.now`.
-   */
-  readonly now?: () => number;
 }
 
 /**
@@ -251,18 +237,12 @@ class StepExecutor {
   readonly #outputResolver = new OutputResolver();
   readonly #criterionEvaluator = new CriterionEvaluator();
   readonly #actionResolver = new ActionResolver();
-  readonly #observer: ArazzoRunnerObserver<OpenAPIOperationEvent> | undefined;
-  readonly #now: (() => number) | undefined;
-  readonly #events: EventChannel<OpenAPIOperationEvent> | undefined;
 
   constructor(options: StepExecutorOptions) {
     this.#document = options.document;
     this.#registry = options.registry;
     this.#locatorNormalizer = new OpenAPIOperationLocatorNormalizer(options.registry);
     this.#operationExecutor = options.operationExecutor;
-    this.#observer = options.observer;
-    this.#now = options.now;
-    this.#events = EventChannel.open({ observer: options.observer, now: options.now });
   }
 
   /**
@@ -283,8 +263,6 @@ class StepExecutor {
       document,
       registry: this.#registry,
       operationExecutor: this.#operationExecutor,
-      observer: this.#observer,
-      now: this.#now,
     });
   }
 
@@ -343,19 +321,6 @@ class StepExecutor {
     const operationOptions =
       // a copy, so the function cannot rewrite the scope this step attributes its errors to
       typeof executeOptions === 'function' ? executeOptions(locator, { ...scope }) : executeOptions;
-    const { runId } = operationOptions;
-    this.#events?.emit({
-      type: 'operation-located',
-      operation: {
-        documentURI: locator.document.uri,
-        jsonPointer: locator.jsonPointer,
-        ...(locator.sourceDescription === undefined
-          ? {}
-          : { sourceDescription: { ...locator.sourceDescription } }),
-      },
-      step: { ...scope },
-      ...(typeof runId === 'string' ? { runId } : {}),
-    });
 
     // resolve parameters and request body against the pre-request context.
     // keyed by '{in}.{name}' rather than bare name, so two parameters that

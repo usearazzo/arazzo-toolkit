@@ -46,13 +46,8 @@ describe('ArazzoRunner events', function () {
       types
         .slice(attempt + 1)
         .filter((type) => type.startsWith('operation-'))
-        .slice(0, 4),
-      [
-        'operation-located',
-        'operation-normalize-start',
-        'operation-normalize-settled',
-        'operation-assembled',
-      ],
+        .slice(0, 3),
+      ['operation-normalize-start', 'operation-normalize-settled', 'operation-assembled'],
     );
   });
 

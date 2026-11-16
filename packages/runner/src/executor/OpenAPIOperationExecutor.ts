@@ -387,14 +387,14 @@ class OpenAPIOperationExecutor {
       ...(step === undefined ? {} : { step: { ...step } }),
     };
 
-    this.#emit('operation-normalize-start', context, runId);
+    this.#events?.emit({ type: 'operation-normalize-start', ...context, runId });
     const normalizedOperation = await this.#operationNormalizer.normalize(
       operation,
       locator.document,
     );
-    this.#emit('operation-normalize-settled', context, runId);
+    this.#events?.emit({ type: 'operation-normalize-settled', ...context, runId });
     const assembled = this.#documentAssembler.assemble(normalizedOperation, locator.document);
-    this.#emit('operation-assembled', context, runId);
+    this.#events?.emit({ type: 'operation-assembled', ...context, runId });
 
     const rest = omit(
       [
@@ -493,22 +493,6 @@ class OpenAPIOperationExecutor {
    * delivering it here sends the same value. Bare keys are left to
    * `buildRequest`: they name no location to deliver to.
    */
-  /**
-   * Emits one of the executor's events about the operation in `context`,
-   * carrying the caller's `runId` when it gave one.
-   */
-  #emit(
-    type: Exclude<OpenAPIOperationEvent['type'], 'operation-located'>,
-    context: RequestContext,
-    runId: string | undefined,
-  ): void {
-    this.#events?.emit({
-      type,
-      ...context,
-      ...(typeof runId === 'string' ? { runId } : {}),
-    });
-  }
-
   #undeclaredParameters(
     parameters: unknown,
     operation: OpenAPIOperationElement,

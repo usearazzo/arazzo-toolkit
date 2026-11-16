@@ -74,7 +74,7 @@ export interface ArazzoRunnerLoadOptions
    * Receives the events of every building block the runner wires, stamped
    * with `now`: the run's workflows, steps and the decisions behind them, and
    * the machinery underneath — document loads, workflow and operation
-   * normalization, operation location and assembly. See
+   * normalization, and request assembly. See
    * {@link ArazzoRunnerEvent}.
    *
    * Loads into a `registry` passed alongside are reported only if that
@@ -190,13 +190,7 @@ class ArazzoRunner {
         openapi31: new OpenAPI31OperationNormalizer(referenceOptions),
       }),
     });
-    const stepExecutor = new StepExecutor({
-      document,
-      registry,
-      operationExecutor,
-      observer,
-      now,
-    });
+    const stepExecutor = new StepExecutor({ document, registry, operationExecutor });
 
     this.document = document;
     this.registry = registry;

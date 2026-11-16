@@ -165,11 +165,11 @@ export interface ActionSelectedEvent extends WorkflowExecutionStepEventBase {
   readonly type: 'action-selected';
   readonly attempt: number;
   /**
-   * The selected action. `undefined` when none matched, so the step takes the
+   * The selected action. Absent when none matched, so the step takes the
    * default path: the next step on success, a break on failure. It is the
    * document's own element, shared with the trace: read it, never change it.
    */
-  readonly action: SelectedAction | undefined;
+  readonly action?: SelectedAction;
   /**
    * What the run does next because of it, as plain data: `retry` re-runs the
    * step, and the rest are the step's terminal transition — `next`, `goto` a

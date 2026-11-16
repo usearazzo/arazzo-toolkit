@@ -78,7 +78,11 @@ class EventChannel<E extends ArazzoRunnerEvent> {
    * recorded duration exactly); otherwise the clock is read now.
    */
   emit(event: UnstampedEvent<E>, timestamp?: number): void {
-    const stamped = { ...event, timestamp: timestamp ?? this.#now() };
+    // an absent optional field of the event itself is omitted, never present as
+    // undefined; undefined values inside its data (an output that resolved to
+    // undefined) are kept.
+    const fields = Object.entries(event).filter(([, value]) => value !== undefined);
+    const stamped = { ...Object.fromEntries(fields), timestamp: timestamp ?? this.#now() };
     this.#observer(EventChannel.#snapshot(stamped, new WeakMap()) as E);
   }
 }

@@ -17,16 +17,6 @@ export interface OpenAPIOperationEventBase extends ArazzoRunnerEventBase, Reques
 }
 
 /**
- * A step's `operationId` or `operationPath` was resolved to an operation.
- * Emitted by the {@link StepExecutor}, once per attempt. The declared
- * `operationId` is not read yet at this point, so `operation` carries none.
- * @public
- */
-export interface OperationLocatedEvent extends OpenAPIOperationEventBase {
-  readonly type: 'operation-located';
-}
-
-/**
  * Normalization of the operation began: dereferencing it (which may fetch
  * externally referenced documents) and inheriting its path-level fields.
  * @public
@@ -53,11 +43,8 @@ export interface OperationAssembledEvent extends OpenAPIOperationEventBase {
 }
 
 /**
- * An event the {@link StepExecutor} or {@link OpenAPIOperationExecutor} emits.
+ * An event the {@link OpenAPIOperationExecutor} emits.
  * @public
  */
 export type OpenAPIOperationEvent =
-  | OperationLocatedEvent
-  | OperationNormalizeStartEvent
-  | OperationNormalizeSettledEvent
-  | OperationAssembledEvent;
+  OperationNormalizeStartEvent | OperationNormalizeSettledEvent | OperationAssembledEvent;
