@@ -8,6 +8,7 @@ import {
   DocumentRegistry,
   OpenAPIDocument,
   OpenAPIOperationExecutor,
+  Redactor,
   type HTTPClient,
   type OpenAPIOperationEvent,
   type OpenAPIOperationExecutorOptions,
@@ -35,7 +36,7 @@ describe('OpenAPIOperationExecutor events', function () {
   });
 
   const httpClient: HTTPClient = async () =>
-    new Response(JSON.stringify({ id: 7 }), {
+    new Response(JSON.stringify({ id: 7, token: 'RESPONSE-TOKEN' }), {
       status: 200,
       headers: { 'content-type': 'application/json', 'set-cookie': 'session=abc' },
     });
@@ -52,18 +53,20 @@ describe('OpenAPIOperationExecutor events', function () {
     return { executor, events };
   };
 
-  const requestOf = (
-    events: OpenAPIOperationEvent[],
-  ): OpenAPIOperationRequestStartEvent['request'] =>
-    (
-      events.find(
-        (event) => event.type === 'openapi-operation-request-start',
-      ) as OpenAPIOperationRequestStartEvent
-    ).request;
+  const startOf = (events: OpenAPIOperationEvent[]): OpenAPIOperationRequestStartEvent =>
+    events.find(
+      (event): event is OpenAPIOperationRequestStartEvent =>
+        event.type === 'openapi-operation-request-start',
+    ) as OpenAPIOperationRequestStartEvent;
+  const settledOf = (events: OpenAPIOperationEvent[]): OpenAPIOperationRequestSettledEvent =>
+    events.find(
+      (event): event is OpenAPIOperationRequestSettledEvent =>
+        event.type === 'openapi-operation-request-settled',
+    ) as OpenAPIOperationRequestSettledEvent;
 
   const getPet = { jsonPointer: '/paths/~1pet~1{petId}/get' };
 
-  specify('should report the request sent and the response that came back', async function () {
+  specify('should report the request sent and the response received', async function () {
     let time = 0;
     const { executor, events } = observe({ now: () => (time += 1) });
 
@@ -72,127 +75,93 @@ describe('OpenAPIOperationExecutor events', function () {
       { parameters: { petId: 7 }, step: { stepId: 'getPet' }, runId: 'run-1' },
     );
 
-    const start = events.find(
-      (event): event is OpenAPIOperationRequestStartEvent =>
-        event.type === 'openapi-operation-request-start',
-    );
-    const settled = events.find(
-      (event): event is OpenAPIOperationRequestSettledEvent =>
-        event.type === 'openapi-operation-request-settled',
-    );
-    assert.strictEqual(start?.request.method, 'GET');
-    assert.match(start?.request.url ?? '', /\/pet\/7$/);
-    assert.deepEqual(start?.step, { stepId: 'getPet' });
-    assert.strictEqual(start?.runId, 'run-1');
-    assert.strictEqual(settled?.response.status, 200);
-    assert.strictEqual(settled?.response.headers['content-type'], 'application/json');
-    assert.isAbove(settled?.timestamp ?? 0, start?.timestamp ?? 0);
-    // bodies are never carried
-    assert.notProperty(start?.request, 'body');
-    assert.notProperty(settled?.response, 'body');
+    const start = startOf(events);
+    const settled = settledOf(events);
+    assert.strictEqual(start.request.method, 'GET');
+    assert.match(start.request.url, /\/pet\/7$/);
+    assert.deepEqual(start.step, { stepId: 'getPet' });
+    assert.strictEqual(start.runId, 'run-1');
+    assert.strictEqual(settled.response.status, 200);
+    assert.strictEqual(settled.response.headers['content-type'], 'application/json');
+    assert.isAbove(settled.timestamp, start.timestamp);
+    // bodies come only with captureBodies
+    assert.notProperty(start.request, 'body');
+    assert.notProperty(settled.response, 'body');
   });
 
-  specify('should mask credential headers on both sides', async function () {
+  specify('should carry the exchange as it was, for a Redactor to mask', async function () {
     const { executor, events } = observe({
       requestInterceptor: (request) => {
         request.headers.Authorization = 'Bearer token-from-interceptor';
-        request.headers['X-Trace'] = 'visible';
         return request;
       },
     });
 
     await executor.execute({ document: petstore, ...getPet }, { parameters: { petId: 7 } });
 
-    const { headers } = requestOf(events);
-    assert.strictEqual(headers.Authorization, 'REDACTED');
-    assert.strictEqual(headers['X-Trace'], 'visible');
-    const settled = events.find(
-      (event): event is OpenAPIOperationRequestSettledEvent =>
-        event.type === 'openapi-operation-request-settled',
+    const start = startOf(events);
+    assert.strictEqual(start.request.headers.Authorization, 'Bearer token-from-interceptor');
+    const redactor = new Redactor();
+    assert.strictEqual(redactor.event(start).request.headers.Authorization, 'REDACTED');
+    assert.strictEqual(
+      redactor.event(settledOf(events)).response.headers['set-cookie'],
+      'REDACTED',
     );
-    assert.strictEqual(settled?.response.headers['set-cookie'], 'REDACTED');
   });
 
-  specify('should always mask an apiKey header the request applies', async function () {
-    // an empty list removes every default, yet the scheme's own header stays masked
-    const { executor, events } = observe({ redact: { headers: [] } });
-
-    await executor.execute(
-      { document: petstore, ...getPet },
-      { parameters: { petId: 7 }, securities: { authorized: { api_key: 'PETS-KEY' } } },
-    );
-
-    assert.strictEqual(requestOf(events).headers.api_key, 'REDACTED');
-  });
-
-  specify('should always mask the Authorization header a scheme applies', async function () {
-    const { executor, events } = observe({ redact: { headers: [] } });
-
-    await executor.execute(
-      { document: petstore, jsonPointer: '/paths/~1pet~1findByStatus/get' },
-      {
-        parameters: { status: 'available' },
-        securities: {
-          authorized: { petstore_auth: { token: { access_token: 'OAUTH-TOKEN' } } },
-        },
-      },
-    );
-
-    const { headers } = requestOf(events);
-    assert.strictEqual(headers.Authorization, 'REDACTED');
-  });
-
-  specify('should always mask an apiKey query parameter the request applies', async function () {
+  specify("should list where the document's security schemes put credentials", async function () {
     const { executor, events } = observe();
 
-    await executor.execute(
+    await executor.execute({ document: petstore, ...getPet }, { parameters: { petId: 7 } });
+
+    // petstore declares an oauth2 scheme and an apiKey header named api_key.
+    assert.sameMembers([...startOf(events).credentials], ['Authorization', 'api_key']);
+  });
+
+  specify('should let a Redactor mask scheme credentials whatever its patterns', async function () {
+    const redactor = new Redactor({ fields: [] });
+    const header = observe();
+    const query = observe();
+
+    // deletePet declares api_key as a header parameter the step sends itself.
+    await header.executor.execute(
+      { document: petstore, jsonPointer: '/paths/~1pet~1{petId}/delete' },
+      { parameters: { petId: 7, api_key: 'STEP-KEY' } },
+    );
+    await query.executor.execute(
       { document: queryKey, jsonPointer: '/paths/~1items/get' },
       { parameters: { page: '2' }, securities: { authorized: { queryKey: 'QUERY-KEY' } } },
     );
 
-    const { url } = requestOf(events);
+    assert.strictEqual(redactor.event(startOf(header.events)).request.headers.api_key, 'REDACTED');
+    const { url } = redactor.event(startOf(query.events)).request;
     assert.include(url, 'key=REDACTED');
     assert.include(url, 'page=2');
-    assert.notInclude(url, 'QUERY-KEY');
   });
 
-  specify('should mask an apiKey a step sends as a parameter of its own', async function () {
-    // deletePet declares api_key as a header parameter and petstore declares
-    // an api_key scheme: no securities are given, yet the value is masked.
-    const { executor, events } = observe({ redact: { headers: [] } });
+  specify('should carry the bodies with captureBodies', async function () {
+    const { executor, events } = observe({ captureBodies: true });
 
     await executor.execute(
-      { document: petstore, jsonPointer: '/paths/~1pet~1{petId}/delete' },
-      { parameters: { petId: 7, api_key: 'STEP-KEY' } },
+      { document: petstore, jsonPointer: '/paths/~1pet/post' },
+      { requestBody: { name: 'Rex', password: 'hunter2' }, requestContentType: 'application/json' },
     );
 
-    assert.strictEqual(requestOf(events).headers.api_key, 'REDACTED');
-  });
-
-  specify('should mask the headers a redact list names', async function () {
-    const { executor, events } = observe({
-      redact: { headers: [...OpenAPIOperationExecutor.defaultRedact.headers, 'x-session'] },
-      requestInterceptor: (request) => {
-        request.headers['X-Session'] = 'secret';
-        request.headers.Authorization = 'Bearer secret';
-        return request;
-      },
-    });
-
-    await executor.execute({ document: petstore, ...getPet }, { parameters: { petId: 7 } });
-
-    const { headers } = requestOf(events);
-    assert.strictEqual(headers['X-Session'], 'REDACTED');
-    assert.strictEqual(headers.Authorization, 'REDACTED');
+    const start = startOf(events);
+    const settled = settledOf(events);
+    assert.include(start.request.body?.text, 'hunter2');
+    assert.include(settled.response.body?.text, 'RESPONSE-TOKEN');
+    assert.isAbove(settled.response.body?.size ?? 0, 0);
+    const redactor = new Redactor();
+    assert.notInclude(redactor.event(start).request.body?.text, 'hunter2');
+    assert.notInclude(redactor.event(settled).response.body?.text, 'RESPONSE-TOKEN');
   });
 
   specify('should leave a request that fails in the transport unsettled', async function () {
-    const events: OpenAPIOperationEvent[] = [];
-    const executor = new OpenAPIOperationExecutor({
+    const { executor, events } = observe({
       httpClient: async () => {
         throw new TypeError('network down');
       },
-      observer: (event) => events.push(event),
     });
 
     let caught: unknown;

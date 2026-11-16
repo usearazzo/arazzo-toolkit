@@ -36,8 +36,10 @@ import type {
 } from './OpenAPIOperationLocatorNormalizer.ts';
 import EventChannel from '../observability/EventChannel.ts';
 import type { ArazzoRunnerObserver } from '../observability/ArazzoRunnerEvent.ts';
-import type { OpenAPIOperationEvent } from '../observability/OpenAPIOperationEvent.ts';
-import HTTPRedactor, { type HTTPRedactOptions } from '../observability/HTTPRedactor.ts';
+import type {
+  OpenAPIOperationEvent,
+  OpenAPIOperationEventBody,
+} from '../observability/OpenAPIOperationEvent.ts';
 
 /**
  * The Arazzo step a request is issued for: its `stepId`, and the `workflowId`
@@ -299,15 +301,11 @@ export interface OpenAPIOperationExecutorOptions {
    */
   readonly now?: () => number;
   /**
-   * What to mask in the request and response the `openapi-operation-request-*`
-   * events carry. Defaults to {@link OpenAPIOperationExecutor.defaultRedact}.
-   * Wherever the document's security schemes put credentials (an `apiKey`
-   * header, query parameter or cookie, the `Authorization` header) is masked
-   * whatever the lists say. Masking goes by name, so a credential under a name
-   * neither covers, such as a custom header a request interceptor adds, is
-   * carried unless listed. Bodies are never carried.
+   * Whether the `openapi-operation-request-*` events carry the request and
+   * response bodies, as text. Off by default. A body that is not text (a
+   * `FormData`, a `Blob`, bytes) is carried as its size only.
    */
-  readonly redact?: HTTPRedactOptions;
+  readonly captureBodies?: boolean;
 }
 
 /**
@@ -333,21 +331,13 @@ export interface OpenAPIOperationExecutorOptions {
  * @public
  */
 class OpenAPIOperationExecutor {
-  /**
-   * What the `openapi-operation-request-*` events mask by default: the
-   * `Authorization`, `Proxy-Authorization`, `Cookie` and `Set-Cookie` headers,
-   * and the signed-URL query parameters OpenTelemetry masks. Spread a list to
-   * extend it in {@link OpenAPIOperationExecutorOptions.redact}.
-   */
-  static readonly defaultRedact: Required<HTTPRedactOptions> = HTTPRedactor.DEFAULTS;
-
   readonly #httpClient: HTTPClient;
   readonly #requestInterceptor: RequestInterceptor | undefined;
   readonly #responseNormalizer: OpenAPIOperationResponseNormalizer;
   readonly #operationExtractor: OpenAPIOperationExtractor;
   readonly #operationNormalizer: OpenAPIOperationNormalizer;
   readonly #documentAssembler: OpenAPIDocumentAssembler;
-  readonly #redactor: HTTPRedactor;
+  readonly #captureBodies: boolean;
   readonly #events: EventChannel<OpenAPIOperationEvent> | undefined;
 
   constructor(options: OpenAPIOperationExecutorOptions = {}) {
@@ -359,7 +349,7 @@ class OpenAPIOperationExecutor {
     this.#operationNormalizer = options.operationNormalizer ?? new OpenAPIOperationNormalizer();
     this.#documentAssembler = options.documentAssembler ?? new OpenAPIDocumentAssembler();
     this.#events = EventChannel.open({ observer: options.observer, now: options.now });
-    this.#redactor = new HTTPRedactor(options.redact);
+    this.#captureBodies = options.captureBodies ?? false;
   }
 
   /**
@@ -495,10 +485,12 @@ class OpenAPIOperationExecutor {
       type: 'openapi-operation-request-start',
       ...context,
       runId,
+      credentials: credentials ?? [],
       request: {
         method: request.method,
-        url: this.#redactor.url(request.url, credentials?.query),
-        headers: this.#redactor.headers(request.headers, credentials),
+        url: request.url,
+        headers: request.headers,
+        ...(this.#captureBodies ? { body: OpenAPIOperationExecutor.#body(request.body) } : {}),
       },
     });
 
@@ -512,30 +504,48 @@ class OpenAPIOperationExecutor {
       });
     }
 
+    const response = await this.#responseNormalizer.normalize(rawResponse, requestInfo);
     this.#events?.emit({
       type: 'openapi-operation-request-settled',
       ...context,
       runId,
+      credentials: credentials ?? [],
       response: {
-        status: rawResponse.status,
-        headers: this.#redactor.headers(rawResponse.headers, credentials),
+        status: response.status,
+        headers: response.headers,
+        ...(this.#captureBodies
+          ? { body: { text: response.text(), size: response.bytes().length } }
+          : {}),
       },
     });
-
-    return this.#responseNormalizer.normalize(rawResponse, requestInfo);
+    return response;
   }
 
   /**
-   * The header and query parameter names the document's security schemes put
-   * their credentials in, so the events mask them whatever the redact lists
-   * say: an `apiKey`'s header, query parameter or `Cookie`, and the
-   * `Authorization` header of every other scheme type. Every scheme the
-   * document declares counts, not only the operation's own or those given
-   * `securities`: a step may send a credential as a parameter of its own.
+   * A request body as an event carries it: its text, or only its size when it
+   * is not text.
    */
-  #credentialNames(document: OpenAPIDocument): { headers: string[]; query: string[] } {
-    type Fields = Record<string, unknown>;
-    const names = { headers: [] as string[], query: [] as string[] };
+  static #body(content: unknown): OpenAPIOperationEventBody {
+    if (typeof content === 'string') {
+      return { text: content, size: new TextEncoder().encode(content).length };
+    }
+    if (content === undefined || content === null) return { size: 0 };
+    if (content instanceof Blob) return { size: content.size };
+    if (content instanceof Uint8Array || content instanceof ArrayBuffer) {
+      return { size: content.byteLength };
+    }
+    return {};
+  }
+
+  /**
+   * The names the document's security schemes put credentials under, so the
+   * events mask them whatever the patterns say: an `apiKey`'s header, query
+   * parameter or `Cookie`, and the `Authorization` header of every other
+   * scheme type. Every scheme the document declares counts, not only the
+   * operation's own or those given `securities`: a step may send a credential
+   * as a parameter of its own.
+   */
+  #credentialNames(document: OpenAPIDocument): string[] {
     const api = document.parseResult.api;
     const components = isObjectElement(api) ? api.get('components') : undefined;
     const declared = isObjectElement(components)
@@ -543,17 +553,16 @@ class OpenAPIOperationExecutor {
       : isObjectElement(api)
         ? api.get('securityDefinitions')
         : undefined;
-    const schemes = isObjectElement(declared) ? (toValue(declared) as Fields) : {};
-    for (const value of Object.values(schemes)) {
-      if (!isPlainObject(value)) continue;
-      const scheme = value as Fields;
-      if (scheme.type !== 'apiKey') names.headers.push('Authorization');
-      else if (typeof scheme.name !== 'string') continue;
-      else if (scheme.in === 'query') names.query.push(scheme.name);
-      else if (scheme.in === 'cookie') names.headers.push('Cookie');
-      else names.headers.push(scheme.name);
-    }
-    return names;
+    const schemes = isObjectElement(declared)
+      ? Object.values(toValue(declared) as Record<string, unknown>)
+      : [];
+
+    return schemes.filter(isPlainObject).map((value) => {
+      const scheme = value as Record<string, unknown>;
+      if (scheme.type !== 'apiKey') return 'Authorization';
+      if (scheme.in === 'cookie') return 'Cookie';
+      return typeof scheme.name === 'string' ? scheme.name : 'Authorization';
+    });
   }
 
   /**

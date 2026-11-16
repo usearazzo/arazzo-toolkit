@@ -43,31 +43,68 @@ export interface OpenAPIOperationAssembledEvent extends OpenAPIOperationEventBas
 }
 
 /**
- * The request about to be handed to the {@link HTTPClient}, after every
- * request interceptor ran. Credentials are masked (see
- * {@link OpenAPIOperationExecutorOptions.redact}); the body is not carried.
+ * A body an `openapi-operation-request-*` event carries, with
+ * {@link OpenAPIOperationExecutorOptions.captureBodies} on.
  * @public
  */
-export interface OpenAPIOperationRequestStartEvent extends OpenAPIOperationEventBase {
+export interface OpenAPIOperationEventBody {
+  /**
+   * The body as text. Absent for a body that is not text.
+   */
+  readonly text?: string;
+  /**
+   * The body's size in bytes, when known.
+   */
+  readonly size?: number;
+  /**
+   * Set by {@link Redactor} when it cut `text` to its limit.
+   */
+  readonly truncated?: boolean;
+}
+
+/**
+ * The fields both `openapi-operation-request-*` events carry.
+ *
+ * These events carry the exchange as it was sent and received, credentials
+ * included, like the request an interceptor receives. Mask them with
+ * {@link Redactor} before they leave the process.
+ * @public
+ */
+export interface OpenAPIOperationExchangeEventBase extends OpenAPIOperationEventBase {
+  /**
+   * The header, query parameter and cookie names the document's security
+   * schemes put credentials under, for {@link Redactor} to mask whatever its
+   * patterns say.
+   */
+  readonly credentials: readonly string[];
+}
+
+/**
+ * The request about to be handed to the {@link HTTPClient}, after every
+ * request interceptor ran.
+ * @public
+ */
+export interface OpenAPIOperationRequestStartEvent extends OpenAPIOperationExchangeEventBase {
   readonly type: 'openapi-operation-request-start';
   readonly request: {
     readonly method: string;
     readonly url: string;
     readonly headers: Readonly<Record<string, string>>;
+    readonly body?: OpenAPIOperationEventBody;
   };
 }
 
 /**
- * The response arrived, before its body is read. Credentials in its headers
- * are masked; the body is not carried. A request that fails in the transport
- * throws and emits no settled event.
+ * The response was received and its body read. A request that fails in the
+ * transport throws and emits no settled event.
  * @public
  */
-export interface OpenAPIOperationRequestSettledEvent extends OpenAPIOperationEventBase {
+export interface OpenAPIOperationRequestSettledEvent extends OpenAPIOperationExchangeEventBase {
   readonly type: 'openapi-operation-request-settled';
   readonly response: {
     readonly status: number;
     readonly headers: Readonly<Record<string, string>>;
+    readonly body?: OpenAPIOperationEventBody;
   };
 }
 

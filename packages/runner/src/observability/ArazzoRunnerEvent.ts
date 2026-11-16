@@ -43,6 +43,10 @@ export type ArazzoRunnerEvent =
  * ApiDOM element in {@link ActionSelectedEvent.action}, or a `Map` or class
  * instance a custom HTTP client put into a response body.
  *
+ * Events carry what the run saw, credentials included, like the request a
+ * request interceptor receives. Pass them through {@link Redactor.event}
+ * before they leave the process.
+ *
  * A building block without an observer builds no events.
  * @public
  */
