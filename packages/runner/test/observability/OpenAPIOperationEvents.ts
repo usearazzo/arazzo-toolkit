@@ -109,77 +109,6 @@ describe('OpenAPIOperationExecutor events', function () {
     );
   });
 
-  specify("should list where the document's security schemes put credentials", async function () {
-    const { executor, events } = observe();
-
-    await executor.execute({ document: petstore, ...getPet }, { parameters: { petId: 7 } });
-
-    // petstore declares an oauth2 scheme and an apiKey header named api_key.
-    assert.sameMembers([...startOf(events).credentials], ['Authorization', 'api_key']);
-  });
-
-  specify('should let a Redactor mask scheme credentials whatever its patterns', async function () {
-    const redactor = new Redactor({ fields: [] });
-    const header = observe();
-    const query = observe();
-
-    // deletePet declares api_key as a header parameter the step sends itself.
-    await header.executor.execute(
-      { document: petstore, jsonPointer: '/paths/~1pet~1{petId}/delete' },
-      { parameters: { petId: 7, api_key: 'STEP-KEY' } },
-    );
-    await query.executor.execute(
-      { document: queryKey, jsonPointer: '/paths/~1items/get' },
-      { parameters: { page: '2' }, securities: { authorized: { queryKey: 'QUERY-KEY' } } },
-    );
-
-    assert.strictEqual(redactor.event(startOf(header.events)).request.headers.api_key, 'REDACTED');
-    const { url } = redactor.event(startOf(query.events)).request;
-    assert.include(url, 'key=REDACTED');
-    assert.include(url, 'page=2');
-  });
-
-  specify('should read a security scheme given as a local $ref', async function () {
-    const { executor, events } = observe();
-
-    await executor.execute(
-      { document: queryKey, jsonPointer: '/paths/~1items/get' },
-      { parameters: { page: '2' } },
-    );
-
-    assert.sameMembers([...startOf(events).credentials], ['key', 'X-Partner']);
-  });
-
-  specify('should carry a body that is not UTF-8 as its size only', async function () {
-    const bytes = new Uint8Array([0xff, 0xfe, 0x00, 0x01]);
-    const { executor, events } = observe({
-      captureBodies: true,
-      httpClient: async () =>
-        new Response(bytes, {
-          status: 200,
-          headers: { 'content-type': 'application/octet-stream' },
-        }),
-    });
-
-    await executor.execute({ document: petstore, ...getPet }, { parameters: { petId: 7 } });
-
-    assert.deepEqual(settledOf(events).response.body, { size: 4 });
-  });
-
-  specify('should carry a request body an interceptor set as a value', async function () {
-    const { executor, events } = observe({
-      captureBodies: true,
-      requestInterceptor: (request) => {
-        request.body = new URLSearchParams({ grant_type: 'password', password: 'p' });
-        return request;
-      },
-    });
-
-    await executor.execute({ document: petstore, ...getPet }, { parameters: { petId: 7 } });
-
-    assert.strictEqual(startOf(events).request.body?.text, 'grant_type=password&password=p');
-  });
-
   specify('should carry the bodies with captureBodies', async function () {
     const { executor, events } = observe({ captureBodies: true });
 
@@ -190,12 +119,25 @@ describe('OpenAPIOperationExecutor events', function () {
 
     const start = startOf(events);
     const settled = settledOf(events);
-    assert.include(start.request.body?.text, 'hunter2');
-    assert.include(settled.response.body?.text, 'RESPONSE-TOKEN');
-    assert.isAbove(settled.response.body?.size ?? 0, 0);
+    // the request body as sent, the response body as parsed
+    assert.include(start.request.body as string, 'hunter2');
+    assert.deepEqual(settled.response.body, { id: 7, token: 'RESPONSE-TOKEN' });
     const redactor = new Redactor();
-    assert.notInclude(redactor.event(start).request.body?.text, 'hunter2');
-    assert.notInclude(redactor.event(settled).response.body?.text, 'RESPONSE-TOKEN');
+    assert.notInclude(redactor.event(start).request.body as string, 'hunter2');
+    assert.deepEqual(redactor.event(settled).response.body, { id: 7, token: 'REDACTED' });
+  });
+
+  specify('should let a Redactor mask an apiKey in the query', async function () {
+    const { executor, events } = observe();
+
+    await executor.execute(
+      { document: queryKey, jsonPointer: '/paths/~1items/get' },
+      { parameters: { page: '2' }, securities: { authorized: { queryKey: 'QUERY-KEY' } } },
+    );
+
+    const { url } = new Redactor().event(startOf(events)).request;
+    assert.include(url, 'key=REDACTED');
+    assert.include(url, 'page=2');
   });
 
   specify('should leave a request that fails in the transport unsettled', async function () {

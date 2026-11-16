@@ -17,12 +17,10 @@ const operation = {
 
 const start = (
   request: Partial<OpenAPIOperationRequestStartEvent['request']>,
-  credentials: string[] = [],
 ): OpenAPIOperationRequestStartEvent => ({
   type: 'openapi-operation-request-start',
   timestamp: 1,
   ...operation,
-  credentials,
   request: { method: 'GET', url: 'https://api.example.com/x', headers: {}, ...request },
 });
 
@@ -32,7 +30,6 @@ const settled = (
   type: 'openapi-operation-request-settled',
   timestamp: 2,
   ...operation,
-  credentials: [],
   response: { status: 200, headers: {}, ...response },
 });
 
@@ -62,16 +59,12 @@ describe('Redactor', function () {
       });
     });
 
-    specify('should replace the defaults, and still mask the listed credentials', function () {
+    specify('should replace the default patterns', function () {
       const { headers } = new Redactor({ fields: ['x-tenant'] }).event(
-        start({ headers: { Authorization: 'a', 'X-Tenant': 't', api_key: 'k' } }, ['api_key']),
+        start({ headers: { Authorization: 'a', 'X-Tenant': 't' } }),
       ).request;
 
-      assert.deepEqual(headers, {
-        Authorization: 'a',
-        'X-Tenant': 'REDACTED',
-        api_key: 'REDACTED',
-      });
+      assert.deepEqual(headers, { Authorization: 'a', 'X-Tenant': 'REDACTED' });
     });
 
     specify('should mask the URL a Location header carries', function () {
@@ -87,8 +80,7 @@ describe('Redactor', function () {
   });
 
   context('urls', function () {
-    const urlOf = (url: string, credentials: string[] = []): string =>
-      new Redactor().event(start({ url }, credentials)).request.url;
+    const urlOf = (url: string): string => new Redactor().event(start({ url })).request.url;
 
     specify('should mask userinfo up to the last @ before the host', function () {
       assert.strictEqual(
@@ -105,7 +97,6 @@ describe('Redactor', function () {
       assert.strictEqual(
         urlOf(
           'https://api.example.com/f?a=%20b+c&SIGNATURE=x&sig=1&sig=2&flag&key=k#frag?sig=keep',
-          ['key'],
         ),
         'https://api.example.com/f?a=%20b+c&SIGNATURE=REDACTED&sig=REDACTED&sig=REDACTED&flag&key=REDACTED#frag?sig=keep',
       );
@@ -138,57 +129,55 @@ describe('Redactor', function () {
   context('bodies', function () {
     const json = { 'content-type': 'application/json' };
 
-    specify('should mask JSON fields at any depth', function () {
-      const { body } = new Redactor().event(
-        start({
-          headers: json,
-          body: { text: '{"user":{"name":"a","password":"p"},"tokens":[1]}', size: 1 },
-        }),
-      ).request;
+    specify('should mask JSON fields at any depth, as text or as a parsed value', function () {
+      const text = new Redactor().event(
+        start({ headers: json, body: '{"user":{"name":"a","password":"p"},"tokens":[1]}' }),
+      ).request.body;
+      const value = new Redactor().event(
+        settled({ headers: json, body: { user: { password: 'p' }, id: 7 } }),
+      ).response.body;
 
-      assert.deepEqual(JSON.parse(body?.text ?? ''), {
+      assert.deepEqual(JSON.parse(text as string), {
         user: { name: 'a', password: 'REDACTED' },
         tokens: 'REDACTED',
       });
-      assert.strictEqual(body?.size, 1);
+      assert.deepEqual(value, { user: { password: 'REDACTED' }, id: 7 });
     });
 
     specify('should mask URL-encoded form fields', function () {
       const { body } = new Redactor().event(
         start({
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: { text: 'grant_type=password&password=p&client_secret=s' },
+          body: 'grant_type=password&password=p&client_secret=s',
         }),
       ).request;
 
+      assert.strictEqual(body, 'grant_type=password&password=REDACTED&client_secret=REDACTED');
+    });
+
+    specify('should mask whole a body it cannot mask field by field', function () {
+      const redactor = new Redactor();
+
       assert.strictEqual(
-        body?.text,
-        'grant_type=password&password=REDACTED&client_secret=REDACTED',
+        redactor.event(
+          settled({ headers: { 'content-type': 'application/xml' }, body: '<a>s</a>' }),
+        ).response.body,
+        'REDACTED',
       );
+      assert.strictEqual(
+        redactor.event(settled({ headers: json, body: '{not json' })).response.body,
+        'REDACTED',
+      );
+      assert.strictEqual(redactor.event(start({ body: new Blob(['x']) })).request.body, 'REDACTED');
     });
 
-    specify('should keep only the size of a body it cannot mask', function () {
-      const xml = new Redactor().event(
-        settled({
-          headers: { 'content-type': 'application/xml' },
-          body: { text: '<a>secret</a>', size: 13 },
-        }),
-      ).response.body;
-      const broken = new Redactor().event(
-        settled({ headers: json, body: { text: '{not json', size: 9 } }),
-      ).response.body;
+    specify('should cut a long body', function () {
+      const { body } = new Redactor().event(
+        settled({ headers: json, body: { data: 'x'.repeat(Redactor.BODY_LIMIT) } }),
+      ).response;
 
-      assert.deepEqual(xml, { size: 13 });
-      assert.deepEqual(broken, { size: 9 });
-    });
-
-    specify('should cut a long body and say so', function () {
-      const text = JSON.stringify({ data: 'x'.repeat(Redactor.BODY_LIMIT) });
-
-      const { body } = new Redactor().event(settled({ headers: json, body: { text } })).response;
-
-      assert.lengthOf(body?.text ?? '', Redactor.BODY_LIMIT);
-      assert.isTrue(body?.truncated);
+      assert.lengthOf(body as string, Redactor.BODY_LIMIT + 1);
+      assert.isTrue((body as string).endsWith('…'));
     });
   });
 

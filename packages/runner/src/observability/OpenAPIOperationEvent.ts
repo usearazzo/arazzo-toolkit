@@ -43,68 +43,43 @@ export interface OpenAPIOperationAssembledEvent extends OpenAPIOperationEventBas
 }
 
 /**
- * A body an `openapi-operation-request-*` event carries, with
- * {@link OpenAPIOperationExecutorOptions.captureBodies} on.
- * @public
- */
-export interface OpenAPIOperationEventBody {
-  /**
-   * The body as text. Absent for a body that is not text.
-   */
-  readonly text?: string;
-  /**
-   * The body's size in bytes, when known.
-   */
-  readonly size?: number;
-  /**
-   * Set by {@link Redactor} when it cut `text` to its limit.
-   */
-  readonly truncated?: boolean;
-}
-
-/**
- * The fields both `openapi-operation-request-*` events carry.
- *
- * These events carry the exchange as it was sent and received, credentials
- * included, like the request an interceptor receives. Mask them with
- * {@link Redactor} before they leave the process.
- * @public
- */
-export interface OpenAPIOperationExchangeEventBase extends OpenAPIOperationEventBase {
-  /**
-   * The header, query parameter and cookie names the document's security
-   * schemes put credentials under, for {@link Redactor} to mask whatever its
-   * patterns say.
-   */
-  readonly credentials: readonly string[];
-}
-
-/**
  * The request about to be handed to the {@link HTTPClient}, after every
- * request interceptor ran.
+ * request interceptor ran, as it is sent: credentials included, like the
+ * request an interceptor receives. Mask it with {@link Redactor} before it
+ * leaves the process.
  * @public
  */
-export interface OpenAPIOperationRequestStartEvent extends OpenAPIOperationExchangeEventBase {
+export interface OpenAPIOperationRequestStartEvent extends OpenAPIOperationEventBase {
   readonly type: 'openapi-operation-request-start';
   readonly request: {
     readonly method: string;
     readonly url: string;
     readonly headers: Readonly<Record<string, string>>;
-    readonly body?: OpenAPIOperationEventBody;
+    /**
+     * The body as handed to the {@link HTTPClient}: JSON or form text, or a
+     * `FormData`, `Blob` or stream. Only with
+     * {@link OpenAPIOperationExecutorOptions.captureBodies}.
+     */
+    readonly body?: unknown;
   };
 }
 
 /**
- * The response was received and its body read. A request that fails in the
+ * The response was received and its body read, as it came: mask it with
+ * {@link Redactor} before it leaves the process. A request that fails in the
  * transport throws and emits no settled event.
  * @public
  */
-export interface OpenAPIOperationRequestSettledEvent extends OpenAPIOperationExchangeEventBase {
+export interface OpenAPIOperationRequestSettledEvent extends OpenAPIOperationEventBase {
   readonly type: 'openapi-operation-request-settled';
   readonly response: {
     readonly status: number;
     readonly headers: Readonly<Record<string, string>>;
-    readonly body?: OpenAPIOperationEventBody;
+    /**
+     * The body parsed by its content type, as `$response.body` reads it. Only
+     * with {@link OpenAPIOperationExecutorOptions.captureBodies}.
+     */
+    readonly body?: unknown;
   };
 }
 

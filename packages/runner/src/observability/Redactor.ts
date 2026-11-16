@@ -4,7 +4,6 @@ import { unescape as unescapeToken } from '@swaggerexpert/json-pointer';
 import { parse as parseMediaType } from '@swaggerexpert/media-types';
 
 import type { ArazzoRunnerEvent } from './ArazzoRunnerEvent.ts';
-import type { OpenAPIOperationEventBody } from './OpenAPIOperationEvent.ts';
 
 /**
  * The parts of a parsed runtime expression that name what it reads.
@@ -61,14 +60,14 @@ export interface RedactorOptions {
  * exporting it or writing it anywhere.
  *
  * Masking goes by name, so a credential under a name no pattern matches is
- * carried as it is. Masked are the values of matching header and query
- * parameter names, of matching fields in JSON and URL-encoded form bodies and
- * in workflow outputs, criterion values read by a matching name, the names an
- * exchange event lists as `credentials` (where the document's security
- * schemes put them), and, whatever the patterns, the userinfo of every URL.
- * A body that is neither JSON nor a URL-encoded form keeps only its size, as
- * it cannot be masked field by field; a masked body's text is cut to
- * {@link Redactor.BODY_LIMIT} characters. The masked value is `REDACTED`.
+ * carried as it is: add a pattern for it. Masked are the values of matching
+ * header and query parameter names, of matching fields in JSON and
+ * URL-encoded form bodies and in workflow outputs, criterion values read by a
+ * matching name, and, whatever the patterns, the userinfo of every URL. A
+ * body that is neither JSON nor a URL-encoded form is masked whole, as it
+ * cannot be masked field by field, and a masked body longer than
+ * {@link Redactor.BODY_LIMIT} characters is cut. The masked value is
+ * `REDACTED`.
  * @public
  */
 class Redactor {
@@ -131,7 +130,7 @@ class Redactor {
   #masked(event: ArazzoRunnerEvent): ArazzoRunnerEvent {
     switch (event.type) {
       case 'workflow-settled':
-        return { ...event, outputs: this.#value(event.outputs, []) as Record<string, unknown> };
+        return { ...event, outputs: this.#value(event.outputs) as Record<string, unknown> };
       case 'criterion-evaluated':
         return {
           ...event,
@@ -147,25 +146,25 @@ class Redactor {
       case 'document-load-settled':
         return { ...event, uri: this.#url(event.uri) };
       case 'openapi-operation-request-start': {
-        const { request, credentials } = event;
+        const { request } = event;
         return {
           ...this.#operation(event),
           request: {
             ...request,
-            url: this.#url(request.url, credentials),
-            headers: this.#headers(request.headers, credentials),
-            ...this.#bodyOf(request.body, request.headers, credentials),
+            url: this.#url(request.url),
+            headers: this.#headers(request.headers),
+            ...('body' in request ? { body: this.#body(request.body, request.headers) } : {}),
           },
         };
       }
       case 'openapi-operation-request-settled': {
-        const { response, credentials } = event;
+        const { response } = event;
         return {
           ...this.#operation(event),
           response: {
             ...response,
-            headers: this.#headers(response.headers, credentials),
-            ...this.#bodyOf(response.body, response.headers, credentials),
+            headers: this.#headers(response.headers),
+            ...('body' in response ? { body: this.#body(response.body, response.headers) } : {}),
           },
         };
       }
@@ -190,28 +189,20 @@ class Redactor {
     };
   }
 
-  #masks(name: string, extra: readonly string[]): boolean {
-    const lowered = name.toLowerCase();
-    return (
-      this.#patterns.some((pattern) => pattern.test(name)) ||
-      extra.some((candidate) => candidate.toLowerCase() === lowered)
-    );
+  #masks(name: string): boolean {
+    return this.#patterns.some((pattern) => pattern.test(name));
   }
 
   /**
    * Headers with masked values replaced, and the URL a `Location` or
    * `Content-Location` header carries masked like a request URL.
    */
-  #headers(
-    headers: Readonly<Record<string, string>>,
-    extra: readonly string[],
-  ): Record<string, string> {
+  #headers(headers: Readonly<Record<string, string>>): Record<string, string> {
     const redacted: Record<string, string> = {};
     for (const [name, value] of Object.entries(headers)) {
-      if (this.#masks(name, extra)) redacted[name] = Redactor.CENSOR;
-      else if (Redactor.#URL_HEADERS.has(name.toLowerCase())) {
-        redacted[name] = this.#url(value, extra);
-      } else redacted[name] = value;
+      if (this.#masks(name)) redacted[name] = Redactor.CENSOR;
+      else if (Redactor.#URL_HEADERS.has(name.toLowerCase())) redacted[name] = this.#url(value);
+      else redacted[name] = value;
     }
     return redacted;
   }
@@ -221,7 +212,7 @@ class Redactor {
    * a string, not through `URL`, so the rest keeps the encoding it was sent
    * with; a value that is no URL comes back as it was.
    */
-  #url(url: string, extra: readonly string[] = []): string {
+  #url(url: string): string {
     // up to the last `@` before the path, as URL parsers split userinfo from
     // the host; a scheme-relative `//user@host` counts too.
     const withoutUserinfo = url.replace(
@@ -233,24 +224,20 @@ class Redactor {
     if (queryStart === -1) return withoutUserinfo;
     const fragmentStart = withoutUserinfo.indexOf('#', queryStart);
     const queryEnd = fragmentStart === -1 ? withoutUserinfo.length : fragmentStart;
-    const query = this.#form(withoutUserinfo.slice(queryStart + 1, queryEnd), extra);
+    const query = this.#form(withoutUserinfo.slice(queryStart + 1, queryEnd));
     return `${withoutUserinfo.slice(0, queryStart + 1)}${query}${withoutUserinfo.slice(queryEnd)}`;
   }
 
   /**
    * A copy of `value` with the values of masked fields replaced, at any depth.
    */
-  #value(value: unknown, extra: readonly string[]): unknown {
-    if (Array.isArray(value)) return value.map((item) => this.#value(item, extra));
+  #value(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map((item) => this.#value(item));
     if (!isPlainObject(value)) return value;
 
     const redacted: Record<string, unknown> = {};
     for (const [name, item] of Object.entries(value as Record<string, unknown>)) {
-      Redactor.#define(
-        redacted,
-        name,
-        this.#masks(name, extra) ? Redactor.CENSOR : this.#value(item, extra),
-      );
+      Redactor.#define(redacted, name, this.#masks(name) ? Redactor.CENSOR : this.#value(item));
     }
     return redacted;
   }
@@ -264,67 +251,60 @@ class Redactor {
   #expressions(values: Readonly<Record<string, unknown>>): Record<string, unknown> {
     const redacted: Record<string, unknown> = {};
     for (const [expression, value] of Object.entries(values)) {
-      let masked: unknown;
       const name = Redactor.#lastName(expression);
-      if (name !== undefined && this.#masks(name, [])) masked = Redactor.CENSOR;
+      let masked: unknown;
+      if (name !== undefined && this.#masks(name)) masked = Redactor.CENSOR;
       else if (expression === '$url' && typeof value === 'string') masked = this.#url(value);
-      else masked = this.#value(value, []);
+      else masked = this.#value(value);
       Redactor.#define(redacted, expression, masked);
     }
     return redacted;
   }
 
   /**
-   * The `body` an exchange event carries, masked, as a spreadable field: a JSON
-   * or URL-encoded form body masked field by field and cut to
-   * {@link Redactor.BODY_LIMIT} characters, any other body reduced to its size.
+   * A body masked for an event: a parsed value or a JSON or URL-encoded form
+   * text masked field by field and cut to {@link Redactor.BODY_LIMIT}
+   * characters, any other body masked whole.
    */
-  #bodyOf(
-    body: OpenAPIOperationEventBody | undefined,
-    headers: Readonly<Record<string, string>>,
-    extra: readonly string[],
-  ): { body?: OpenAPIOperationEventBody } {
-    if (body === undefined) return {};
-    const { text, ...rest } = body;
-    const masked =
-      text === undefined ? undefined : this.#text(text, Redactor.#contentType(headers), extra);
-    if (masked === undefined) return { body: rest };
-    return masked.length > Redactor.BODY_LIMIT
-      ? { body: { ...rest, text: masked.slice(0, Redactor.BODY_LIMIT), truncated: true } }
-      : { body: { ...rest, text: masked } };
+  #body(body: unknown, headers: Readonly<Record<string, string>>): unknown {
+    let masked: unknown;
+    if (isPlainObject(body) || Array.isArray(body)) masked = this.#value(body);
+    else if (typeof body === 'string') masked = this.#text(body, Redactor.#contentType(headers));
+    else masked = body === undefined || body === null || body === '' ? body : Redactor.CENSOR;
+
+    const text = typeof masked === 'string' ? masked : JSON.stringify(masked);
+    return text !== undefined && text.length > Redactor.BODY_LIMIT
+      ? `${text.slice(0, Redactor.BODY_LIMIT)}…`
+      : masked;
   }
 
-  #text(
-    text: string,
-    mediaType: MediaType | undefined,
-    extra: readonly string[],
-  ): string | undefined {
+  #text(text: string, mediaType: MediaType | undefined): string {
+    if (text === '') return text;
     if (mediaType?.subtype === 'json' || mediaType?.suffix === 'json') {
-      if (text === '') return text;
       try {
-        return JSON.stringify(this.#value(JSON.parse(text), extra));
+        return JSON.stringify(this.#value(JSON.parse(text)));
       } catch {
-        return undefined;
+        return Redactor.CENSOR;
       }
     }
     if (mediaType?.type === 'application' && mediaType.subtype === 'x-www-form-urlencoded') {
-      return this.#form(text, extra);
+      return this.#form(text);
     }
-    return undefined;
+    return Redactor.CENSOR;
   }
 
   /**
    * `name=value` pairs joined by `&`, with masked values replaced and every
    * other pair left as it was.
    */
-  #form(pairs: string, extra: readonly string[]): string {
+  #form(pairs: string): string {
     return pairs
       .split('&')
       .map((pair) => {
         const separator = pair.indexOf('=');
         if (separator === -1) return pair;
         const name = pair.slice(0, separator);
-        return this.#masks(Redactor.#decode(name), extra) ? `${name}=${Redactor.CENSOR}` : pair;
+        return this.#masks(Redactor.#decode(name)) ? `${name}=${Redactor.CENSOR}` : pair;
       })
       .join('&');
   }

@@ -1,57 +1,20 @@
 {
   "openapi": "3.1.0",
-  "info": {
-    "title": "API key in the query",
-    "version": "1.0.0"
-  },
-  "servers": [
-    {
-      "url": "https://api.example.com"
-    }
-  ],
+  "info": { "title": "API key in the query", "version": "1.0.0" },
+  "servers": [{ "url": "https://api.example.com" }],
   "components": {
     "securitySchemes": {
-      "queryKey": {
-        "type": "apiKey",
-        "name": "key",
-        "in": "query"
-      },
-      "sharedKey": {
-        "$ref": "#/x-shared/headerKey"
-      }
+      "queryKey": { "type": "apiKey", "name": "key", "in": "query" }
     }
   },
   "paths": {
     "/items": {
       "get": {
         "operationId": "listItems",
-        "security": [
-          {
-            "queryKey": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
+        "security": [{ "queryKey": [] }],
+        "parameters": [{ "name": "page", "in": "query", "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK" } }
       }
-    }
-  },
-  "x-shared": {
-    "headerKey": {
-      "type": "apiKey",
-      "name": "X-Partner",
-      "in": "header"
     }
   }
 }

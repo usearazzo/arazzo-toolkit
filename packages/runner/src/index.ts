@@ -198,8 +198,6 @@ export type {
   OpenAPIOperationAssembledEvent,
   OpenAPIOperationRequestStartEvent,
   OpenAPIOperationRequestSettledEvent,
-  OpenAPIOperationEventBody,
-  OpenAPIOperationExchangeEventBase,
 } from './observability/OpenAPIOperationEvent.ts';
 export { default as Redactor } from './observability/Redactor.ts';
 export type { RedactorOptions } from './observability/Redactor.ts';

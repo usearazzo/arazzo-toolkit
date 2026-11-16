@@ -1,7 +1,6 @@
 import { omit } from 'ramda';
 import { toValue } from '@speclynx/apidom-core';
-import { isArrayElement, isObjectElement, type Element } from '@speclynx/apidom-datamodel';
-import { evaluate, URIFragmentIdentifier } from '@speclynx/apidom-json-pointer';
+import { isArrayElement, isObjectElement } from '@speclynx/apidom-datamodel';
 import { url as urlUtils } from '@speclynx/apidom-reference/configuration/empty';
 import {
   isSwaggerElement,
@@ -37,10 +36,7 @@ import type {
 } from './OpenAPIOperationLocatorNormalizer.ts';
 import EventChannel from '../observability/EventChannel.ts';
 import type { ArazzoRunnerObserver } from '../observability/ArazzoRunnerEvent.ts';
-import type {
-  OpenAPIOperationEvent,
-  OpenAPIOperationEventBody,
-} from '../observability/OpenAPIOperationEvent.ts';
+import type { OpenAPIOperationEvent } from '../observability/OpenAPIOperationEvent.ts';
 
 /**
  * The Arazzo step a request is issued for: its `stepId`, and the `workflowId`
@@ -303,8 +299,7 @@ export interface OpenAPIOperationExecutorOptions {
   readonly now?: () => number;
   /**
    * Whether the `openapi-operation-request-*` events carry the request and
-   * response bodies, as text. Off by default. A body that is not text (a
-   * `FormData`, a `Blob`, bytes) is carried as its size only.
+   * response bodies. Off by default.
    */
   readonly captureBodies?: boolean;
 }
@@ -480,18 +475,15 @@ class OpenAPIOperationExecutor {
       body: request.body,
     };
 
-    // looked up only when observed: where the document's schemes put credentials
-    const credentials = this.#events && this.#credentialNames(locator.document);
     this.#events?.emit({
       type: 'openapi-operation-request-start',
       ...context,
       runId,
-      credentials: credentials ?? [],
       request: {
         method: request.method,
         url: request.url,
         headers: request.headers,
-        ...(this.#captureBodies ? { body: OpenAPIOperationExecutor.#body(request.body) } : {}),
+        ...(this.#captureBodies ? { body: request.body } : {}),
       },
     });
 
@@ -510,91 +502,13 @@ class OpenAPIOperationExecutor {
       type: 'openapi-operation-request-settled',
       ...context,
       runId,
-      credentials: credentials ?? [],
       response: {
         status: response.status,
         headers: response.headers,
-        ...(this.#captureBodies ? { body: OpenAPIOperationExecutor.#body(response.bytes()) } : {}),
+        ...(this.#captureBodies ? { body: response.body } : {}),
       },
     });
     return response;
-  }
-
-  /**
-   * A body as an event carries it: its text when its content is valid UTF-8
-   * (a string, `URLSearchParams`, a JSON value, or bytes), else only its size,
-   * or nothing for a body whose size is unknown (a `FormData`, a stream).
-   */
-  static #body(content: unknown): OpenAPIOperationEventBody {
-    if (content === undefined || content === null) return { size: 0 };
-    if (typeof content === 'string') {
-      return { text: content, size: new TextEncoder().encode(content).length };
-    }
-    if (content instanceof URLSearchParams) return OpenAPIOperationExecutor.#body(String(content));
-    if (content instanceof Uint8Array || content instanceof ArrayBuffer) {
-      const bytes = content instanceof Uint8Array ? content : new Uint8Array(content);
-      try {
-        return {
-          text: new TextDecoder('utf-8', { fatal: true }).decode(bytes),
-          size: bytes.length,
-        };
-      } catch {
-        return { size: bytes.length };
-      }
-    }
-    if (content instanceof Blob) return { size: content.size };
-    if (isPlainObject(content) || Array.isArray(content)) {
-      return OpenAPIOperationExecutor.#body(JSON.stringify(content));
-    }
-    return {};
-  }
-
-  /**
-   * The names the document's security schemes put credentials under, so the
-   * events list them for a {@link Redactor} to mask whatever its patterns say:
-   * an `apiKey`'s header or query parameter name, `Cookie` for an `apiKey` in
-   * a cookie, and `Authorization` for every other scheme type. Every scheme
-   * the document declares counts, not only the operation's own or those given
-   * `securities`: a step may send a credential as a parameter of its own. A
-   * scheme given as a local `$ref` is read from its target.
-   */
-  #credentialNames(document: OpenAPIDocument): string[] {
-    const api = document.parseResult.api;
-    if (!isObjectElement(api)) return [];
-    const components = api.get('components');
-    const declared = isObjectElement(components)
-      ? components.get('securitySchemes')
-      : api.get('securityDefinitions');
-    if (!isObjectElement(declared)) return [];
-
-    const names = new Set<string>();
-    declared.forEach((value) => {
-      const scheme = OpenAPIOperationExecutor.#localTarget(value, api);
-      if (!isObjectElement(scheme)) return;
-      const type = toValue(scheme.get('type'));
-      const name = toValue(scheme.get('name'));
-      if (typeof type !== 'string') return;
-      if (type !== 'apiKey') names.add('Authorization');
-      else if (toValue(scheme.get('in')) === 'cookie') names.add('Cookie');
-      else if (typeof name === 'string' && name !== '') names.add(name);
-    });
-    return [...names];
-  }
-
-  /**
-   * The element a local `$ref` (`#/...`) points to within `root`, or `element`
-   * itself when it is no such reference. A reference that does not resolve
-   * gives `undefined`.
-   */
-  static #localTarget(element: unknown, root: Element): unknown {
-    if (!isObjectElement(element) || !element.hasKey('$ref')) return element;
-    const ref = toValue(element.get('$ref'));
-    if (typeof ref !== 'string' || !ref.startsWith('#')) return undefined;
-    try {
-      return evaluate(root, URIFragmentIdentifier.from(ref));
-    } catch {
-      return undefined;
-    }
   }
 
   /**
