@@ -21,6 +21,7 @@ import WorkflowExecutor, {
   type WorkflowExecutionResult,
 } from './executor/WorkflowExecutor.ts';
 import InvalidEntryDocumentError from './errors/InvalidEntryDocumentError.ts';
+import type { ArazzoRunnerObserver } from './observability/ArazzoRunnerEvent.ts';
 
 /**
  * The options of ApiDOM reference the runner accepts: its `resolve` options,
@@ -69,6 +70,12 @@ export interface ArazzoRunnerLoadOptions
    * same options.
    */
   readonly reference?: ArazzoRunnerReferenceOptions;
+  /**
+   * Receives the run's events as they happen, stamped with `now`: its
+   * workflows, dependencies, steps and the decisions behind them. See
+   * {@link ArazzoRunnerEvent}.
+   */
+  readonly observer?: ArazzoRunnerObserver;
 }
 
 /**

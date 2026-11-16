@@ -126,6 +126,7 @@ export type {
   StepRunRecord,
   RetryReferenceRecord,
 } from './executor/WorkflowExecutor.ts';
+export type { WorkflowCallVia } from './executor/WorkflowCallStack.ts';
 export { default as StepExecutor } from './executor/StepExecutor.ts';
 export type {
   StepExecutorOptions,
@@ -156,6 +157,32 @@ export type {
   ArazzoWorkflowLocator,
   WorkflowReferenceContext,
 } from './executor/ArazzoWorkflowLocatorNormalizer.ts';
+
+/* Observability */
+export type {
+  ArazzoRunnerEvent,
+  ArazzoRunnerEventBase,
+  ArazzoRunnerEventLevel,
+  ArazzoRunnerObserver,
+} from './observability/ArazzoRunnerEvent.ts';
+export type {
+  WorkflowExecutionEvent,
+  WorkflowExecutionEventBase,
+  WorkflowExecutionStepEventBase,
+  WorkflowExecutionDependency,
+  WorkflowStartEvent,
+  WorkflowSettledEvent,
+  DependencyStartEvent,
+  DependencySettledEvent,
+  StepStartEvent,
+  StepAttemptEvent,
+  CriterionEvaluatedEvent,
+  ActionSelectedEvent,
+  RetryWaitEvent,
+  RetryReferenceStartEvent,
+  RetryReferenceSettledEvent,
+  StepSettledEvent,
+} from './observability/WorkflowExecutionEvent.ts';
 
 /* Errors */
 export { default as ArazzoRunnerError } from './errors/ArazzoRunnerError.ts';

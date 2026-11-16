@@ -9,7 +9,7 @@ import ExecutionError from '../errors/ExecutionError.ts';
  * reference — or a `goto`'s one-way transfer to a `workflowId` — is a call
  * cycle. `retry` and `goto` are grouped with `step` for that classification, not
  * `dependsOn`: each is a call the current step makes, not a stated precondition.
- * @internal
+ * @public
  */
 export type WorkflowCallVia = 'root' | 'step' | 'dependsOn' | 'retry' | 'goto';
 

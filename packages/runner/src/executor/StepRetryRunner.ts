@@ -77,6 +77,12 @@ export interface StepRetryRunContext {
     action: FailureActionElement,
     outcome: StepAttemptOutcome,
   ) => Promise<void>;
+  /**
+   * Told that a `retry` action fired, before its `retryAfter` wait: the action,
+   * and the wait in milliseconds (`0` for none). Called synchronously and not
+   * awaited; it only observes the decision.
+   */
+  readonly onRetry?: (action: FailureActionElement, delayMs: number) => void;
 }
 
 /**
@@ -205,6 +211,7 @@ class StepRetryRunner {
         // sleep(0) for immediate retries, and never hand a custom sleep a
         // zero/negative/NaN value.
         const delayMs = this.#retryAfterMs(action);
+        context.onRetry?.(action, delayMs);
         if (delayMs > 0) await this.#sleep(delayMs, context.signal);
         if (runReference !== undefined) await runReference(action, outcome);
         fired = true;
