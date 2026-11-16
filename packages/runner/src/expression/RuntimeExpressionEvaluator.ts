@@ -19,6 +19,8 @@ import { ApiDOMEvaluationRealm } from '@speclynx/apidom-json-pointer';
 import { toValue } from '@speclynx/apidom-core';
 
 import RuntimeExpressionError from '../errors/RuntimeExpressionError.ts';
+import DocumentLoadError from '../errors/DocumentLoadError.ts';
+import UnmatchedProviderError from '../errors/UnmatchedProviderError.ts';
 import type DocumentRegistry from '../registry/DocumentRegistry.ts';
 import type APIDocument from '../document/APIDocument.ts';
 import ArazzoDocument from '../document/ArazzoDocument.ts';
@@ -46,8 +48,10 @@ export interface RuntimeExpressionEvaluatorOptions {
   readonly document?: ArazzoDocument;
   /**
    * The document registry, used to reach the external document a
-   * `$sourceDescriptions` reference points at. The referenced document must
-   * already be loaded — resolution is synchronous and never triggers a fetch.
+   * `$sourceDescriptions` reference points at. The document is acquired from
+   * it — returned from its cache, or loaded — whenever the source's `type` is
+   * one the registry can load. Without a registry, `$sourceDescriptions`
+   * resolves against the Source Description Object's own fields only.
    */
   readonly registry?: DocumentRegistry;
 }
@@ -100,6 +104,9 @@ const HTTP_EXCHANGE_NODES: ReadonlySet<ASTNode['type']> = new Set([
  * (via the registry) the source name points at. A step reference resolves to
  * the Step Object as authored — a locator, not the step's execution result.
  *
+ * Evaluation is asynchronous because a `$sourceDescriptions` reference may
+ * have to load the document it points at.
+ *
  * A reference resolves to `undefined` when it is absent. Runtime values
  * originate from JSON (or ApiDOM), which cannot represent `undefined` — an
  * absent value is a missing property and an explicit null is `null` — so
@@ -134,11 +141,19 @@ class RuntimeExpressionEvaluator {
    * The expression must be the bare form without surrounding braces
    * (e.g. `$inputs.username`, `$response.body#/pets/0/id`). In strict mode an
    * unresolvable reference throws; otherwise it returns `undefined`.
+   *
+   * A `$sourceDescriptions` reference whose document cannot be loaded is not
+   * merely unresolved: unless it names a field of the Source Description Object,
+   * it rejects with the load error in either mode, since nothing else can
+   * produce its value.
+   *
+   * @throws DocumentLoadError - When a referenced source document cannot be read or loaded
+   * @throws UnmatchedProviderError - When no provider can load a referenced source document
    */
-  evaluate(expression: string): unknown {
+  async evaluate(expression: string): Promise<unknown> {
     const node = this.#parse(expression);
     this.#assertAvailable(node, expression);
-    const value = this.#evaluateNode(node, expression);
+    const value = await this.#evaluateNode(node, expression);
     if (value === undefined && this.#strict) {
       throw new RuntimeExpressionError(
         `Runtime expression "${expression}" could not be resolved against the context`,
@@ -156,8 +171,21 @@ class RuntimeExpressionEvaluator {
    * mode, unresolvable references render as an empty string. A `{…}` that is not
    * a valid embedded expression (e.g. a literal JSON payload) is left unchanged.
    */
-  interpolate(template: string): string {
-    return interpolate(template, (expression) => this.evaluate(expression));
+  async interpolate(template: string): Promise<string> {
+    // `interpolate` takes a synchronous resolver, so the embedded expressions are
+    // collected by a first pass, evaluated in order, and substituted by a second.
+    // Interpolation never skips an expression, so the result is the same.
+    const expressions: string[] = [];
+    interpolate(template, (expression) => {
+      expressions.push(expression);
+      return '';
+    });
+
+    const values = new Map<string, unknown>();
+    for (const expression of expressions) {
+      if (!values.has(expression)) values.set(expression, await this.evaluate(expression));
+    }
+    return interpolate(template, (expression) => values.get(expression));
   }
 
   /**
@@ -171,7 +199,7 @@ class RuntimeExpressionEvaluator {
    * yields the string representation of its value, not the typed value. A
    * string containing no expressions is returned unchanged.
    */
-  resolve(value: string): unknown {
+  async resolve(value: string): Promise<unknown> {
     // `test` returns true only when the entire string is a valid runtime
     // expression, so a braced or mixed string falls through to interpolation.
     return test(value) ? this.evaluate(value) : this.interpolate(value);
@@ -221,7 +249,7 @@ class RuntimeExpressionEvaluator {
    * Walks an AST node against the context, returning the referenced value or
    * `undefined` when the reference does not resolve.
    */
-  #evaluateNode(node: ASTNode, expression: string): unknown {
+  #evaluateNode(node: ASTNode, expression: string): unknown | Promise<unknown> {
     switch (node.type) {
       case 'UrlExpression':
         return this.#context.request?.url;
@@ -314,17 +342,40 @@ class RuntimeExpressionEvaluator {
    *    `$sourceDescriptions.{name}.url` yields the source's URL. An operationId
    *    that collides with a field name takes precedence (tier 1 wins).
    *
+   * The referenced document is acquired only when the registry can load the
+   * source's `type`; a source no provider loads (e.g. AsyncAPI) resolves by
+   * tier 2 alone. When acquiring fails, a `{reference}` naming a field present
+   * on the Source Description Object still resolves to that field — it does
+   * not depend on the document — and any other reference rethrows the load
+   * error, since nothing else can produce its value.
+   *
    * Returns `undefined` when nothing matches.
    */
-  #sourceDescription({
+  async #sourceDescription({
     sourceName,
     reference,
     stepsReference,
-  }: SourceDescriptionsExpression): unknown {
-    const uri = this.#document?.resolveSourceDescriptionURI(sourceName);
+  }: SourceDescriptionsExpression): Promise<unknown> {
+    const document = this.#document;
+    const uri = document?.resolveSourceDescriptionURI(sourceName);
+    const type = document?.resolveSourceDescriptionField(sourceName, 'type');
+    const field = document?.resolveSourceDescriptionField(sourceName, reference);
 
     // tier 1: operationId / workflowId / workflow step in the referenced document.
-    const apiDocument = uri === undefined ? undefined : this.#registry?.get(uri);
+    let apiDocument: APIDocument | undefined;
+    if (
+      uri !== undefined &&
+      this.#registry !== undefined &&
+      this.#registry.canLoad(typeof type === 'string' ? type : undefined)
+    ) {
+      try {
+        apiDocument = await this.#registry.acquire(uri);
+      } catch (error: unknown) {
+        const unloadable =
+          error instanceof DocumentLoadError || error instanceof UnmatchedProviderError;
+        if (!unloadable || field === undefined) throw error;
+      }
+    }
     if (apiDocument !== undefined) {
       if (stepsReference !== undefined) {
         return this.#step(apiDocument, stepsReference.workflowId, stepsReference.stepId);
@@ -338,7 +389,7 @@ class RuntimeExpressionEvaluator {
     }
 
     // tier 2: a field of the Source Description Object (url, type, ...).
-    return this.#document?.resolveSourceDescriptionField(sourceName, reference);
+    return field;
   }
 
   /**

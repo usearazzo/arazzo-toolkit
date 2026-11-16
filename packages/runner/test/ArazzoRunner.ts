@@ -116,9 +116,8 @@ describe('ArazzoRunner', function () {
       await captureRejection(ArazzoRunner.load(compositionPath, { registry }));
 
       // the rejected document is cached but not pinned as a second entry.
-      const rejected = registry.get(compositionPath);
-      assert.isDefined(rejected);
-      assert.isFalse(ArazzoDocument.is(rejected!) && rejected.isEntry);
+      const rejected = await registry.acquire(compositionPath);
+      assert.isFalse(ArazzoDocument.is(rejected) && rejected.isEntry);
       const second = await ArazzoRunner.load(entryPath, { registry });
       assert.strictEqual(second.document, first.document);
       assert.strictEqual(registry.entryDocument, first.document);
@@ -180,6 +179,27 @@ describe('ArazzoRunner', function () {
   });
 
   context('execute', function () {
+    specify(
+      'should resolve outputs and criteria from source descriptions no step loaded',
+      async function () {
+        const calls: OpenAPIOperationRequest[] = [];
+        const runner = await ArazzoRunner.load(
+          path.join(fixturesPath, 'source-descriptions-loading.arazzo.yaml'),
+          { httpClient: makeHTTPClient(calls) },
+        );
+
+        const result = await runner.execute('readsUnloadedSources');
+
+        assert.strictEqual(result.status, 'completed');
+        assert.isTrue(result.steps[0].successful);
+        assert.strictEqual(
+          (result.outputs.updatePet as { operationId?: string } | undefined)?.operationId,
+          'updatePet',
+        );
+        assert.strictEqual(calls.length, 1);
+      },
+    );
+
     specify('should run the first workflow of a duplicated workflowId', async function () {
       const calls: OpenAPIOperationRequest[] = [];
       const runner = await ArazzoRunner.load(duplicatePath, { httpClient: makeHTTPClient(calls) });

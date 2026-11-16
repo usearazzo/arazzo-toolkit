@@ -15,6 +15,7 @@ import {
   ArazzoRunnerError,
   DocumentLoadError,
   DocumentRegistryProvider,
+  ArazzoDocumentRegistryProvider,
   type APIDocument,
 } from '../../src/index.ts';
 import InvalidEntryDocumentError from '../../src/errors/InvalidEntryDocumentError.ts';
@@ -81,6 +82,83 @@ describe('DocumentRegistry', function () {
       assert.strictEqual(doc1, doc2);
     });
 
+    context('given concurrent calls for a document that is still loading', function () {
+      /**
+       * Delegates to the Arazzo provider and counts how often it loads.
+       */
+      class CountingProvider extends DocumentRegistryProvider {
+        readonly #inner = new ArazzoDocumentRegistryProvider();
+
+        loads = 0;
+
+        async canProvide(uri: string): Promise<boolean> {
+          return this.#inner.canProvide(uri);
+        }
+
+        async provide(uri: string): Promise<APIDocument> {
+          this.loads += 1;
+          return this.#inner.provide(uri);
+        }
+      }
+
+      specify('should load the document once and share it', async function () {
+        const provider = new CountingProvider();
+        const registry = new DocumentRegistry({ providers: [provider] });
+
+        const [doc1, doc2, doc3] = await Promise.all([
+          registry.acquire(fixturePath),
+          registry.acquire(path.relative(process.cwd(), fixturePath)),
+          registry.acquireEntryDocument(fixturePath),
+        ]);
+
+        assert.strictEqual(provider.loads, 1);
+        assert.strictEqual(doc1, doc2);
+        assert.strictEqual(doc1, doc3);
+      });
+
+      specify(
+        'should load again after clear() instead of sharing the earlier load',
+        async function () {
+          const provider = new CountingProvider();
+          const registry = new DocumentRegistry({ providers: [provider] });
+
+          const before = registry.acquire(fixturePath);
+          registry.clear();
+          const after = registry.acquire(fixturePath);
+
+          assert.notStrictEqual(await before, await after);
+          assert.strictEqual(provider.loads, 2);
+        },
+      );
+
+      specify('should share a failed load with every waiting call', async function () {
+        const providerError = new UnmatchedProviderError('provider failed');
+        let loads = 0;
+        class FailingProvider extends DocumentRegistryProvider {
+          async canProvide(): Promise<boolean> {
+            return true;
+          }
+
+          async provide(): Promise<APIDocument> {
+            loads += 1;
+            throw providerError;
+          }
+        }
+        const registry = new DocumentRegistry({ providers: [new FailingProvider()] });
+
+        const results = await Promise.allSettled([
+          registry.acquire(fixturePath),
+          registry.acquire(fixturePath),
+        ]);
+
+        assert.strictEqual(loads, 1);
+        assert.deepEqual(
+          results.map((result) => (result.status === 'rejected' ? result.reason : result.value)),
+          [providerError, providerError],
+        );
+      });
+    });
+
     context('given relative file system path', function () {
       // relative to the working directory mocha runs from
       const relativePath = path.relative(process.cwd(), fixturePath);
@@ -105,8 +183,8 @@ describe('DocumentRegistry', function () {
         const registry = new DocumentRegistry();
         const doc = await registry.acquireEntryDocument(relativePath);
 
-        assert.strictEqual(registry.get(relativePath), doc);
-        assert.strictEqual(registry.get(fixturePath), doc);
+        assert.strictEqual(await registry.acquire(relativePath), doc);
+        assert.strictEqual(await registry.acquire(fixturePath), doc);
       });
 
       specify('should resolve source descriptions against the document', async function () {
@@ -207,6 +285,37 @@ describe('DocumentRegistry', function () {
           deleteUser: '/paths/~1user~1{username}/delete',
         });
       });
+    });
+  });
+
+  context('canLoad', function () {
+    specify('should tell whether a provider loads the source type', function () {
+      const registry = new DocumentRegistry();
+
+      assert.isTrue(registry.canLoad('openapi'));
+      assert.isTrue(registry.canLoad('arazzo'));
+      assert.isFalse(registry.canLoad('asyncapi'));
+    });
+
+    specify('should allow a source that declares no type', function () {
+      const registry = new DocumentRegistry({ providers: [new ArazzoDocumentRegistryProvider()] });
+
+      assert.isTrue(registry.canLoad(undefined));
+    });
+
+    specify('should allow any type for a provider that declares none', function () {
+      class AnyProvider extends DocumentRegistryProvider {
+        async canProvide(): Promise<boolean> {
+          return true;
+        }
+
+        async provide(): Promise<APIDocument> {
+          throw new Error('not loaded in this test');
+        }
+      }
+      const registry = new DocumentRegistry({ providers: [new AnyProvider()] });
+
+      assert.isTrue(registry.canLoad('asyncapi'));
     });
   });
 
@@ -332,6 +441,31 @@ describe('DocumentRegistry', function () {
       const error = await captureRejection(registry.acquire(fixturePath));
 
       assert.strictEqual(error, providerError);
+    });
+
+    specify('should retry a failed load on the next call', async function () {
+      let attempts = 0;
+      class FlakyProvider extends DocumentRegistryProvider {
+        readonly #inner = new ArazzoDocumentRegistryProvider();
+
+        async canProvide(uri: string): Promise<boolean> {
+          return this.#inner.canProvide(uri);
+        }
+
+        async provide(uri: string): Promise<APIDocument> {
+          attempts += 1;
+          if (attempts === 1) throw new Error('transient failure');
+          return this.#inner.provide(uri);
+        }
+      }
+      const registry = new DocumentRegistry({ providers: [new FlakyProvider()] });
+
+      const error = await captureRejection(registry.acquire(fixturePath));
+      const document = await registry.acquire(fixturePath);
+
+      assert.instanceOf(error, DocumentLoadError);
+      assert.instanceOf(document, ArazzoDocument);
+      assert.strictEqual(attempts, 2);
     });
 
     specify('should keep the registry usable', async function () {

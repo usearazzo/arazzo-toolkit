@@ -66,6 +66,8 @@ export const providerOptionsOverride: ArazzoDocumentRegistryProviderOptions = {
  * @public
  */
 class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
+  override readonly sourceDescriptionType = 'arazzo';
+
   readonly #options: ArazzoDocumentRegistryProviderOptions;
 
   constructor(options: ArazzoDocumentRegistryProviderOptions = {}) {

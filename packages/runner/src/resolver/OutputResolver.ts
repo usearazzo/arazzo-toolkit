@@ -29,11 +29,11 @@ class OutputResolver extends ArazzoValueResolver {
    * {@link ResolverError}. An output value that is not a valid runtime
    * expression throws with reason `ResolverError.InvalidExpression`.
    */
-  resolve(
+  async resolve(
     outputs: StepOutputsElement | WorkflowOutputsElement | undefined,
     resolve: RuntimeExpressionResolver,
     scope: ResolverScope,
-  ): Record<string, unknown> {
+  ): Promise<Record<string, unknown>> {
     const result: Record<string, unknown> = {};
     if (outputs === undefined) return result;
     // present but not a map: the walk below would fail as a bare
@@ -46,7 +46,14 @@ class OutputResolver extends ArazzoValueResolver {
       });
     }
 
+    // collected first: `forEach` takes a synchronous callback, and each output
+    // is awaited in turn below.
+    const entries: [unknown, unknown][] = [];
     outputs.forEach((value, key) => {
+      entries.push([key, value]);
+    });
+
+    for (const [key, value] of entries) {
       const name = toValue(key) as string;
       const expression = toValue(value);
       if (typeof expression !== 'string' || !isRuntimeExpression(expression)) {
@@ -61,12 +68,12 @@ class OutputResolver extends ArazzoValueResolver {
       // ever created and the output is silently lost — and an object value
       // additionally rewrites the record's prototype
       Object.defineProperty(result, name, {
-        value: resolve(expression),
+        value: await resolve(expression),
         enumerable: true,
         writable: true,
         configurable: true,
       });
-    });
+    }
 
     return result;
   }

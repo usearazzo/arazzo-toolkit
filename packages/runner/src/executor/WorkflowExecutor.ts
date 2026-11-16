@@ -58,7 +58,9 @@ export interface WorkflowExecutorOptions {
    */
   readonly document: ArazzoDocument;
   /**
-   * The document registry holding the already-loaded source documents.
+   * The document registry the source documents are acquired from — returned
+   * from its cache, or loaded when an operation, a workflow or a
+   * `$sourceDescriptions` expression first needs them.
    */
   readonly registry: DocumentRegistry;
   /**
@@ -848,7 +850,7 @@ class WorkflowExecutor {
             invocation,
             scope,
             'goto',
-            this.#actionInputs(action?.parameters, outcome, invocation, stepId),
+            await this.#actionInputs(action?.parameters, outcome, invocation, stepId),
           );
           runOutcome = { kind: 'transferred', transferredTo };
           break stepLoop;
@@ -900,14 +902,14 @@ class WorkflowExecutor {
    * {@link WorkflowExecutor.#validateWorkflowOutputsShape} already checked
    * the shape up front, independent of resolving it.
    */
-  #result(
+  async #result(
     invocation: WorkflowInvocation,
     workflow: WorkflowElement,
     steps: readonly StepRunRecord[],
     outcome: RunOutcome,
     dependencies: readonly WorkflowExecutionResult[],
     startedAt: number,
-  ): WorkflowExecutionResult {
+  ): Promise<WorkflowExecutionResult> {
     const shared = {
       workflowId: invocation.workflowId,
       steps,
@@ -929,7 +931,7 @@ class WorkflowExecutor {
     }
     return {
       ...shared,
-      outputs: this.#resolveWorkflowOutputs(workflow, invocation),
+      outputs: await this.#resolveWorkflowOutputs(workflow, invocation),
       status: outcome.status,
       settledStatus: outcome.status,
     };
@@ -1065,7 +1067,7 @@ class WorkflowExecutor {
         const reference = toValue(action.workflowId) as string;
         // resolved before the budget is charged, so an authoring error in them
         // costs no budget unit.
-        const inputs = this.#actionInputs(action.parameters, outcome, invocation, stepId);
+        const inputs = await this.#actionInputs(action.parameters, outcome, invocation, stepId);
         this.#chargeBudget(scope, invocation, stepId);
         const result = await this.#runReferencedWorkflow(
           reference,
@@ -1308,7 +1310,7 @@ class WorkflowExecutor {
       // sees the same (usually absent) value on every attempt, not the
       // previous attempt's own result.
       const preContext = this.#inputContext(state, subWorkflowId, priorWorkflowEntry);
-      const inputs = this.#parameterResolver.resolve(
+      const inputs = await this.#parameterResolver.resolve(
         step.parameters,
         (expression) => this.#evaluate(preContext, expression, document),
         stepScope,
@@ -1330,7 +1332,7 @@ class WorkflowExecutor {
         outputs: result.outputs,
         calledWorkflow: { stepId, workflowId: subWorkflowId },
       };
-      const outputs = this.#outputResolver.resolve(
+      const outputs = await this.#outputResolver.resolve(
         step.outputs,
         (expression) => this.#evaluate(context, expression, document),
         stepScope,
@@ -1349,10 +1351,10 @@ class WorkflowExecutor {
       // evaluated by the parent document's step executor — only the sub-run
       // itself switched documents.
       const stepExecutor = this.#stepExecutor.forDocument(document);
-      const successCriteria = stepExecutor.evaluateCriteria(step, context, workflowId);
+      const successCriteria = await stepExecutor.evaluateCriteria(step, context, workflowId);
       const successful =
         !this.#settledFailed(result) && successCriteria.every((criterion) => criterion.met);
-      const { matchedActions, actionCriteria } = stepExecutor.selectActions(
+      const { matchedActions, actionCriteria } = await stepExecutor.selectActions(
         step,
         successful,
         context,
@@ -1463,7 +1465,7 @@ class WorkflowExecutor {
     outcome: StepAttemptOutcome,
     invocation: WorkflowInvocation,
     stepId: string,
-  ): Record<string, unknown> {
+  ): Promise<Record<string, unknown>> {
     const { workflowId, document } = invocation;
     return this.#parameterResolver.resolve(
       parameters,
@@ -1633,7 +1635,7 @@ class WorkflowExecutor {
   #resolveWorkflowOutputs(
     workflow: WorkflowElement,
     invocation: WorkflowInvocation,
-  ): Record<string, unknown> {
+  ): Promise<Record<string, unknown>> {
     const context = invocation.state.toContext();
     return this.#outputResolver.resolve(
       workflow.outputs,
@@ -1653,7 +1655,7 @@ class WorkflowExecutor {
     context: RuntimeExpressionContext,
     expression: string,
     document: ArazzoDocument,
-  ): unknown {
+  ): Promise<unknown> {
     return new RuntimeExpressionEvaluator(context, {
       strict: false,
       document,

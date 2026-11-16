@@ -1,5 +1,5 @@
 import {
-  evaluate as evaluateSimpleCriterion,
+  evaluateAsync as evaluateSimpleCriterion,
   ArazzoCriterionError,
 } from '@swaggerexpert/arazzo-criterion';
 
@@ -14,7 +14,9 @@ import type { CriterionContextResolver } from './CriterionEvaluator.ts';
  * unlike `regex`/`jsonpath`/`xpath` — it has no separate `context`. Parsing,
  * loose/case-insensitive comparison, and member/index navigation are delegated
  * to `@swaggerexpert/arazzo-criterion`; each embedded runtime expression is
- * resolved through the supplied resolver.
+ * resolved through the supplied resolver and awaited in turn. `&&` and `||`
+ * short-circuit, so an operand that cannot change the outcome is never
+ * resolved.
  *
  * An operand that resolves to `undefined` (a lenient miss) does not throw; it is
  * compared per the library's rules (e.g. `undefined == x` and relational
@@ -28,9 +30,9 @@ class SimpleCriterionEvaluator {
    * Evaluates the simple `condition`, resolving each embedded runtime
    * expression via `resolve`.
    */
-  evaluate(condition: string, resolve: CriterionContextResolver): boolean {
+  async evaluate(condition: string, resolve: CriterionContextResolver): Promise<boolean> {
     try {
-      return evaluateSimpleCriterion(condition, { resolve });
+      return await evaluateSimpleCriterion(condition, { resolve });
     } catch (error: unknown) {
       if (error instanceof ArazzoCriterionError) {
         throw new CriterionEvaluationError(`Invalid simple criterion condition "${condition}"`, {

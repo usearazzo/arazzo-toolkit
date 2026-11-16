@@ -38,7 +38,7 @@ class WorkflowParameterResolver extends StepParameterResolver {
    *
    * `scope` names the step in a thrown {@link ResolverError}.
    */
-  resolve(
+  async resolve(
     parameters:
       | StepParametersElement
       | SuccessActionParametersElement
@@ -46,7 +46,7 @@ class WorkflowParameterResolver extends StepParameterResolver {
       | undefined,
     resolve: RuntimeExpressionResolver,
     scope: StepScope,
-  ): Record<string, unknown> {
+  ): Promise<Record<string, unknown>> {
     const result: Record<string, unknown> = {};
     if (parameters === undefined) return result;
     // present but scalar: walking it would fail as a bare
@@ -74,7 +74,7 @@ class WorkflowParameterResolver extends StepParameterResolver {
       // ever created and the input is silently lost — and an object value
       // additionally rewrites the record's prototype
       Object.defineProperty(result, name, {
-        value: this.resolveValue(parameter.value, resolve),
+        value: await this.resolveValue(parameter.value, resolve),
         enumerable: true,
         writable: true,
         configurable: true,

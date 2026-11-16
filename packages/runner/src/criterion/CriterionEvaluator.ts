@@ -15,14 +15,19 @@ import JSONPathCriterionEvaluator from './JSONPathCriterionEvaluator.ts';
 import XPathCriterionEvaluator from './XPathCriterionEvaluator.ts';
 
 /**
- * Resolves a runtime expression to a value during criterion evaluation.
+ * Resolves a runtime expression to a value, or to a Promise of it, during
+ * criterion evaluation. The result is awaited, so a synchronous resolver works
+ * too.
  *
  * Used both for a criterion's `context` (regex/jsonpath/xpath) and for the
  * expressions embedded in a `simple` condition. It should resolve leniently —
  * an unresolvable reference returning `undefined` fails the criterion rather
  * than throwing (a common way to drive it is
  * `(expression) => runtimeExpressionEvaluator.evaluate(expression)` with a
- * lenient evaluator).
+ * lenient evaluator). An error it throws or rejects with — such as the load
+ * error of a `$sourceDescriptions` document that cannot be loaded — is not a
+ * {@link CriterionEvaluationError}, so it propagates instead of failing the
+ * criterion.
  * @public
  */
 export type CriterionContextResolver = (expression: string) => unknown;
@@ -130,7 +135,10 @@ class CriterionEvaluator {
    * the expressions embedded in the condition; for the other types it resolves
    * the criterion's `context` expression that the condition is applied to.
    */
-  evaluate(criterion: CriterionElement, resolve: CriterionContextResolver): CriterionOutcome {
+  async evaluate(
+    criterion: CriterionElement,
+    resolve: CriterionContextResolver,
+  ): Promise<CriterionOutcome> {
     if (!isCriterionElement(criterion)) {
       throw new CriterionError('Element is not a Criterion Object', {
         reason: CriterionError.InvalidCriterion,
@@ -155,23 +163,32 @@ class CriterionEvaluator {
     try {
       switch (type) {
         case 'simple':
-          met = this.#simple.evaluate(condition, resolve);
+          met = await this.#simple.evaluate(condition, resolve);
           break;
         case 'regex':
-          met = this.#regex.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+          met = this.#regex.evaluate(
+            condition,
+            await this.#resolveContext(criterion, type, resolve),
+          );
           break;
         case 'jsonpath':
           // only rfc9535 is supported, Arazzo 1.1.0's default, so an omitted
           // version is accepted. draft-goessner has different semantics and is
           // rejected rather than mis-evaluated.
           this.#requireVersion(criterion, type, condition, 'rfc9535');
-          met = this.#jsonpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+          met = this.#jsonpath.evaluate(
+            condition,
+            await this.#resolveContext(criterion, type, resolve),
+          );
           break;
         case 'xpath':
           // only XPath 3.1 is supported; xpath-31 is Arazzo 1.1.0's default, so
           // an omitted version is accepted. Older versions are rejected.
           this.#requireVersion(criterion, type, condition, 'xpath-31');
-          met = this.#xpath.evaluate(condition, this.#resolveContext(criterion, type, resolve));
+          met = this.#xpath.evaluate(
+            condition,
+            await this.#resolveContext(criterion, type, resolve),
+          );
           break;
         default:
           throw new CriterionError(`Unknown criterion type "${type}"`, {
@@ -270,11 +287,11 @@ class CriterionEvaluator {
    * `jsonpath`, `xpath`) must declare one; a criterion of such a type without a
    * `context` throws a {@link CriterionError}.
    */
-  #resolveContext(
+  async #resolveContext(
     criterion: CriterionElement,
     type: string,
     resolve: CriterionContextResolver,
-  ): unknown {
+  ): Promise<unknown> {
     if (!isStringElement(criterion.context)) {
       throw new CriterionError(`Criterion type "${type}" requires a "context"`, {
         type,

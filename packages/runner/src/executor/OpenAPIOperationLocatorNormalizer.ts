@@ -135,7 +135,7 @@ class OpenAPIOperationLocatorNormalizer extends SourceDescriptionsLocatorNormali
       {},
       { strict: false, document, registry: this.registry },
     );
-    const uriReference = evaluator.interpolate(operationPath);
+    const uriReference = await evaluator.interpolate(operationPath);
 
     const documentURI = url.sanitize(url.stripHash(uriReference));
     if (documentURI === '') {

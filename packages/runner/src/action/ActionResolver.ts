@@ -14,15 +14,19 @@ import ResolverError from '../errors/ResolverError.ts';
 import type { StepScope } from '../resolver/ResolverScope.ts';
 
 /**
- * Determines whether a single criterion of an action is met. Receives the
- * action declaring the criterion, so a caller can attribute the outcome to it.
+ * Determines whether a single criterion of an action is met, or resolves to
+ * whether it is. Receives the action declaring the criterion, so a caller can
+ * attribute the outcome to it.
  *
  * Bridged to a criterion evaluator
- * (`(criterion) => criterionEvaluator.evaluate(criterion, resolve).met`); an
- * unresolvable/failing criterion is `false`, not an error.
+ * (`async (criterion) => (await criterionEvaluator.evaluate(criterion, resolve)).met`);
+ * an unresolvable/failing criterion is `false`, not an error.
  * @public
  */
-export type CriterionPredicate = (criterion: CriterionElement, action: SelectedAction) => boolean;
+export type CriterionPredicate = (
+  criterion: CriterionElement,
+  action: SelectedAction,
+) => boolean | Promise<boolean>;
 
 /**
  * The action selected for a step outcome — a Success or Failure Action element.
@@ -77,16 +81,21 @@ class ActionResolver {
    * `end` its author was reaching for would otherwise never happen without a
    * word said about why.
    */
-  resolveOnSuccess(
+  async resolveOnSuccess(
     actions: StepOnSuccessElement | undefined,
     isCriterionMet: CriterionPredicate,
     scope: StepScope,
-  ): SuccessActionElement[] {
+  ): Promise<SuccessActionElement[]> {
     // safe: `#resolveAll` validates every entry as *a* Success/Failure Action
     // Object, not one matching this list's own field, but a well-formed
     // `StepOnSuccessElement` only ever refracts Success Action entries — the
     // apidom refractor types list entries positionally at parse time.
-    return this.#resolveAll(actions, isCriterionMet, 'onSuccess', scope) as SuccessActionElement[];
+    return (await this.#resolveAll(
+      actions,
+      isCriterionMet,
+      'onSuccess',
+      scope,
+    )) as SuccessActionElement[];
   }
 
   /**
@@ -95,13 +104,18 @@ class ActionResolver {
    * Same matching and error behavior as {@link ActionResolver.resolveOnSuccess} —
    * see there for the full rationale — mirrored for the step's other list.
    */
-  resolveOnFailure(
+  async resolveOnFailure(
     actions: StepOnFailureElement | undefined,
     isCriterionMet: CriterionPredicate,
     scope: StepScope,
-  ): FailureActionElement[] {
+  ): Promise<FailureActionElement[]> {
     // safe: see the same-named comment in `resolveOnSuccess` above.
-    return this.#resolveAll(actions, isCriterionMet, 'onFailure', scope) as FailureActionElement[];
+    return (await this.#resolveAll(
+      actions,
+      isCriterionMet,
+      'onFailure',
+      scope,
+    )) as FailureActionElement[];
   }
 
   /**
@@ -114,12 +128,12 @@ class ActionResolver {
    * element's own type no longer distinguishes them. Baked in by the public
    * method rather than taken from the caller.
    */
-  #resolveAll(
+  async #resolveAll(
     actions: StepOnSuccessElement | StepOnFailureElement | undefined,
     isCriterionMet: CriterionPredicate,
     field: StepActionsField,
     scope: StepScope,
-  ): SelectedAction[] {
+  ): Promise<SelectedAction[]> {
     if (actions === undefined) return [];
     // present but scalar: walking it would fail as a bare
     // `TypeError: actions is not iterable`.
@@ -139,7 +153,7 @@ class ActionResolver {
           { ...scope, target: field, reason: ResolverError.MalformedActionEntry },
         );
       }
-      if (this.#criteriaMet(action, isCriterionMet, scope)) {
+      if (await this.#criteriaMet(action, isCriterionMet, scope)) {
         matched.push(action);
       }
     }
@@ -157,11 +171,11 @@ class ActionResolver {
    * not say what its author meant, the same as an unrecognized entry in the
    * action list itself.
    */
-  #criteriaMet(
+  async #criteriaMet(
     action: SelectedAction,
     isCriterionMet: CriterionPredicate,
     scope: StepScope,
-  ): boolean {
+  ): Promise<boolean> {
     const criteria = action.criteria;
     if (criteria === undefined) return true;
     if (!isArrayElement(criteria)) {
@@ -182,7 +196,7 @@ class ActionResolver {
       }
       // every criterion is evaluated, not only up to the first unmet one, so
       // a predicate that records outcomes sees the whole list.
-      if (!isCriterionMet(criterion, action)) met = false;
+      if (!(await isCriterionMet(criterion, action))) met = false;
     }
     return met;
   }

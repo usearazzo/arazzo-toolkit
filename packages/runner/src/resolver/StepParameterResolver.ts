@@ -29,7 +29,7 @@ abstract class StepParameterResolver extends ArazzoValueResolver {
     parameters: StepParametersElement | undefined,
     resolve: RuntimeExpressionResolver,
     scope: StepScope,
-  ): Record<string, unknown>;
+  ): Promise<Record<string, unknown>>;
 }
 
 export default StepParameterResolver;

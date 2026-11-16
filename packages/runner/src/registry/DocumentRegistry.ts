@@ -29,6 +29,7 @@ export interface DocumentRegistryOptions {
  */
 class DocumentRegistry {
   readonly #documents: Map<string, APIDocument> = new Map();
+  readonly #loading: Map<string, Promise<APIDocument>> = new Map();
   readonly #providers: DocumentRegistryProvider[];
 
   constructor(options: DocumentRegistryOptions = {}) {
@@ -55,6 +56,10 @@ class DocumentRegistry {
    * otherwise detects the format, loads via the matching provider,
    * caches, and returns it.
    *
+   * Concurrent calls for a document that is still loading share that one
+   * load instead of each fetching and parsing it. A failed load is not
+   * remembered: the next call tries again.
+   *
    * @throws DocumentLoadError - When the document cannot be read or loaded
    * @throws UnmatchedProviderError - When no provider can load the document
    */
@@ -63,6 +68,22 @@ class DocumentRegistry {
     const cachedDocument = this.#get(canonicalURI);
     if (cachedDocument) return cachedDocument;
 
+    const loading = this.#loading.get(canonicalURI);
+    if (loading) return loading;
+
+    const load: Promise<APIDocument> = this.#load(canonicalURI).finally(() => {
+      // only its own entry: after clear(), a newer load may hold the key
+      if (this.#loading.get(canonicalURI) === load) this.#loading.delete(canonicalURI);
+    });
+    this.#loading.set(canonicalURI, load);
+    return load;
+  }
+
+  /**
+   * Loads a document through the first provider that can provide it, and
+   * caches it.
+   */
+  async #load(canonicalURI: string): Promise<APIDocument> {
     for (const provider of this.#providers) {
       try {
         if (await provider.canProvide(canonicalURI)) {
@@ -87,16 +108,20 @@ class DocumentRegistry {
   }
 
   /**
-   * Returns an already-loaded document by URI, or undefined if not cached.
+   * Whether a source description of `type` can be loaded at all: some provider
+   * loads that type, or does not say which type it loads. A source with no
+   * `type` may be of any type, so it can.
    *
-   * Synchronous counterpart to `acquire`: it never loads a document, only
-   * returns one the registry already holds, marking it most recently used like
-   * any other access. Consumers that must resolve a reference without awaiting
-   * (e.g. runtime expression evaluation) use this; the executor is responsible
-   * for having acquired the document beforehand.
+   * Answered from the providers alone, without fetching anything — so a
+   * caller can skip a load that could only fail, such as an AsyncAPI source
+   * while no provider loads AsyncAPI.
    */
-  get(uri: string): APIDocument | undefined {
-    return this.#get(this.#canonicalize(uri));
+  canLoad(type: string | undefined): boolean {
+    if (type === undefined) return true;
+    return this.#providers.some(
+      (provider) =>
+        provider.sourceDescriptionType === undefined || provider.sourceDescriptionType === type,
+    );
   }
 
   /**
@@ -136,8 +161,13 @@ class DocumentRegistry {
     return document;
   }
 
+  /**
+   * Drops every cached document. A load still in progress is no longer shared:
+   * the next `acquire` of that document starts a fresh load.
+   */
   clear(): void {
     this.#documents.clear();
+    this.#loading.clear();
   }
 
   /**

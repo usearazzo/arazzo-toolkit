@@ -64,7 +64,7 @@ describe('WorkflowExecutionState', function () {
   });
 
   context('accumulation across a run (write → read loop)', function () {
-    specify('should let a later step read an earlier step output via $steps', function () {
+    specify('should let a later step read an earlier step output via $steps', async function () {
       const state = new WorkflowExecutionState({ inputs: { user: 'alice' } });
 
       // step 1 completes: resolve + store its outputs
@@ -72,21 +72,24 @@ describe('WorkflowExecutionState', function () {
 
       // step 2 evaluates a parameter against the accumulated state
       const evaluator = new RuntimeExpressionEvaluator(state.toContext());
-      assert.strictEqual(evaluator.evaluate('$steps.login.outputs.token'), 'secret-token');
-      assert.strictEqual(evaluator.evaluate('$inputs.user'), 'alice');
+      assert.strictEqual(await evaluator.evaluate('$steps.login.outputs.token'), 'secret-token');
+      assert.strictEqual(await evaluator.evaluate('$inputs.user'), 'alice');
     });
 
-    specify('should read the current response only for the step being evaluated', function () {
-      const state = new WorkflowExecutionState();
-      state.setStepOutputs('prior', { id: 1 });
+    specify(
+      'should read the current response only for the step being evaluated',
+      async function () {
+        const state = new WorkflowExecutionState();
+        state.setStepOutputs('prior', { id: 1 });
 
-      const evaluator = new RuntimeExpressionEvaluator(
-        state.toContext(undefined, { statusCode: 201, body: { created: true } }),
-      );
-      assert.strictEqual(evaluator.evaluate('$statusCode'), 201);
-      assert.strictEqual(evaluator.evaluate('$response.body#/created'), true);
-      assert.strictEqual(evaluator.evaluate('$steps.prior.outputs.id'), 1);
-    });
+        const evaluator = new RuntimeExpressionEvaluator(
+          state.toContext(undefined, { statusCode: 201, body: { created: true } }),
+        );
+        assert.strictEqual(await evaluator.evaluate('$statusCode'), 201);
+        assert.strictEqual(await evaluator.evaluate('$response.body#/created'), true);
+        assert.strictEqual(await evaluator.evaluate('$steps.prior.outputs.id'), 1);
+      },
+    );
   });
 
   context('outputs getter', function () {

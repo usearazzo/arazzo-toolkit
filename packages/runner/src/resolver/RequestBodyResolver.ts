@@ -69,11 +69,11 @@ class RequestBodyResolver extends ArazzoValueResolver {
    *
    * `scope` names the step in a thrown {@link ResolverError}.
    */
-  resolve(
+  async resolve(
     requestBody: RequestBodyElement | undefined,
     resolve: RuntimeExpressionResolver,
     scope: StepScope,
-  ): ResolvedRequestBody | undefined {
+  ): Promise<ResolvedRequestBody | undefined> {
     if (requestBody === undefined) return undefined;
 
     // present but scalar: `.payload`, `.replacements` and `.contentType` are
@@ -90,7 +90,7 @@ class RequestBodyResolver extends ArazzoValueResolver {
     const authoredPayload = toValue(requestBody.payload);
     let payload = this.#requireResolved(
       authoredPayload,
-      this.#resolvePayloadValue(authoredPayload, [], resolve, scope),
+      await this.#resolvePayloadValue(authoredPayload, [], resolve, scope),
       [],
       scope,
     );
@@ -109,7 +109,7 @@ class RequestBodyResolver extends ArazzoValueResolver {
         if (!isPayloadReplacementElement(replacement)) continue;
         const target = toValue(replacement.target) as string | undefined;
         if (typeof target !== 'string') continue;
-        const value = this.resolveValue(replacement.value, resolve);
+        const value = await this.resolveValue(replacement.value, resolve);
         if (value === undefined) continue;
         payload = this.#applyReplacement(payload, target, value, scope);
       }
@@ -127,33 +127,33 @@ class RequestBodyResolver extends ArazzoValueResolver {
    * objects and arrays. Returns {@link UNRESOLVED} for a bare expression that
    * did not resolve, for its container to handle.
    */
-  #resolvePayloadValue(
+  async #resolvePayloadValue(
     value: unknown,
     tokens: readonly string[],
     resolve: RuntimeExpressionResolver,
     scope: StepScope,
-  ): unknown {
+  ): Promise<unknown> {
     if (typeof value === 'string') return this.#resolvePayloadString(value, tokens, resolve, scope);
 
     if (Array.isArray(value)) {
-      return value.map((item: unknown, index) => {
+      const items: unknown[] = [];
+      for (const [index, item] of value.entries()) {
         const itemTokens = [...tokens, String(index)];
-        const resolved = this.#resolvePayloadValue(item, itemTokens, resolve, scope);
-        return this.#requireResolved(item, resolved, itemTokens, scope);
-      });
+        const resolved = await this.#resolvePayloadValue(item, itemTokens, resolve, scope);
+        items.push(this.#requireResolved(item, resolved, itemTokens, scope));
+      }
+      return items;
     }
 
     if (value !== null && typeof value === 'object') {
+      const members: [string, unknown][] = [];
+      for (const [key, member] of Object.entries(value)) {
+        const resolved = await this.#resolvePayloadValue(member, [...tokens, key], resolve, scope);
+        if (resolved !== UNRESOLVED) members.push([key, resolved]);
+      }
       // `fromEntries` defines own properties, so an authored `__proto__` key
       // stays a plain member instead of replacing the prototype.
-      return Object.fromEntries(
-        Object.entries(value)
-          .map(([key, member]) => [
-            key,
-            this.#resolvePayloadValue(member, [...tokens, key], resolve, scope),
-          ])
-          .filter(([, resolved]) => resolved !== UNRESOLVED),
-      );
+      return Object.fromEntries(members);
     }
 
     return value;
@@ -164,38 +164,52 @@ class RequestBodyResolver extends ArazzoValueResolver {
    * typed value (or {@link UNRESOLVED}), anything else by tolerant
    * interpolation of its embedded `{expression}` occurrences.
    */
-  #resolvePayloadString(
+  async #resolvePayloadString(
     value: string,
     tokens: readonly string[],
     resolve: RuntimeExpressionResolver,
     scope: StepScope,
-  ): unknown {
+  ): Promise<unknown> {
     if (isRuntimeExpression(value)) {
-      const resolved = resolve(value);
+      const resolved = await resolve(value);
       return resolved === undefined ? UNRESOLVED : resolved;
     }
 
-    return interpolate(
+    const options = {
+      strict: false,
+      onError: ({ text }: { readonly text: string }): never => {
+        throw new ResolverError(
+          `Invalid runtime expression "${text}" in ${this.#payloadTarget(tokens)}`,
+          {
+            ...scope,
+            target: this.#payloadTarget(tokens),
+            reason: ResolverError.InvalidExpression,
+          },
+        );
+      },
+    };
+
+    // `interpolate` takes a synchronous resolver, so the embedded expressions
+    // are collected by a first pass, resolved in order, and substituted by a
+    // second. Interpolation never skips an expression, so the result is the same.
+    const expressions: string[] = [];
+    interpolate(
       value,
       (expression) => {
-        const resolved = resolve(expression);
-        if (resolved === undefined) throw this.#unresolvedError(expression, tokens, scope);
-        return resolved;
+        expressions.push(expression);
+        return '';
       },
-      {
-        strict: false,
-        onError: ({ text }) => {
-          throw new ResolverError(
-            `Invalid runtime expression "${text}" in ${this.#payloadTarget(tokens)}`,
-            {
-              ...scope,
-              target: this.#payloadTarget(tokens),
-              reason: ResolverError.InvalidExpression,
-            },
-          );
-        },
-      },
+      options,
     );
+
+    const values = new Map<string, unknown>();
+    for (const expression of expressions) {
+      if (values.has(expression)) continue;
+      const resolved = await resolve(expression);
+      if (resolved === undefined) throw this.#unresolvedError(expression, tokens, scope);
+      values.set(expression, resolved);
+    }
+    return interpolate(value, (expression) => values.get(expression), options);
   }
 
   /**
