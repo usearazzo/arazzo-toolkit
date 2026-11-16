@@ -101,8 +101,6 @@ export type RequestInterceptor = (
  */
 interface AssembledSpec {
   paths: Record<string, Record<string, { parameters?: unknown[] }>>;
-  components?: { securitySchemes?: Record<string, unknown> };
-  securityDefinitions?: Record<string, unknown>;
 }
 
 /**
@@ -303,9 +301,11 @@ export interface OpenAPIOperationExecutorOptions {
   /**
    * What to mask in the request and response the `openapi-operation-request-*`
    * events carry. Defaults to {@link OpenAPIOperationExecutor.defaultRedact}.
-   * The credentials of the security schemes a request applies (an `apiKey`
-   * header or query parameter, the `Authorization` header) are masked
-   * whatever the lists say. Bodies are never carried.
+   * Wherever the document's security schemes put credentials (an `apiKey`
+   * header, query parameter or cookie, the `Authorization` header) is masked
+   * whatever the lists say. Masking goes by name, so a credential under a name
+   * neither covers, such as a custom header a request interceptor adds, is
+   * carried unless listed. Bodies are never carried.
    */
   readonly redact?: HTTPRedactOptions;
 }
@@ -489,8 +489,8 @@ class OpenAPIOperationExecutor {
       body: request.body,
     };
 
-    // looked up only when observed: where this request's own schemes put credentials
-    const credentials = this.#events && this.#credentialNames(spec, buildOptions.securities);
+    // looked up only when observed: where the document's schemes put credentials
+    const credentials = this.#events && this.#credentialNames(locator.document);
     this.#events?.emit({
       type: 'openapi-operation-request-start',
       ...context,
@@ -498,7 +498,7 @@ class OpenAPIOperationExecutor {
       request: {
         method: request.method,
         url: this.#redactor.url(request.url, credentials?.query),
-        headers: this.#redactor.headers(Object.entries(request.headers), credentials?.headers),
+        headers: this.#redactor.headers(request.headers, credentials),
       },
     });
 
@@ -518,7 +518,7 @@ class OpenAPIOperationExecutor {
       runId,
       response: {
         status: rawResponse.status,
-        headers: this.#redactor.headers(rawResponse.headers, credentials?.headers),
+        headers: this.#redactor.headers(rawResponse.headers, credentials),
       },
     });
 
@@ -526,24 +526,27 @@ class OpenAPIOperationExecutor {
   }
 
   /**
-   * The header and query parameter names the security schemes this request is
-   * given put their credentials in, so the events mask them whatever the
-   * redact lists say: an `apiKey`'s header, query parameter or `Cookie`, and
-   * the `Authorization` header of every other scheme type.
+   * The header and query parameter names the document's security schemes put
+   * their credentials in, so the events mask them whatever the redact lists
+   * say: an `apiKey`'s header, query parameter or `Cookie`, and the
+   * `Authorization` header of every other scheme type. Every scheme the
+   * document declares counts, not only the operation's own or those given
+   * `securities`: a step may send a credential as a parameter of its own.
    */
-  #credentialNames(
-    spec: AssembledSpec,
-    securities: unknown,
-  ): { headers: string[]; query: string[] } {
+  #credentialNames(document: OpenAPIDocument): { headers: string[]; query: string[] } {
     type Fields = Record<string, unknown>;
     const names = { headers: [] as string[], query: [] as string[] };
-    const authorized = isPlainObject(securities) ? (securities as Fields).authorized : undefined;
-    if (!isPlainObject(authorized)) return names;
-
-    const schemes = spec.components?.securitySchemes ?? spec.securityDefinitions ?? {};
-    for (const schemeName of Object.keys(authorized)) {
-      const scheme = schemes[schemeName] as Fields | undefined;
-      if (scheme === undefined) continue;
+    const api = document.parseResult.api;
+    const components = isObjectElement(api) ? api.get('components') : undefined;
+    const declared = isObjectElement(components)
+      ? components.get('securitySchemes')
+      : isObjectElement(api)
+        ? api.get('securityDefinitions')
+        : undefined;
+    const schemes = isObjectElement(declared) ? (toValue(declared) as Fields) : {};
+    for (const value of Object.values(schemes)) {
+      if (!isPlainObject(value)) continue;
+      const scheme = value as Fields;
       if (scheme.type !== 'apiKey') names.headers.push('Authorization');
       else if (typeof scheme.name !== 'string') continue;
       else if (scheme.in === 'query') names.query.push(scheme.name);

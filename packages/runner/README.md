@@ -41,7 +41,7 @@ Use it to test an API flow end to end in CI, to drive a workflow from your own s
 - **Steps.** Parameters and request bodies resolved from runtime expressions, `successCriteria` evaluated (`simple`, `regex`, `jsonpath`, `xpath`), `outputs` resolved from the response.
 - **Control flow.** `goto`, `retry` (with `retryLimit`, `retryAfter`, and references), and `end`, as the specification defines them, with workflow-level default actions and parameters, and action `parameters` as the inputs of a `goto` or `retry` workflow target.
 - **Composition.** Sub-workflow steps, `dependsOn` prerequisites, one-way transfer to another workflow, and workflows in other Arazzo documents.
-- **Observability.** A typed event stream while the run happens: workflows, dependencies, steps, attempts, criterion outcomes and selected actions, plus document loads, normalization, request assembly and every request sent with its response underneath, credentials masked. Folding a run's workflow events gives back its trace.
+- **Observability.** A typed event stream while the run happens: workflows, dependencies, steps, attempts, criterion outcomes and selected actions, plus document loads, normalization, request assembly and every request sent with its response underneath. Bodies are never included, and credentials are masked by name: the standard credential headers, signed-URL query parameters, wherever the document's security schemes put credentials, and any names you add. Folding a run's workflow events gives back its trace.
 - **Your HTTP stack.** Global `fetch` by default, or any client you plug in. Arazzo is auth-agnostic, so credentials come from you: static ones per API, or a request interceptor.
 
 ## At a glance

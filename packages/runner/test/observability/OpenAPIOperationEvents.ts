@@ -156,6 +156,19 @@ describe('OpenAPIOperationExecutor events', function () {
     assert.notInclude(url, 'QUERY-KEY');
   });
 
+  specify('should mask an apiKey a step sends as a parameter of its own', async function () {
+    // deletePet declares api_key as a header parameter and petstore declares
+    // an api_key scheme: no securities are given, yet the value is masked.
+    const { executor, events } = observe({ redact: { headers: [] } });
+
+    await executor.execute(
+      { document: petstore, jsonPointer: '/paths/~1pet~1{petId}/delete' },
+      { parameters: { petId: 7, api_key: 'STEP-KEY' } },
+    );
+
+    assert.strictEqual(requestOf(events).headers.api_key, 'REDACTED');
+  });
+
   specify('should mask the headers a redact list names', async function () {
     const { executor, events } = observe({
       redact: { headers: [...OpenAPIOperationExecutor.defaultRedact.headers, 'x-session'] },
