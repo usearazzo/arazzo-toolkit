@@ -35,7 +35,7 @@ const settled = (
   type: 'openapi-operation-request-settled',
   timestamp: 2,
   ...operation,
-  response: { status: 200, headers: {}, ...response },
+  response: { status: 200, headers: {}, size: 0, ...response },
 });
 
 describe('Redactor', function () {
@@ -107,6 +107,13 @@ describe('Redactor', function () {
       assert.strictEqual(urlOf(url), url);
     });
 
+    specify('should mask matching fragment parameters', function () {
+      assert.strictEqual(
+        urlOf('https://app.example.com/cb#access_token=t&state=s'),
+        'https://app.example.com/cb#access_token=REDACTED&state=s',
+      );
+    });
+
     specify('should mask userinfo in document URIs and paths', function () {
       const event: DocumentLoadStartEvent = {
         type: 'document-load-start',
@@ -176,13 +183,12 @@ describe('Redactor', function () {
       assert.strictEqual(redactor.event(start({ body: new Blob(['x']) })).request.body, 'REDACTED');
     });
 
-    specify('should cut a long body', function () {
+    specify('should keep a parsed body an object', function () {
       const { body } = new Redactor().event(
-        settled({ headers: json, body: { data: 'x'.repeat(Redactor.BODY_LIMIT) } }),
+        settled({ headers: json, body: { data: 'x'.repeat(20_000), token: 't' } }),
       ).response;
 
-      assert.lengthOf(body as string, Redactor.BODY_LIMIT + 1);
-      assert.isTrue((body as string).endsWith('…'));
+      assert.deepEqual(body, { data: 'x'.repeat(20_000), token: 'REDACTED' });
     });
   });
 
@@ -201,6 +207,67 @@ describe('Redactor', function () {
       assert.deepEqual(Object.keys(outputs), ['sessionToken', 'pet', '__proto__']);
       assert.strictEqual(outputs.sessionToken, 'REDACTED');
       assert.deepEqual(outputs.pet, { name: 'Rex' });
+    });
+
+    specify(
+      'should match every name an expression reads, and an unparsed $ key as is',
+      function () {
+        const event: WorkflowSettledEvent = {
+          type: 'workflow-settled',
+          ...frame,
+          status: 'completed',
+          settledStatus: 'completed',
+          outputs: {
+            '$steps.login.outputs.token#/value': 'a',
+            '$inputs.apiKey#/0': 'b',
+            '$response.body#/session/id': 'c',
+            $token: 'd',
+            '$response.body#/name': 'Rex',
+          },
+        };
+
+        assert.deepEqual(new Redactor().event(event).outputs, {
+          '$steps.login.outputs.token#/value': 'REDACTED',
+          '$inputs.apiKey#/0': 'REDACTED',
+          '$response.body#/session/id': 'REDACTED',
+          $token: 'REDACTED',
+          '$response.body#/name': 'Rex',
+        });
+      },
+    );
+
+    specify('should cut a cycle but walk a shared object wherever it appears', function () {
+      const shared = { name: 'Rex', token: 't' };
+      const cyclic: Record<string, unknown> = { name: 'loop' };
+      cyclic.self = cyclic;
+      const event: WorkflowSettledEvent = {
+        type: 'workflow-settled',
+        ...frame,
+        status: 'completed',
+        settledStatus: 'completed',
+        outputs: { a: shared, b: shared, cyclic },
+      };
+
+      const { outputs } = new Redactor().event(event);
+
+      assert.deepEqual(outputs.a, { name: 'Rex', token: 'REDACTED' });
+      assert.deepEqual(outputs.b, { name: 'Rex', token: 'REDACTED' });
+      assert.deepEqual(outputs.cyclic, { name: 'loop', self: 'REDACTED' });
+    });
+
+    specify('should mask whole an object that is not plain data', function () {
+      const event: WorkflowSettledEvent = {
+        type: 'workflow-settled',
+        ...frame,
+        status: 'completed',
+        settledStatus: 'completed',
+        outputs: { map: new Map([['token', 't']]), at: new Date(0) },
+      };
+
+      const { outputs } = new Redactor().event(event);
+
+      assert.strictEqual(outputs.map, 'REDACTED');
+      assert.instanceOf(outputs.at, Date);
     });
 
     specify('should mask criterion values by the name each expression reads', function () {

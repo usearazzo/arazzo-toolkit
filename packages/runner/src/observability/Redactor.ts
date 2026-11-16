@@ -1,4 +1,5 @@
 import { isPlainObject } from 'ramda-adjunct';
+import { isElement } from '@speclynx/apidom-datamodel';
 import { parse as parseExpression } from '@swaggerexpert/arazzo-runtime-expression';
 import { unescape as unescapeToken } from '@swaggerexpert/json-pointer';
 import { parse as parseMediaType } from '@swaggerexpert/media-types';
@@ -53,33 +54,34 @@ export interface RedactorOptions {
  * request interceptor receives. Pass every event through
  * {@link Redactor.event} before logging, exporting or writing it.
  *
- * It masks by name, whatever the event: the value of any field whose name
- * matches a pattern (headers, query parameters, body and output fields, at
- * any depth), and a criterion value whose runtime expression reads a
- * matching name (`$inputs.password`, `$response.body#/access_token`). Every
- * absolute URL has its userinfo masked and its matching query values, as the
- * `URL` constructor parses it. A request or
- * response body that is JSON or a URL-encoded form is masked field by field
- * and cut to {@link Redactor.BODY_LIMIT} characters; any other body is
- * masked whole. A credential under a name no pattern matches is carried as
- * it is. The masked value is `REDACTED`.
+ * It masks by name, whatever the event:
+ *
+ * - the value of any field whose name matches a pattern: headers, query
+ *   parameters, body and output fields, at any depth;
+ * - a criterion value whose runtime expression reads a matching name, in its
+ *   base or in any token of its JSON Pointer (`$inputs.password`,
+ *   `$steps.login.outputs.token#/value`);
+ * - in every absolute URL, as `URL` parses it, the userinfo and the matching
+ *   query and fragment parameters;
+ * - a request or response body that is JSON or a URL-encoded form, field by
+ *   field, and any other body, or any object that is not plain data, whole.
+ *
+ * A credential under a name no pattern matches is carried as it is. The
+ * masked value is `REDACTED`.
  * @public
  */
 class Redactor {
   static readonly CENSOR = 'REDACTED';
 
-  static readonly BODY_LIMIT = 10_000;
-
   /**
-   * Elastic APM's `sanitizeFieldNames` defaults, plus `*secret*` (Elastic's
-   * exact `secret` misses OAuth's `client_secret`) and the signed-URL query
+   * Elastic APM's `sanitizeFieldNames` defaults, with `*secret*` for its exact
+   * `secret` (which misses OAuth's `client_secret`), plus the signed-URL query
    * parameters OpenTelemetry's HTTP conventions mask.
    */
   static readonly defaultFields: readonly string[] = Object.freeze([
     'password',
     'passwd',
     'pwd',
-    'secret',
     '*secret*',
     '*key',
     '*token*',
@@ -100,6 +102,7 @@ class Redactor {
   ]);
 
   readonly #patterns: readonly RegExp[];
+  readonly #matches = new Map<string, boolean>();
 
   constructor(options: RedactorOptions = {}) {
     this.#patterns = (options.fields ?? Redactor.defaultFields).map(Redactor.#compile);
@@ -109,22 +112,38 @@ class Redactor {
    * A masked copy of the event.
    */
   event<E extends ArazzoRunnerEvent>(event: E): E {
-    return this.#walk(event) as E;
+    return this.#walk(event, new WeakSet()) as E;
   }
 
-  #walk(value: unknown): unknown {
+  #walk(value: unknown, seen: WeakSet<object>): unknown {
     if (typeof value === 'string') return URL.canParse(value) ? this.#url(value) : value;
-    if (Array.isArray(value)) return value.map((item) => this.#walk(item));
-    if (!isPlainObject(value)) return value;
+    if (typeof value !== 'object' || value === null) return value;
+    // an ApiDOM element (a selected action) is the document's own, and a date
+    // holds no credential; any other object that is not plain data cannot be
+    // walked field by field.
+    if (isElement(value) || value instanceof Date) return value;
+    if (!Array.isArray(value) && !isPlainObject(value)) return Redactor.CENSOR;
+    // only the objects on the current path: a shared, acyclic one is walked
+    // again where it reappears, a cycle is cut.
+    if (seen.has(value)) return Redactor.CENSOR;
+    seen.add(value);
+    try {
+      return Array.isArray(value)
+        ? value.map((item) => this.#walk(item, seen))
+        : this.#fields(value as Record<string, unknown>, seen);
+    } finally {
+      seen.delete(value);
+    }
+  }
 
-    const object = value as Record<string, unknown>;
+  #fields(object: Record<string, unknown>, seen: WeakSet<object>): Record<string, unknown> {
     const redacted: Record<string, unknown> = {};
     for (const [name, item] of Object.entries(object)) {
       let masked: unknown;
       if (this.#masks(name)) masked = Redactor.CENSOR;
       else if (name === 'body' && isPlainObject(object.headers)) {
-        masked = this.#body(item, object.headers as Record<string, string>);
-      } else masked = this.#walk(item);
+        masked = this.#body(item, object.headers as Record<string, string>, seen);
+      } else masked = this.#walk(item, seen);
       // defined, not assigned, so an own `__proto__` key stays data
       Object.defineProperty(redacted, name, {
         value: masked,
@@ -137,17 +156,25 @@ class Redactor {
   }
 
   /**
-   * Whether a name matches a pattern. A runtime expression is matched by the
-   * field name it reads.
+   * Whether a name matches a pattern. A runtime expression matches when any
+   * name it reads does.
    */
   #masks(name: string): boolean {
-    const target = name.startsWith('$') ? Redactor.#fieldName(name) : name;
-    return target !== undefined && this.#patterns.some((pattern) => pattern.test(target));
+    let matches = this.#matches.get(name);
+    if (matches === undefined) {
+      const names = name.startsWith('$') ? Redactor.#namesRead(name) : [name];
+      matches = names.some((candidate) =>
+        this.#patterns.some((pattern) => pattern.test(candidate)),
+      );
+      this.#matches.set(name, matches);
+    }
+    return matches;
   }
 
   /**
-   * The absolute URL with its userinfo and matching query values masked. A
-   * URL with nothing to mask comes back exactly as it was, not normalized.
+   * The absolute URL with its userinfo and matching query and fragment
+   * parameters masked. A URL with nothing to mask comes back exactly as it
+   * was, not normalized.
    */
   #url(value: string): string {
     const url = new URL(value);
@@ -157,42 +184,37 @@ class Redactor {
       url.password = Redactor.CENSOR;
       masked = true;
     }
-    const query = this.#params(url.search);
+    const query = this.#params(url.search.slice(1));
     if (query !== undefined) {
       url.search = query;
+      masked = true;
+    }
+    const fragment = this.#params(url.hash.slice(1));
+    if (fragment !== undefined) {
+      url.hash = fragment;
       masked = true;
     }
     return masked ? url.href : value;
   }
 
   /**
-   * A body masked by what its `Content-Type` says it is, and cut to the limit.
+   * A body masked by what its `Content-Type` says it is.
    */
-  #body(body: unknown, headers: Readonly<Record<string, string>>): unknown {
-    let masked: unknown;
-    if (body === undefined || body === null || body === '') masked = body;
-    else if (typeof body !== 'string')
-      masked = isPlainObject(body) || Array.isArray(body) ? this.#walk(body) : Redactor.CENSOR;
-    else {
-      const mediaType = Redactor.#contentType(headers);
-      if (mediaType?.subtype === 'json' || mediaType?.suffix === 'json') {
-        try {
-          masked = JSON.stringify(this.#walk(JSON.parse(body)));
-        } catch {
-          masked = Redactor.CENSOR;
-        }
-      } else if (
-        mediaType?.type === 'application' &&
-        mediaType.subtype === 'x-www-form-urlencoded'
-      ) {
-        masked = this.#params(body) ?? body;
-      } else masked = Redactor.CENSOR;
-    }
+  #body(body: unknown, headers: Readonly<Record<string, string>>, seen: WeakSet<object>): unknown {
+    if (typeof body !== 'string' || body === '') return this.#walk(body, seen);
 
-    const text = typeof masked === 'string' ? masked : JSON.stringify(masked);
-    return text !== undefined && text.length > Redactor.BODY_LIMIT
-      ? `${text.slice(0, Redactor.BODY_LIMIT)}…`
-      : masked;
+    const mediaType = Redactor.#contentType(headers);
+    if (mediaType?.subtype === 'json' || mediaType?.suffix === 'json') {
+      try {
+        return JSON.stringify(this.#walk(JSON.parse(body), seen));
+      } catch {
+        return Redactor.CENSOR;
+      }
+    }
+    if (mediaType?.type === 'application' && mediaType.subtype === 'x-www-form-urlencoded') {
+      return this.#params(body) ?? body;
+    }
+    return Redactor.CENSOR;
   }
 
   /**
@@ -200,13 +222,13 @@ class Redactor {
    * `undefined` when none matches, so the caller keeps the text as it was.
    */
   #params(text: string): string | undefined {
-    const params = [...new URLSearchParams(text)];
-    if (!params.some(([name]) => this.#masks(name))) return undefined;
-    const masked = params.map(([name, value]) => [
-      name,
-      this.#masks(name) ? Redactor.CENSOR : value,
-    ]);
-    return new URLSearchParams(masked).toString();
+    let masked = false;
+    const params = [...new URLSearchParams(text)].map(([name, value]) => {
+      if (!this.#masks(name)) return [name, value];
+      masked = true;
+      return [name, Redactor.CENSOR];
+    });
+    return masked ? new URLSearchParams(params).toString() : undefined;
   }
 
   static #contentType(headers: Readonly<Record<string, string>>): MediaType | undefined {
@@ -220,30 +242,32 @@ class Redactor {
   }
 
   /**
-   * The field name a runtime expression reads: `password` for
-   * `$inputs.password`, `Authorization` for `$request.header.Authorization`,
-   * `access_token` for `$response.body#/access_token` (a JSON Pointer's last
-   * token). `undefined` for one that reads no named field (`$statusCode`) or
-   * does not parse.
+   * Every name a runtime expression reads: the header, query, path, input,
+   * output or component name, and each token of its JSON Pointer, e.g.
+   * `token` and `value` for `$steps.login.outputs.token#/value`. A string
+   * that does not parse as an expression is its own name.
    */
-  static #fieldName(expression: string): string | undefined {
+  static #namesRead(expression: string): string[] {
     let tree: ExpressionNode | undefined;
     try {
       tree = parseExpression(expression).tree as ExpressionNode | undefined;
     } catch {
-      return undefined;
+      return [expression];
     }
-    const reference = tree?.source?.reference;
-    const token = (tree?.jsonPointer ?? reference?.jsonPointer)?.referenceTokens.at(-1)?.value;
-    if (token !== undefined) return unescapeToken(token);
-    return (
-      reference?.token ??
-      reference?.name ??
-      tree?.name ??
-      tree?.outputName ??
-      tree?.fieldName ??
-      tree?.componentName
-    );
+    if (tree === undefined) return [expression];
+
+    const reference = tree.source?.reference;
+    const tokens = (tree.jsonPointer ?? reference?.jsonPointer)?.referenceTokens ?? [];
+    const names = [
+      reference?.token,
+      reference?.name,
+      tree.name,
+      tree.outputName,
+      tree.fieldName,
+      tree.componentName,
+      ...tokens.map((token) => unescapeToken(token.value)),
+    ];
+    return names.filter((name): name is string => name !== undefined);
   }
 
   static #compile(pattern: string): RegExp {

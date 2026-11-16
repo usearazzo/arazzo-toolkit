@@ -76,6 +76,10 @@ export interface OpenAPIOperationRequestSettledEvent extends OpenAPIOperationEve
     readonly status: number;
     readonly headers: Readonly<Record<string, string>>;
     /**
+     * The body's size in bytes, as received.
+     */
+    readonly size: number;
+    /**
      * The body parsed by its content type, as `$response.body` reads it. Only
      * with {@link OpenAPIOperationExecutorOptions.captureBodies}.
      */

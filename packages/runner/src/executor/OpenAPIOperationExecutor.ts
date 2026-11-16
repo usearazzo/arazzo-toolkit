@@ -505,6 +505,7 @@ class OpenAPIOperationExecutor {
       response: {
         status: response.status,
         headers: response.headers,
+        size: response.bytes().length,
         ...(this.#captureBodies ? { body: response.body } : {}),
       },
     });

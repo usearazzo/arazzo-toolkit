@@ -83,6 +83,10 @@ describe('OpenAPIOperationExecutor events', function () {
     assert.strictEqual(start.runId, 'run-1');
     assert.strictEqual(settled.response.status, 200);
     assert.strictEqual(settled.response.headers['content-type'], 'application/json');
+    assert.strictEqual(
+      settled.response.size,
+      JSON.stringify({ id: 7, token: 'RESPONSE-TOKEN' }).length,
+    );
     assert.isAbove(settled.timestamp, start.timestamp);
     // bodies come only with captureBodies
     assert.notProperty(start.request, 'body');
