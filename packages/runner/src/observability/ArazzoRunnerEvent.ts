@@ -21,7 +21,7 @@ export interface ArazzoRunnerEventBase {
  *
  * Events carry no level or severity, like Node's `diagnostics_channel`
  * messages: how to log an event is the logging consumer's decision. The
- * `document-*`, `workflow-normalize-*` and `operation-*` events describe the
+ * `document-*`, `workflow-normalize-*` and `openapi-operation-*` events describe the
  * machinery under a run, the detail a debug log would show.
  * @public
  */
@@ -42,6 +42,10 @@ export type ArazzoRunnerEvent =
  * the run. Anything else is shared and must be treated as read-only: the
  * ApiDOM element in {@link ActionSelectedEvent.action}, or a `Map` or class
  * instance a custom HTTP client put into a response body.
+ *
+ * Events carry what the run saw, credentials included, like the request a
+ * request interceptor receives. Pass them through {@link Redactor.event}
+ * before they leave the process.
  *
  * A building block without an observer builds no events.
  * @public

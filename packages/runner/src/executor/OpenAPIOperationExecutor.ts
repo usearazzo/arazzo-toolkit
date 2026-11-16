@@ -288,7 +288,8 @@ export interface OpenAPIOperationExecutorOptions {
   readonly documentAssembler?: OpenAPIDocumentAssembler;
   /**
    * Receives the executor's events: the start and end of each operation's
-   * normalization, and its assembly. See {@link OpenAPIOperationEvent}.
+   * normalization, its assembly, and the request sent and its response. See
+   * {@link OpenAPIOperationEvent}.
    */
   readonly observer?: ArazzoRunnerObserver<OpenAPIOperationEvent>;
   /**
@@ -296,6 +297,11 @@ export interface OpenAPIOperationExecutorOptions {
    * `performance.now`.
    */
   readonly now?: () => number;
+  /**
+   * Whether the `openapi-operation-request-*` events carry the request and
+   * response bodies. Off by default.
+   */
+  readonly captureBodies?: boolean;
 }
 
 /**
@@ -327,6 +333,7 @@ class OpenAPIOperationExecutor {
   readonly #operationExtractor: OpenAPIOperationExtractor;
   readonly #operationNormalizer: OpenAPIOperationNormalizer;
   readonly #documentAssembler: OpenAPIDocumentAssembler;
+  readonly #captureBodies: boolean;
   readonly #events: EventChannel<OpenAPIOperationEvent> | undefined;
 
   constructor(options: OpenAPIOperationExecutorOptions = {}) {
@@ -338,6 +345,7 @@ class OpenAPIOperationExecutor {
     this.#operationNormalizer = options.operationNormalizer ?? new OpenAPIOperationNormalizer();
     this.#documentAssembler = options.documentAssembler ?? new OpenAPIDocumentAssembler();
     this.#events = EventChannel.open({ observer: options.observer, now: options.now });
+    this.#captureBodies = options.captureBodies ?? false;
   }
 
   /**
@@ -386,14 +394,14 @@ class OpenAPIOperationExecutor {
       ...(step === undefined ? {} : { step: { ...step } }),
     };
 
-    this.#events?.emit({ type: 'operation-normalize-start', ...context, runId });
+    this.#events?.emit({ type: 'openapi-operation-normalize-start', ...context, runId });
     const normalizedOperation = await this.#operationNormalizer.normalize(
       operation,
       locator.document,
     );
-    this.#events?.emit({ type: 'operation-normalize-settled', ...context, runId });
+    this.#events?.emit({ type: 'openapi-operation-normalize-settled', ...context, runId });
     const assembled = this.#documentAssembler.assemble(normalizedOperation, locator.document);
-    this.#events?.emit({ type: 'operation-assembled', ...context, runId });
+    this.#events?.emit({ type: 'openapi-operation-assembled', ...context, runId });
 
     const rest = omit(
       [
@@ -467,6 +475,18 @@ class OpenAPIOperationExecutor {
       body: request.body,
     };
 
+    this.#events?.emit({
+      type: 'openapi-operation-request-start',
+      ...context,
+      runId,
+      request: {
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        ...(this.#captureBodies ? { body: request.body } : {}),
+      },
+    });
+
     let rawResponse: Response;
     try {
       rawResponse = await this.#httpClient(request);
@@ -477,7 +497,19 @@ class OpenAPIOperationExecutor {
       });
     }
 
-    return this.#responseNormalizer.normalize(rawResponse, requestInfo);
+    const response = await this.#responseNormalizer.normalize(rawResponse, requestInfo);
+    this.#events?.emit({
+      type: 'openapi-operation-request-settled',
+      ...context,
+      runId,
+      response: {
+        status: response.status,
+        headers: response.headers,
+        size: response.size,
+        ...(this.#captureBodies ? { body: response.body } : {}),
+      },
+    });
+    return response;
   }
 
   /**

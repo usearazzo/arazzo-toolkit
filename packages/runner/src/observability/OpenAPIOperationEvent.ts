@@ -21,16 +21,16 @@ export interface OpenAPIOperationEventBase extends ArazzoRunnerEventBase, Reques
  * externally referenced documents) and inheriting its path-level fields.
  * @public
  */
-export interface OperationNormalizeStartEvent extends OpenAPIOperationEventBase {
-  readonly type: 'operation-normalize-start';
+export interface OpenAPIOperationNormalizeStartEvent extends OpenAPIOperationEventBase {
+  readonly type: 'openapi-operation-normalize-start';
 }
 
 /**
  * The operation was normalized.
  * @public
  */
-export interface OperationNormalizeSettledEvent extends OpenAPIOperationEventBase {
-  readonly type: 'operation-normalize-settled';
+export interface OpenAPIOperationNormalizeSettledEvent extends OpenAPIOperationEventBase {
+  readonly type: 'openapi-operation-normalize-settled';
 }
 
 /**
@@ -38,8 +38,53 @@ export interface OperationNormalizeSettledEvent extends OpenAPIOperationEventBas
  * request is built from.
  * @public
  */
-export interface OperationAssembledEvent extends OpenAPIOperationEventBase {
-  readonly type: 'operation-assembled';
+export interface OpenAPIOperationAssembledEvent extends OpenAPIOperationEventBase {
+  readonly type: 'openapi-operation-assembled';
+}
+
+/**
+ * The request about to be handed to the {@link HTTPClient}, after every
+ * request interceptor ran, as it is sent: credentials included, like the
+ * request an interceptor receives. Mask it with {@link Redactor} before it
+ * leaves the process.
+ * @public
+ */
+export interface OpenAPIOperationRequestStartEvent extends OpenAPIOperationEventBase {
+  readonly type: 'openapi-operation-request-start';
+  readonly request: {
+    readonly method: string;
+    readonly url: string;
+    readonly headers: Readonly<Record<string, string>>;
+    /**
+     * The body as handed to the {@link HTTPClient}: JSON or form text, or a
+     * `FormData`, `Blob` or stream. Only with
+     * {@link OpenAPIOperationExecutorOptions.captureBodies}.
+     */
+    readonly body?: unknown;
+  };
+}
+
+/**
+ * The response was received and its body read, as it came: mask it with
+ * {@link Redactor} before it leaves the process. A request that fails in the
+ * transport throws and emits no settled event.
+ * @public
+ */
+export interface OpenAPIOperationRequestSettledEvent extends OpenAPIOperationEventBase {
+  readonly type: 'openapi-operation-request-settled';
+  readonly response: {
+    readonly status: number;
+    readonly headers: Readonly<Record<string, string>>;
+    /**
+     * The body's size in bytes: {@link OpenAPIOperationResponse.size}.
+     */
+    readonly size: number;
+    /**
+     * The body parsed by its content type, as `$response.body` reads it. Only
+     * with {@link OpenAPIOperationExecutorOptions.captureBodies}.
+     */
+    readonly body?: unknown;
+  };
 }
 
 /**
@@ -47,4 +92,8 @@ export interface OperationAssembledEvent extends OpenAPIOperationEventBase {
  * @public
  */
 export type OpenAPIOperationEvent =
-  OperationNormalizeStartEvent | OperationNormalizeSettledEvent | OperationAssembledEvent;
+  | OpenAPIOperationNormalizeStartEvent
+  | OpenAPIOperationNormalizeSettledEvent
+  | OpenAPIOperationAssembledEvent
+  | OpenAPIOperationRequestStartEvent
+  | OpenAPIOperationRequestSettledEvent;

@@ -111,6 +111,17 @@ export interface CriterionEvaluationRecord {
    */
   readonly actionName?: string;
   /**
+   * Every runtime expression the evaluation resolved, keyed by the expression
+   * as written, with the value it resolved to: the expressions embedded in a
+   * `simple` condition, or the `context` of a `regex`, `jsonpath` or `xpath`
+   * one. What the criterion actually saw, e.g. `{ "$statusCode": 404 }`.
+   *
+   * A whole body (`$response.body`, `$request.body`) is recorded as the
+   * placeholder `[body]`, so the trace never holds a body; the body and its
+   * size are in the attempt's `openapi-operation-request-settled` event.
+   */
+  readonly values: Readonly<Record<string, unknown>>;
+  /**
    * Why the condition could not be evaluated — present only then, with `met`
    * `false`.
    */
@@ -587,12 +598,17 @@ class StepExecutor {
     context: RuntimeExpressionContext,
   ): Promise<CriterionEvaluationRecord> {
     const condition = toValue(criterion.condition) as string;
+    const values: Record<string, unknown> = {};
+    const resolve = async (expression: string): Promise<unknown> => {
+      const value = await this.#evaluate(context, expression);
+      const wholeBody = expression === '$response.body' || expression === '$request.body';
+      values[expression] = wholeBody ? '[body]' : value;
+      return value;
+    };
     try {
-      const { met, error } = await this.#criterionEvaluator.evaluate(criterion, (expression) =>
-        this.#evaluate(context, expression),
-      );
-      if (error === undefined) return { condition, met };
-      return { condition, met, diagnostic: { code: error.reason, message: error.message } };
+      const { met, error } = await this.#criterionEvaluator.evaluate(criterion, resolve);
+      if (error === undefined) return { condition, met, values };
+      return { condition, met, values, diagnostic: { code: error.reason, message: error.message } };
     } catch (error: unknown) {
       // a step that calls a workflow made no HTTP call, so a condition on one
       // fails like any unevaluable condition; the diagnostic keeps the
@@ -604,6 +620,7 @@ class StepExecutor {
         return {
           condition,
           met: false,
+          values,
           diagnostic: { code: error.reason, message: error.message },
         };
       }

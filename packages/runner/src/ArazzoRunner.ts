@@ -38,8 +38,9 @@ export type ArazzoRunnerReferenceOptions = Pick<DocumentRegistryProviderOptions,
  * Every option is a seam of a building block the runner wires: `registry` is
  * the {@link DocumentRegistry} the documents load into (a fresh one with the
  * default providers when omitted), `reference` goes to everything the runner
- * builds that retrieves documents, `httpClient` and `requestInterceptor` go to
- * the {@link OpenAPIOperationExecutor}, and the rest go to the
+ * builds that retrieves documents, `httpClient`, `requestInterceptor` and
+ * `captureBodies` go to the {@link OpenAPIOperationExecutor}, and the rest go
+ * to the
  * {@link WorkflowExecutor}.
  *
  * Retrieving documents and calling APIs are separate on purpose: `reference`
@@ -49,7 +50,7 @@ export type ArazzoRunnerReferenceOptions = Pick<DocumentRegistryProviderOptions,
  */
 export interface ArazzoRunnerLoadOptions
   extends
-    Pick<OpenAPIOperationExecutorOptions, 'httpClient' | 'requestInterceptor'>,
+    Pick<OpenAPIOperationExecutorOptions, 'httpClient' | 'requestInterceptor' | 'captureBodies'>,
     Pick<WorkflowExecutorOptions, 'maxSteps' | 'maxWorkflowDepth' | 'sleep' | 'now'> {
   /**
    * The registry to load the documents into. A registry backs one entry
@@ -163,6 +164,7 @@ class ArazzoRunner {
       reference,
       httpClient,
       requestInterceptor,
+      captureBodies,
       ...workflowExecutorOptions
     } = options;
 
@@ -181,6 +183,7 @@ class ArazzoRunner {
     const operationExecutor = new OpenAPIOperationExecutor({
       httpClient,
       requestInterceptor,
+      captureBodies,
       observer,
       now,
       operationNormalizer: new OpenAPIOperationNormalizer({

@@ -58,6 +58,17 @@ class OpenAPIOperationResponse {
   }
 
   /**
+   * The body's size in bytes, as read: after the transport decoded any
+   * `Content-Encoding`, so a compressed body counts at its decoded size.
+   */
+  get size(): number {
+    // a string content encodes back to exactly the bytes received
+    return typeof this.#content === 'string'
+      ? new TextEncoder().encode(this.#content).length
+      : this.#content.length;
+  }
+
+  /**
    * The body as text, like `Response.text()`; `''` when there is none.
    */
   text(): string {

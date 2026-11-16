@@ -45,9 +45,13 @@ describe('ArazzoRunner events', function () {
     assert.deepEqual(
       types
         .slice(attempt + 1)
-        .filter((type) => type.startsWith('operation-'))
+        .filter((type) => type.startsWith('openapi-operation-'))
         .slice(0, 3),
-      ['operation-normalize-start', 'operation-normalize-settled', 'operation-assembled'],
+      [
+        'openapi-operation-normalize-start',
+        'openapi-operation-normalize-settled',
+        'openapi-operation-assembled',
+      ],
     );
   });
 
@@ -80,7 +84,7 @@ describe('ArazzoRunner events', function () {
 
     const start = events.find((event) => event.type === 'workflow-start');
     const operations = events.filter((event): event is OpenAPIOperationEvent =>
-      event.type.startsWith('operation-'),
+      event.type.startsWith('openapi-operation-'),
     );
     assert.isNotEmpty(operations);
     assert.isTrue(operations.every((event) => event.runId === start?.runId));
@@ -102,7 +106,7 @@ describe('ArazzoRunner events', function () {
     await runner.execute('linear', { inputs: { status: 'available' } });
 
     const normalized = events.find(
-      (event): event is OpenAPIOperationEvent => event.type === 'operation-normalize-start',
+      (event): event is OpenAPIOperationEvent => event.type === 'openapi-operation-normalize-start',
     );
     assert.isTrue(Object.isFrozen(normalized?.operation));
     assert.notStrictEqual(normalized?.operation, contexts[0].operation);
@@ -196,7 +200,13 @@ describe('ArazzoRunner events', function () {
 
       assert.deepEqual(
         events.map((event) => event.type),
-        ['operation-normalize-start', 'operation-normalize-settled', 'operation-assembled'],
+        [
+          'openapi-operation-normalize-start',
+          'openapi-operation-normalize-settled',
+          'openapi-operation-assembled',
+          'openapi-operation-request-start',
+          'openapi-operation-request-settled',
+        ],
       );
       assert.isTrue(events.every((event) => !('runId' in event) && !('step' in event)));
     });

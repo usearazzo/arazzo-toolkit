@@ -542,6 +542,27 @@ describe('StepExecutor', function () {
   });
 
   context('criterion records', function () {
+    specify('should record a whole body as a placeholder', async function () {
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        successCriteria: [
+          { context: '$response.body', condition: '$[0].id', type: 'jsonpath' },
+          { condition: '$response.body#/0/id == 7' },
+        ],
+      }) as StepElement;
+      const { executor } = makeExecutor();
+
+      const result = await executor.execute(step, state());
+
+      assert.deepEqual(result.successCriteria[0].values, {
+        '$response.body': '[body]',
+      });
+      // a pointer into the body reads one value, recorded as it is.
+      assert.deepEqual(result.successCriteria[1].values, { '$response.body#/0/id': 7 });
+    });
+
     specify(
       'should record every successCriterion, then the action criteria by action name',
       async function () {
@@ -568,14 +589,16 @@ describe('StepExecutor', function () {
         const result = await executor.execute(step, state());
 
         // the first unmet criterion does not stop the others, in either list.
+        // each record also carries what its condition saw.
+        const saw = { $statusCode: 200 };
         assert.deepEqual(result.successCriteria, [
-          { condition: '$statusCode == 201', met: false },
-          { condition: '$statusCode == 202', met: false },
-          { condition: '$statusCode == 200', met: true },
+          { condition: '$statusCode == 201', met: false, values: saw },
+          { condition: '$statusCode == 202', met: false, values: saw },
+          { condition: '$statusCode == 200', met: true, values: saw },
         ]);
         assert.deepEqual(result.actionCriteria, [
-          { condition: '$statusCode == 500', met: false, actionName: 'onServerError' },
-          { condition: '$statusCode == 200', met: true, actionName: 'onServerError' },
+          { condition: '$statusCode == 500', met: false, values: saw, actionName: 'onServerError' },
+          { condition: '$statusCode == 200', met: true, values: saw, actionName: 'onServerError' },
         ]);
         assert.strictEqual(toValue(result.action?.name), 'fallback');
       },
