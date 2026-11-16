@@ -43,8 +43,9 @@ export interface WorkflowExecutionStepEventBase extends WorkflowExecutionEventBa
 }
 
 /**
- * A workflow invocation began, after its definition was checked and before
- * its `dependsOn` prerequisites and steps run.
+ * A workflow invocation began: it entered the call stack, before it is
+ * normalized and its definition checked. A definition that fails those checks
+ * throws, leaving the event without its `workflow-settled`.
  * @public
  */
 export interface WorkflowStartEvent extends WorkflowExecutionEventBase {

@@ -774,6 +774,10 @@ class WorkflowExecutor {
     // is waiting for.
     throwIfAborted(scope.signal, { workflowId, callStack: nested });
 
+    const frame = { runId: scope.runId, workflowId, path: nested.path };
+    // emitted before normalization, so its events nest inside this workflow's.
+    this.#events?.emit({ type: 'workflow-start', ...frame, via }, startedAt);
+
     const workflow = await this.#resolveWorkflow(locator, scope, nested.path);
     const state = new WorkflowExecutionState({ inputs });
     const invocation: WorkflowInvocation = {
@@ -809,12 +813,6 @@ class WorkflowExecutor {
       const stepId = toValue(step.stepId) as string;
       this.#assertActionParameters([step.onSuccess, step.onFailure], workflowId, stepId);
     }
-
-    const frame = { runId: scope.runId, workflowId, path: nested.path };
-    // stamped with `startedAt`, the reading `durationMs` counts from, though
-    // emitted only now: a workflow whose definition fails the checks above
-    // never starts.
-    this.#events?.emit({ type: 'workflow-start', ...frame, via }, startedAt);
 
     const dependencies = await this.#runDependencies(workflow, invocation, scope);
     if (dependencies.some((dependency) => this.#settledFailed(dependency))) {

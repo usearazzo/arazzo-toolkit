@@ -101,12 +101,11 @@ class DocumentRegistry {
   async #load(canonicalURI: string): Promise<APIDocument> {
     this.#events?.emit({ type: 'document-load-start', uri: canonicalURI });
     for (const provider of this.#providers) {
+      let document: APIDocument | undefined;
       try {
         if (await provider.canProvide(canonicalURI)) {
-          const document = await provider.provide(canonicalURI);
+          document = await provider.provide(canonicalURI);
           this.#set(canonicalURI, document);
-          this.#events?.emit({ type: 'document-load-settled', uri: canonicalURI });
-          return document;
         }
       } catch (error: unknown) {
         // a document that cannot be read or loaded fails in ApiDOM or the parser;
@@ -116,6 +115,11 @@ class DocumentRegistry {
           uri: canonicalURI,
           cause: error,
         });
+      }
+      if (document !== undefined) {
+        // outside the try: an observer's own error is not a failed load.
+        this.#events?.emit({ type: 'document-load-settled', uri: canonicalURI });
+        return document;
       }
     }
 

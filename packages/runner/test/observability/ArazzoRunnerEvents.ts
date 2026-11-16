@@ -56,6 +56,24 @@ describe('ArazzoRunner events', function () {
     );
   });
 
+  specify('should deliver events in the order of their timestamps', async function () {
+    const events: ArazzoRunnerEvent[] = [];
+    let time = 0;
+    const runner = await ArazzoRunner.load(entryPath, {
+      httpClient,
+      now: () => (time += 1),
+      observer: (event) => events.push(event),
+    });
+
+    await runner.execute('linear', { inputs: { status: 'available' } });
+
+    const timestamps = events.map((event) => event.timestamp);
+    assert.deepEqual(
+      timestamps,
+      [...timestamps].sort((a, b) => a - b),
+    );
+  });
+
   specify("should stamp operation events with the run's runId and step", async function () {
     const events: ArazzoRunnerEvent[] = [];
     const runner = await ArazzoRunner.load(entryPath, {
@@ -129,6 +147,24 @@ describe('ArazzoRunner events', function () {
         ],
       );
       assert.isTrue(events.every((event) => event.uri === events[0].uri));
+    });
+
+    specify("should reject with the observer's own error after a load", async function () {
+      const thrown = new Error('observer bug');
+      const registry = new DocumentRegistry({
+        observer: (event) => {
+          if (event.type === 'document-load-settled') throw thrown;
+        },
+      });
+
+      let caught: unknown;
+      try {
+        await registry.acquire(openAPIPath);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.strictEqual(caught, thrown);
     });
 
     specify('should report an OpenAPIOperationExecutor without run or step', async function () {
