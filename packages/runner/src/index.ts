@@ -196,7 +196,10 @@ export type {
   OpenAPIOperationNormalizeStartEvent,
   OpenAPIOperationNormalizeSettledEvent,
   OpenAPIOperationAssembledEvent,
+  OpenAPIOperationRequestStartEvent,
+  OpenAPIOperationRequestSettledEvent,
 } from './observability/OpenAPIOperationEvent.ts';
+export type { HTTPRedactOptions } from './observability/HTTPRedactor.ts';
 
 /* Errors */
 export { default as ArazzoRunnerError } from './errors/ArazzoRunnerError.ts';

@@ -37,6 +37,7 @@ import type {
 import EventChannel from '../observability/EventChannel.ts';
 import type { ArazzoRunnerObserver } from '../observability/ArazzoRunnerEvent.ts';
 import type { OpenAPIOperationEvent } from '../observability/OpenAPIOperationEvent.ts';
+import HTTPRedactor, { type HTTPRedactOptions } from '../observability/HTTPRedactor.ts';
 
 /**
  * The Arazzo step a request is issued for: its `stepId`, and the `workflowId`
@@ -100,6 +101,8 @@ export type RequestInterceptor = (
  */
 interface AssembledSpec {
   paths: Record<string, Record<string, { parameters?: unknown[] }>>;
+  components?: { securitySchemes?: Record<string, unknown> };
+  securityDefinitions?: Record<string, unknown>;
 }
 
 /**
@@ -288,7 +291,8 @@ export interface OpenAPIOperationExecutorOptions {
   readonly documentAssembler?: OpenAPIDocumentAssembler;
   /**
    * Receives the executor's events: the start and end of each operation's
-   * normalization, and its assembly. See {@link OpenAPIOperationEvent}.
+   * normalization, its assembly, and the request sent and its response. See
+   * {@link OpenAPIOperationEvent}.
    */
   readonly observer?: ArazzoRunnerObserver<OpenAPIOperationEvent>;
   /**
@@ -296,6 +300,14 @@ export interface OpenAPIOperationExecutorOptions {
    * `performance.now`.
    */
   readonly now?: () => number;
+  /**
+   * What to mask in the request and response the `openapi-operation-request-*`
+   * events carry. Defaults to {@link OpenAPIOperationExecutor.defaultRedact}.
+   * The credentials of the security schemes a request applies (an `apiKey`
+   * header or query parameter, the `Authorization` header) are masked
+   * whatever the lists say. Bodies are never carried.
+   */
+  readonly redact?: HTTPRedactOptions;
 }
 
 /**
@@ -321,12 +333,21 @@ export interface OpenAPIOperationExecutorOptions {
  * @public
  */
 class OpenAPIOperationExecutor {
+  /**
+   * What the `openapi-operation-request-*` events mask by default: the
+   * `Authorization`, `Proxy-Authorization`, `Cookie` and `Set-Cookie` headers,
+   * and the signed-URL query parameters OpenTelemetry masks. Spread a list to
+   * extend it in {@link OpenAPIOperationExecutorOptions.redact}.
+   */
+  static readonly defaultRedact: Required<HTTPRedactOptions> = HTTPRedactor.DEFAULTS;
+
   readonly #httpClient: HTTPClient;
   readonly #requestInterceptor: RequestInterceptor | undefined;
   readonly #responseNormalizer: OpenAPIOperationResponseNormalizer;
   readonly #operationExtractor: OpenAPIOperationExtractor;
   readonly #operationNormalizer: OpenAPIOperationNormalizer;
   readonly #documentAssembler: OpenAPIDocumentAssembler;
+  readonly #redactor: HTTPRedactor;
   readonly #events: EventChannel<OpenAPIOperationEvent> | undefined;
 
   constructor(options: OpenAPIOperationExecutorOptions = {}) {
@@ -338,6 +359,7 @@ class OpenAPIOperationExecutor {
     this.#operationNormalizer = options.operationNormalizer ?? new OpenAPIOperationNormalizer();
     this.#documentAssembler = options.documentAssembler ?? new OpenAPIDocumentAssembler();
     this.#events = EventChannel.open({ observer: options.observer, now: options.now });
+    this.#redactor = new HTTPRedactor(options.redact);
   }
 
   /**
@@ -467,6 +489,19 @@ class OpenAPIOperationExecutor {
       body: request.body,
     };
 
+    // looked up only when observed: where this request's own schemes put credentials
+    const credentials = this.#events && this.#credentialNames(spec, buildOptions.securities);
+    this.#events?.emit({
+      type: 'openapi-operation-request-start',
+      ...context,
+      runId,
+      request: {
+        method: request.method,
+        url: this.#redactor.url(request.url, credentials?.query),
+        headers: this.#redactor.headers(Object.entries(request.headers), credentials?.headers),
+      },
+    });
+
     let rawResponse: Response;
     try {
       rawResponse = await this.#httpClient(request);
@@ -477,7 +512,45 @@ class OpenAPIOperationExecutor {
       });
     }
 
+    this.#events?.emit({
+      type: 'openapi-operation-request-settled',
+      ...context,
+      runId,
+      response: {
+        status: rawResponse.status,
+        headers: this.#redactor.headers(rawResponse.headers, credentials?.headers),
+      },
+    });
+
     return this.#responseNormalizer.normalize(rawResponse, requestInfo);
+  }
+
+  /**
+   * The header and query parameter names the security schemes this request is
+   * given put their credentials in, so the events mask them whatever the
+   * redact lists say: an `apiKey`'s header, query parameter or `Cookie`, and
+   * the `Authorization` header of every other scheme type.
+   */
+  #credentialNames(
+    spec: AssembledSpec,
+    securities: unknown,
+  ): { headers: string[]; query: string[] } {
+    type Fields = Record<string, unknown>;
+    const names = { headers: [] as string[], query: [] as string[] };
+    const authorized = isPlainObject(securities) ? (securities as Fields).authorized : undefined;
+    if (!isPlainObject(authorized)) return names;
+
+    const schemes = spec.components?.securitySchemes ?? spec.securityDefinitions ?? {};
+    for (const schemeName of Object.keys(authorized)) {
+      const scheme = schemes[schemeName] as Fields | undefined;
+      if (scheme === undefined) continue;
+      if (scheme.type !== 'apiKey') names.headers.push('Authorization');
+      else if (typeof scheme.name !== 'string') continue;
+      else if (scheme.in === 'query') names.query.push(scheme.name);
+      else if (scheme.in === 'cookie') names.headers.push('Cookie');
+      else names.headers.push(scheme.name);
+    }
+    return names;
   }
 
   /**

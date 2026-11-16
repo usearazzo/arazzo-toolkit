@@ -43,10 +43,41 @@ export interface OpenAPIOperationAssembledEvent extends OpenAPIOperationEventBas
 }
 
 /**
+ * The request about to be handed to the {@link HTTPClient}, after every
+ * request interceptor ran. Credentials are masked (see
+ * {@link OpenAPIOperationExecutorOptions.redact}); the body is not carried.
+ * @public
+ */
+export interface OpenAPIOperationRequestStartEvent extends OpenAPIOperationEventBase {
+  readonly type: 'openapi-operation-request-start';
+  readonly request: {
+    readonly method: string;
+    readonly url: string;
+    readonly headers: Readonly<Record<string, string>>;
+  };
+}
+
+/**
+ * The response arrived, before its body is read. Credentials in its headers
+ * are masked; the body is not carried. A request that fails in the transport
+ * throws and emits no settled event.
+ * @public
+ */
+export interface OpenAPIOperationRequestSettledEvent extends OpenAPIOperationEventBase {
+  readonly type: 'openapi-operation-request-settled';
+  readonly response: {
+    readonly status: number;
+    readonly headers: Readonly<Record<string, string>>;
+  };
+}
+
+/**
  * An event the {@link OpenAPIOperationExecutor} emits.
  * @public
  */
 export type OpenAPIOperationEvent =
   | OpenAPIOperationNormalizeStartEvent
   | OpenAPIOperationNormalizeSettledEvent
-  | OpenAPIOperationAssembledEvent;
+  | OpenAPIOperationAssembledEvent
+  | OpenAPIOperationRequestStartEvent
+  | OpenAPIOperationRequestSettledEvent;

@@ -204,6 +204,8 @@ describe('ArazzoRunner events', function () {
           'openapi-operation-normalize-start',
           'openapi-operation-normalize-settled',
           'openapi-operation-assembled',
+          'openapi-operation-request-start',
+          'openapi-operation-request-settled',
         ],
       );
       assert.isTrue(events.every((event) => !('runId' in event) && !('step' in event)));
