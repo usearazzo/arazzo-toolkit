@@ -9,10 +9,15 @@ import {
 } from '@speclynx/apidom-reference/configuration/empty';
 import { UnmatchedResolverError } from '@speclynx/apidom-reference/configuration/empty';
 import { toValue } from '@speclynx/apidom-core';
-import { isArrayElement, isStringElement } from '@speclynx/apidom-datamodel';
+import { isArrayElement, isStringElement, type Element } from '@speclynx/apidom-datamodel';
 import { traverse, type Path } from '@speclynx/apidom-traverse';
 import {
+  isCriterionElement,
+  isFailureActionElement,
+  isParameterElement,
   isStepElement,
+  isSuccessActionElement,
+  isWorkflowElement,
   type SourceDescriptionElement,
   type WorkflowElement,
 } from '@speclynx/apidom-ns-arazzo-1';
@@ -102,6 +107,7 @@ class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
       uri,
       parseResult,
     );
+    ArazzoDocumentRegistryProvider.#recordPointers(parseResult);
 
     return new ArazzoDocument(uri, parseResult, workflowIndex, stepIndex, sourceDescriptionIndex);
   }
@@ -174,6 +180,37 @@ class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
     });
 
     return { workflowIndex, stepIndex, sourceDescriptionIndex };
+  }
+
+  /**
+   * Records, in each element's `json-pointer` meta, where it is written: every
+   * workflow, step, criterion, action and parameter, its `components` included,
+   * and every `dependsOn` entry. The record travels with the element through
+   * normalization, so an inherited or referenced element keeps the pointer of
+   * where it is defined, for the events to locate it by.
+   */
+  static #recordPointers(parseResult: ParseResultElement): void {
+    traverse(parseResult.api, {
+      enter(path: Path) {
+        const element = path.node as Element;
+        const located =
+          isWorkflowElement(element) ||
+          isStepElement(element) ||
+          isCriterionElement(element) ||
+          isSuccessActionElement(element) ||
+          isFailureActionElement(element) ||
+          isParameterElement(element);
+        if (!located) return;
+
+        const pointer = path.formatPath('jsonpointer');
+        element.meta.set('json-pointer', pointer);
+        if (isWorkflowElement(element) && isArrayElement(element.dependsOn)) {
+          [...element.dependsOn].forEach((entry, index) => {
+            entry.meta.set('json-pointer', `${pointer}/dependsOn/${index}`);
+          });
+        }
+      },
+    });
   }
 
   #buildParseOptions(): ApiDOMReferenceOptions {

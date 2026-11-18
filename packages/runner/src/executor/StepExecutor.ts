@@ -1,5 +1,5 @@
 import { toValue } from '@speclynx/apidom-core';
-import { isArrayElement, isStringElement } from '@speclynx/apidom-datamodel';
+import { isArrayElement, isStringElement, type Element } from '@speclynx/apidom-datamodel';
 import {
   isCriterionElement,
   type CriterionElement,
@@ -239,6 +239,8 @@ export type StepExecuteOptions =
  * @public
  */
 class StepExecutor {
+  static readonly #criteria = new WeakMap<CriterionEvaluationRecord, Element>();
+
   readonly #document: ArazzoDocument;
   readonly #registry: DocumentRegistry;
   readonly #locatorNormalizer: OpenAPIOperationLocatorNormalizer;
@@ -515,7 +517,9 @@ class StepExecutor {
     // evaluated one after another, in list order, like the actions' criteria.
     const records: CriterionEvaluationRecord[] = [];
     for (const criterion of [...criteria] as CriterionElement[]) {
-      records.push(await this.#evaluateCriterion(criterion, context));
+      const record = await this.#evaluateCriterion(criterion, context);
+      StepExecutor.#criteria.set(record, criterion);
+      records.push(record);
     }
     return records;
   }
@@ -555,6 +559,7 @@ class StepExecutor {
         ...(await this.#evaluateCriterion(criterion, context)),
         actionName: toValue(action.name) as string,
       };
+      StepExecutor.#criteria.set(record, criterion);
       actionCriteria.push(record);
       return record.met;
     };
@@ -626,6 +631,16 @@ class StepExecutor {
       }
       throw error;
     }
+  }
+
+  /**
+   * The Criterion Object a record this executor produced was evaluated from,
+   * so an event can name where the criterion is written. Records are keyed
+   * weakly: a record no one holds is forgotten with its criterion.
+   * @internal
+   */
+  static criterionOf(record: CriterionEvaluationRecord): Element | undefined {
+    return StepExecutor.#criteria.get(record);
   }
 
   /**

@@ -18,6 +18,7 @@ import {
 const frame = { runId: 'run-1', workflowId: 'w', path: ['w'], timestamp: 1 };
 const operation = {
   operation: { documentURI: 'https://api.example.com/openapi.json', jsonPointer: '/paths' },
+  location: { uri: 'https://api.example.com/openapi.json', jsonPointer: '/paths' },
 };
 
 const start = (

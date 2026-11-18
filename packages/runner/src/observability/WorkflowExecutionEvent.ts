@@ -6,6 +6,7 @@ import type {
   RetryReferenceRecord,
   WorkflowExecutionResult,
 } from '../executor/WorkflowExecutor.ts';
+import type { DocumentLocation } from '../document/APIDocument.ts';
 import type { ArazzoRunnerEventBase } from './ArazzoRunnerEvent.ts';
 
 /**
@@ -50,6 +51,11 @@ export interface WorkflowExecutionStepEventBase extends WorkflowExecutionEventBa
  */
 export interface WorkflowStartEvent extends WorkflowExecutionEventBase {
   readonly type: 'workflow-start';
+  /**
+   * Where the workflow is written. Its line and column are present only when
+   * the document was loaded with `sourceMap`.
+   */
+  readonly location?: DocumentLocation;
   /**
    * How the workflow was reached. `root` is the workflow named in `execute`,
    * `step` is a sub-workflow step, `dependsOn` is a prerequisite, `retry` is
@@ -98,6 +104,11 @@ export interface WorkflowExecutionDependency {
  */
 export interface DependencyStartEvent extends WorkflowExecutionEventBase {
   readonly type: 'dependency-start';
+  /**
+   * Where the `dependsOn` entry is written. Its line and column are present only when
+   * the document was loaded with `sourceMap`.
+   */
+  readonly location?: DocumentLocation;
   readonly dependency: WorkflowExecutionDependency;
 }
 
@@ -123,6 +134,11 @@ export interface DependencySettledEvent extends WorkflowExecutionEventBase {
  */
 export interface StepStartEvent extends WorkflowExecutionStepEventBase {
   readonly type: 'step-start';
+  /**
+   * Where the step is written. Its line and column are present only when
+   * the document was loaded with `sourceMap`.
+   */
+  readonly location?: DocumentLocation;
 }
 
 /**
@@ -146,6 +162,11 @@ export interface StepAttemptEvent extends WorkflowExecutionStepEventBase {
  */
 export interface CriterionEvaluatedEvent extends WorkflowExecutionStepEventBase {
   readonly type: 'criterion-evaluated';
+  /**
+   * Where the criterion is written. Its line and column are present only when
+   * the document was loaded with `sourceMap`.
+   */
+  readonly location?: DocumentLocation;
   readonly attempt: number;
   /**
    * `success` for one of the step's `successCriteria`, `action` for a
@@ -163,6 +184,11 @@ export interface CriterionEvaluatedEvent extends WorkflowExecutionStepEventBase 
  */
 export interface ActionSelectedEvent extends WorkflowExecutionStepEventBase {
   readonly type: 'action-selected';
+  /**
+   * Where the selected action (absent with none) is written. Its line and column are present only when
+   * the document was loaded with `sourceMap`.
+   */
+  readonly location?: DocumentLocation;
   readonly attempt: number;
   /**
    * The selected action. Absent when none matched, so the step takes the
@@ -196,6 +222,11 @@ export interface RetryWaitEvent extends WorkflowExecutionStepEventBase {
  */
 export interface RetryReferenceStartEvent extends WorkflowExecutionStepEventBase {
   readonly type: 'retry-reference-start';
+  /**
+   * Where the `retry` action that names the reference is written. Its line and column are present only when
+   * the document was loaded with `sourceMap`.
+   */
+  readonly location?: DocumentLocation;
   readonly attempt: number;
   readonly kind: RetryReferenceRecord['kind'];
   readonly id: RetryReferenceRecord['id'];
@@ -232,6 +263,11 @@ export interface StepSettledEvent extends WorkflowExecutionStepEventBase {
  */
 export interface WorkflowNormalizeStartEvent extends WorkflowExecutionEventBase {
   readonly type: 'workflow-normalize-start';
+  /**
+   * Where the workflow is written. Its line and column are present only when
+   * the document was loaded with `sourceMap`.
+   */
+  readonly location?: DocumentLocation;
 }
 
 /**
@@ -240,6 +276,11 @@ export interface WorkflowNormalizeStartEvent extends WorkflowExecutionEventBase 
  */
 export interface WorkflowNormalizeSettledEvent extends WorkflowExecutionEventBase {
   readonly type: 'workflow-normalize-settled';
+  /**
+   * Where the workflow is written. Its line and column are present only when
+   * the document was loaded with `sourceMap`.
+   */
+  readonly location?: DocumentLocation;
 }
 
 /**
