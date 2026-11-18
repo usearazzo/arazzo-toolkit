@@ -69,22 +69,19 @@ abstract class APIDocument {
    */
   locationOf(element: Element): DocumentLocation {
     const origin = toValue(element.meta.get('ref-origin'));
-    const pointer = toValue(element.meta.get('json-pointer'));
-    const uri = typeof origin === 'string' ? origin : this.uri;
-    const jsonPointer = typeof pointer === 'string' ? pointer : undefined;
-    // a source-mapped parse positions every element fully, any other none
-    const range: DocumentRange | undefined =
-      element.startLine === undefined
-        ? undefined
-        : {
-            start: { line: element.startLine, character: element.startCharacter! },
-            end: { line: element.endLine!, character: element.endCharacter! },
-          };
+    const jsonPointer = toValue(element.meta.get('json-pointer'));
+    const { startLine, startCharacter, endLine, endCharacter } = element;
 
     return {
-      uri,
-      ...(jsonPointer === undefined ? {} : { jsonPointer }),
-      ...(range === undefined ? {} : { range }),
+      uri: typeof origin === 'string' ? origin : this.uri,
+      ...(typeof jsonPointer === 'string' && { jsonPointer }),
+      // a source-mapped parse positions every element fully, any other none
+      ...(startLine !== undefined && {
+        range: {
+          start: { line: startLine, character: startCharacter! },
+          end: { line: endLine!, character: endCharacter! },
+        },
+      }),
     };
   }
 
