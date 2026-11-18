@@ -51,11 +51,8 @@ export interface WorkflowExecutionStepEventBase extends WorkflowExecutionEventBa
  */
 export interface WorkflowStartEvent extends WorkflowExecutionEventBase {
   readonly type: 'workflow-start';
-  /**
-   * Where the workflow is written; absent for a workflow id its document
-   * does not hold.
-   */
-  readonly location?: DocumentLocation;
+  /** Where the workflow is written. */
+  readonly location: DocumentLocation;
   /**
    * How the workflow was reached. `root` is the workflow named in `execute`,
    * `step` is a sub-workflow step, `dependsOn` is a prerequisite, `retry` is

@@ -784,13 +784,21 @@ class WorkflowExecutor {
     throwIfAborted(scope.signal, { workflowId, callStack: nested });
 
     const frame: WorkflowFrame = { runId: scope.runId, workflowId, path: nested.path };
+    // extracted before `workflow-start`: a workflow its document does not
+    // define never starts, and the event can say where the one it runs is.
+    const extracted = this.#extractWorkflow(locator);
     // emitted before normalization, so its events nest inside this workflow's.
     this.#events?.emit(
-      { type: 'workflow-start', ...frame, via, location: this.#workflowLocation(locator) },
+      {
+        type: 'workflow-start',
+        ...frame,
+        via,
+        location: locator.document.locationOf(extracted),
+      },
       startedAt,
     );
 
-    const workflow = await this.#resolveWorkflow(locator, scope, frame);
+    const workflow = await this.#resolveWorkflow(locator, extracted, scope, frame);
     const state = new WorkflowExecutionState({ inputs });
     const invocation: WorkflowInvocation = {
       workflowId,
@@ -1120,15 +1128,6 @@ class WorkflowExecutor {
         throw error;
       }
     };
-  }
-
-  /**
-   * Where a workflow is written, or `undefined` for an id its document does
-   * not hold (the run throws for it once it tries to resolve it).
-   */
-  #workflowLocation({ document, workflowId }: ArazzoWorkflowLocator): DocumentLocation | undefined {
-    if (!document.workflowIndex.has(workflowId)) return undefined;
-    return document.locationOf(this.#extractor.extract(document, workflowId));
   }
 
   /**
@@ -1758,35 +1757,40 @@ class WorkflowExecutor {
   }
 
   /**
-   * Extracts and normalizes the workflow a locator names. A workflow its
-   * document does not define is the executor-level `workflow-not-found`
-   * authoring error, raised here rather than leaking the extractor's
-   * `ExtractionError`. Only the root {@link WorkflowExecutor.execute} id
-   * reaches this check unvalidated — every reference position goes through
-   * the locator normalizer, which already rejects a missing workflow with
-   * the referencing context attached — so the error's `workflowId` is the
-   * missing id itself.
+   * Extracts the workflow a locator names. A workflow its document does not
+   * define is the executor-level `workflow-not-found` authoring error, raised
+   * here rather than leaking the extractor's `ExtractionError`. Only the root
+   * {@link WorkflowExecutor.execute} id reaches this check unvalidated — every
+   * reference position goes through the locator normalizer, which already
+   * rejects a missing workflow with the referencing context attached — so the
+   * error's `workflowId` is the missing id itself.
    */
-  async #resolveWorkflow(
-    locator: ArazzoWorkflowLocator,
-    scope: RunScope,
-    frame: WorkflowFrame,
-  ): Promise<WorkflowElement> {
-    const { document, workflowId } = locator;
-    const qualifiedId = this.#qualifiedId(locator);
-    const cached = scope.workflows.get(qualifiedId);
-    if (cached !== undefined) return cached;
-
+  #extractWorkflow({ document, workflowId }: ArazzoWorkflowLocator): WorkflowElement {
     if (!document.workflowIndex.has(workflowId)) {
       throw new ExecutionError(
         `workflow "${workflowId}" not found in Arazzo document at "${document.uri}"`,
         { workflowId, reason: ExecutionError.WorkflowNotFound },
       );
     }
-    const extracted = this.#extractor.extract(document, workflowId);
-    const location = document.locationOf(extracted);
+    return this.#extractor.extract(document, workflowId);
+  }
+
+  /**
+   * Normalizes an extracted workflow, once per run for each workflow.
+   */
+  async #resolveWorkflow(
+    locator: ArazzoWorkflowLocator,
+    extracted: WorkflowElement,
+    scope: RunScope,
+    frame: WorkflowFrame,
+  ): Promise<WorkflowElement> {
+    const qualifiedId = this.#qualifiedId(locator);
+    const cached = scope.workflows.get(qualifiedId);
+    if (cached !== undefined) return cached;
+
+    const location = locator.document.locationOf(extracted);
     this.#events?.emit({ type: 'workflow-normalize-start', ...frame, location });
-    const workflow = await this.#normalizer.normalize(extracted, document);
+    const workflow = await this.#normalizer.normalize(extracted, locator.document);
     this.#events?.emit({ type: 'workflow-normalize-settled', ...frame, location });
     scope.workflows.set(qualifiedId, workflow);
     return workflow;
