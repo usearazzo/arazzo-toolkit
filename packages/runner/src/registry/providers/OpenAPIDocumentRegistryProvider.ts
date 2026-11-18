@@ -100,7 +100,7 @@ class OpenAPIDocumentRegistryProvider extends DocumentRegistryProvider {
    */
   async provide(uri: string): Promise<OpenAPIDocument> {
     const parseResult: ParseResultElement = await parseOpenAPI(uri, this.#buildParseOptions());
-    DocumentRegistryProvider.assertParsed(uri, parseResult);
+    this.assertParsed(uri, parseResult);
     const operationIndex = await this.#buildOperationIndex(uri, parseResult);
 
     return new OpenAPIDocument(uri, parseResult, operationIndex);

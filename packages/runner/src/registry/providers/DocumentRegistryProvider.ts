@@ -55,7 +55,7 @@ abstract class DocumentRegistryProvider {
    * and parse what they can instead, so a document must load with source maps
    * exactly when it loads without.
    */
-  protected static assertParsed(uri: string, parseResult: ParseResultElement): void {
+  protected assertParsed(uri: string, parseResult: ParseResultElement): void {
     const [error] = parseResult.errors;
     if (error === undefined) return;
     throw new ParseError(`Failed to parse the document at "${uri}": ${toValue(error)}`);
