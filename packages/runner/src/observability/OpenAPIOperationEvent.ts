@@ -10,9 +10,9 @@ import type { ArazzoRunnerEventBase } from './ArazzoRunnerEvent.ts';
  */
 export interface OpenAPIOperationEventBase extends ArazzoRunnerEventBase, RequestContext {
   /**
-   * Where the operation is written: the document and JSON Pointer it was
-   * located at, and, when the document was loaded with `sourceMap`, its line
-   * and column.
+   * Where the operation is written. It differs from `operation` (where the
+   * operation was looked up) for an operation of a Path Item Object written
+   * as a `$ref`, which is written in the document the reference names.
    */
   readonly location: DocumentLocation;
   /**

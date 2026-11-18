@@ -3,18 +3,27 @@ import { toValue, toYAML } from '@speclynx/apidom-core';
 import type { Element } from '@speclynx/apidom-datamodel';
 
 /**
- * Where an element is written: the document that defines it, its JSON
- * Pointer there, and, when the document was parsed with source maps, its line
- * and column (1-based).
+ * Where an element is written.
  * @public
  */
 export interface DocumentLocation {
+  /**
+   * The document that defines the element: the one it came from when it was
+   * reached through a reference (a workflow of another Arazzo document, an
+   * operation of a Path Item Object written as a `$ref`), not necessarily the
+   * entry document.
+   */
   readonly uri: string;
   /**
-   * Absent for an element whose pointer the registry could not record, such
-   * as one transcluded from a file it never loaded.
+   * The element's JSON Pointer in that document. Absent only for an element
+   * whose pointer no one recorded: the runner records one for every element
+   * an event locates.
    */
   readonly jsonPointer?: string;
+  /**
+   * The 1-based line and column, present only when the document was parsed
+   * with source maps (`sourceMap` on `ArazzoRunner.load`).
+   */
   readonly line?: number;
   readonly column?: number;
 }

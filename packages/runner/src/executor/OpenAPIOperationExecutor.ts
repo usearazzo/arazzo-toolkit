@@ -381,9 +381,11 @@ class OpenAPIOperationExecutor {
     // reach buildRequest
     const { requestInterceptor, step, runId } = executeOptions;
     // the operation as extracted from its own document, before normalizing
-    // copies it, carries where it is written.
+    // copies it, carries where it is written; located once, and only for an
+    // observer.
+    let located: DocumentLocation | undefined;
     const location = (): DocumentLocation =>
-      locator.document.operationLocation(operation, locator.jsonPointer);
+      (located ??= locator.document.operationLocation(operation, locator.jsonPointer));
     const declaredOperationId = toValue(operation.operationId);
     const context: RequestContext = {
       operation: {

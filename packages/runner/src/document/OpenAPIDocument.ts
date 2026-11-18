@@ -35,8 +35,18 @@ class OpenAPIDocument extends APIDocument {
     if (typeof origin !== 'string' || typeof reference !== 'string') return location;
 
     const hashAt = reference.indexOf('#');
-    const fragment = hashAt === -1 ? '' : decodeURIComponent(reference.slice(hashAt + 1));
+    const fragment = hashAt === -1 ? '' : OpenAPIDocument.#decode(reference.slice(hashAt + 1));
     return { ...location, uri: origin, jsonPointer: `${fragment}${jsonPointer.slice(methodAt)}` };
+  }
+
+  // a stray `%` the reference layer tolerated must not fail the run that is
+  // being observed
+  static #decode(fragment: string): string {
+    try {
+      return decodeURIComponent(fragment);
+    } catch {
+      return fragment;
+    }
   }
 
   /**

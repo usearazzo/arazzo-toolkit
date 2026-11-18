@@ -14,7 +14,6 @@ import { traverse, type Path } from '@speclynx/apidom-traverse';
 import {
   isCriterionElement,
   isFailureActionElement,
-  isParameterElement,
   isStepElement,
   isSuccessActionElement,
   isWorkflowElement,
@@ -184,8 +183,8 @@ class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
 
   /**
    * Records, in each element's `json-pointer` meta, where it is written: every
-   * workflow, step, criterion, action and parameter, its `components` included,
-   * and every `dependsOn` entry. The record travels with the element through
+   * workflow, step, criterion and action, its `components` included, and
+   * every `dependsOn` entry. The record travels with the element through
    * normalization, so an inherited or referenced element keeps the pointer of
    * where it is defined, for the events to locate it by.
    */
@@ -198,8 +197,7 @@ class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
           isStepElement(element) ||
           isCriterionElement(element) ||
           isSuccessActionElement(element) ||
-          isFailureActionElement(element) ||
-          isParameterElement(element);
+          isFailureActionElement(element);
         if (!located) return;
 
         const pointer = path.formatPath('jsonpointer');

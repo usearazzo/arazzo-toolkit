@@ -1786,17 +1786,10 @@ class WorkflowExecutor {
       );
     }
     const extracted = this.#extractor.extract(document, workflowId);
-    this.#events?.emit({
-      type: 'workflow-normalize-start',
-      ...frame,
-      location: document.locationOf(extracted),
-    });
+    const location = this.#events === undefined ? undefined : document.locationOf(extracted);
+    this.#events?.emit({ type: 'workflow-normalize-start', ...frame, location });
     const workflow = await this.#normalizer.normalize(extracted, document);
-    this.#events?.emit({
-      type: 'workflow-normalize-settled',
-      ...frame,
-      location: document.locationOf(extracted),
-    });
+    this.#events?.emit({ type: 'workflow-normalize-settled', ...frame, location });
     scope.workflows.set(qualifiedId, workflow);
     return workflow;
   }
