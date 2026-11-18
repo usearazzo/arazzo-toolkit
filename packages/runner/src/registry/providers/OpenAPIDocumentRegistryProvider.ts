@@ -136,12 +136,16 @@ class OpenAPIDocumentRegistryProvider extends DocumentRegistryProvider {
       OperationElement(path: Path) {
         const operation = path.node as OpenAPIOperationElement;
         const operationId = toValue(operation.operationId);
+        const pointer = path.formatPath('jsonpointer');
+        // where the operation is written, for the events to locate it by; an
+        // operation of a `$ref` path item already has it recorded
+        if (!operation.hasMetaProperty('json-pointer')) operation.meta.set('json-pointer', pointer);
 
         if (typeof operationId !== 'string') return path.skip();
         if (operationId === '') return path.skip();
         if (index.has(operationId)) return path.skip();
 
-        index.set(operationId, path.formatPath('jsonpointer'));
+        index.set(operationId, pointer);
 
         path.skip();
       },

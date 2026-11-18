@@ -62,18 +62,17 @@ abstract class APIDocument {
   }
 
   /**
-   * Where an element of this document, or one it references, is written. An
-   * element that came through a reference is located in the document it came
-   * from (its `ref-origin`), at the pointer the registry recorded for it when
-   * it loaded that document; `jsonPointer` stands in when none was recorded.
+   * Where an element of this document, or one it references, is written, as
+   * the registry provider recorded it when it loaded the document: the
+   * document it came from (its `ref-origin`) when it came through a
+   * reference, and its JSON Pointer there.
    */
-  locationOf(element: Element, jsonPointer?: string): DocumentLocation {
+  locationOf(element: Element): DocumentLocation {
     const origin = toValue(element.meta.get('ref-origin'));
-    const recorded = toValue(element.meta.get('json-pointer'));
-    const pointer = typeof recorded === 'string' ? recorded : jsonPointer;
+    const pointer = toValue(element.meta.get('json-pointer'));
     return {
       uri: typeof origin === 'string' ? origin : this.uri,
-      ...(pointer === undefined ? {} : { jsonPointer: pointer }),
+      ...(typeof pointer === 'string' ? { jsonPointer: pointer } : {}),
       ...(element.startLine === undefined ||
       element.startCharacter === undefined ||
       element.endLine === undefined ||
