@@ -3,6 +3,26 @@ import { toValue, toYAML } from '@speclynx/apidom-core';
 import type { Element } from '@speclynx/apidom-datamodel';
 
 /**
+ * A position in a document, as in the Language Server Protocol: a 0-based
+ * line, and a 0-based character offset within it in UTF-16 code units.
+ * @public
+ */
+export interface DocumentPosition {
+  readonly line: number;
+  readonly character: number;
+}
+
+/**
+ * A range in a document, as in the Language Server Protocol: from `start` to
+ * `end`, the shape the validator's diagnostics use.
+ * @public
+ */
+export interface DocumentRange {
+  readonly start: DocumentPosition;
+  readonly end: DocumentPosition;
+}
+
+/**
  * Where an element is written.
  * @public
  */
@@ -21,11 +41,10 @@ export interface DocumentLocation {
    */
   readonly jsonPointer?: string;
   /**
-   * The 1-based line and column, present only when the document was parsed
-   * with source maps (`sourceMap` on `ArazzoRunner.load`).
+   * The element's range in that document, present only when the document was
+   * parsed with source maps (`sourceMap` on `ArazzoRunner.load`).
    */
-  readonly line?: number;
-  readonly column?: number;
+  readonly range?: DocumentRange;
 }
 
 /**
@@ -55,9 +74,17 @@ abstract class APIDocument {
     return {
       uri: typeof origin === 'string' ? origin : this.uri,
       ...(pointer === undefined ? {} : { jsonPointer: pointer }),
-      ...(element.startLine === undefined || element.startCharacter === undefined
+      ...(element.startLine === undefined ||
+      element.startCharacter === undefined ||
+      element.endLine === undefined ||
+      element.endCharacter === undefined
         ? {}
-        : { line: element.startLine + 1, column: element.startCharacter + 1 }),
+        : {
+            range: {
+              start: { line: element.startLine, character: element.startCharacter },
+              end: { line: element.endLine, character: element.endCharacter },
+            },
+          }),
     };
   }
 

@@ -142,7 +142,7 @@ const result = await runner.execute('authenticateAndOrderPet', {
 | Cancel a run | `signal` | [Cancellation](https://usearazzo.com/docs/runner/#cancellation) |
 | Watch a run as it happens (progress, logs, debugging) | `observer` | [Observing a run](https://usearazzo.com/docs/runner/#observability) |
 | Include request and response bodies in those events | `captureBodies` | [Observing a run](https://usearazzo.com/docs/runner/#observability) |
-| Give each `location` (on events, and on the result's steps and criteria) a line and column, not only its JSON Pointer | `sourceMap` on `load` | [Observing a run](https://usearazzo.com/docs/runner/#observability) |
+| Give each `location` (on events, and on the result's steps and criteria) its range in the document, not only its JSON Pointer | `sourceMap` on `load` | [Observing a run](https://usearazzo.com/docs/runner/#observability) |
 | Mask credentials before logging or exporting events | `new Redactor().event(event)` | [Observing a run](https://usearazzo.com/docs/runner/#observability) |
 | Compose the building blocks yourself | `DocumentRegistry`, the executors | [Runner API Reference](https://usearazzo.com/docs/runner/) |
 

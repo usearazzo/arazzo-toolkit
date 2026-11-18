@@ -39,6 +39,16 @@ const run = async (
   return events;
 };
 
+// the start of a location's range, as an editor shows it (1-based)
+const startOf = (location: DocumentLocation | undefined): [number, number] | undefined =>
+  location?.range === undefined
+    ? undefined
+    : [location.range.start.line + 1, location.range.start.character + 1];
+
+// a location without its range, for comparing uri and pointer alone
+const placeOf = (location: DocumentLocation | undefined) =>
+  location === undefined ? undefined : { uri: location.uri, jsonPointer: location.jsonPointer };
+
 const locationsOf = (events: ArazzoRunnerEvent[], type: ArazzoRunnerEvent['type']) =>
   events
     .filter((event) => event.type === type)
@@ -51,19 +61,17 @@ describe('Document locations', function () {
     const events = await run(components, 'testWorkflow', { sourceMap: true });
     const uri = fixture(components);
 
-    assert.deepEqual(locationsOf(events, 'workflow-start'), [
-      { uri, jsonPointer: '/workflows/0', line: 10, column: 5 },
-    ]);
-    assert.deepEqual(locationsOf(events, 'workflow-normalize-start'), [
-      { uri, jsonPointer: '/workflows/0', line: 10, column: 5 },
-    ]);
-    assert.deepEqual(locationsOf(events, 'step-start'), [
-      { uri, jsonPointer: '/workflows/0/steps/0', line: 15, column: 9 },
-    ]);
+    const [workflow] = locationsOf(events, 'workflow-start');
+    assert.deepEqual(placeOf(workflow), { uri, jsonPointer: '/workflows/0' });
+    assert.deepEqual(startOf(workflow), [10, 5]);
+    assert.deepEqual(locationsOf(events, 'workflow-normalize-start'), [workflow]);
+    const [step] = locationsOf(events, 'step-start');
+    assert.deepEqual(placeOf(step), { uri, jsonPointer: '/workflows/0/steps/0' });
+    assert.deepEqual(startOf(step), [15, 9]);
     // a workflow-level action reached through $components: where it is defined
-    assert.deepEqual(locationsOf(events, 'action-selected'), [
-      { uri, jsonPointer: '/components/successActions/finish', line: 42, column: 7 },
-    ]);
+    const [action] = locationsOf(events, 'action-selected');
+    assert.deepEqual(placeOf(action), { uri, jsonPointer: '/components/successActions/finish' });
+    assert.deepEqual(startOf(action), [42, 7]);
   });
 
   specify('should locate by JSON Pointer alone without source maps', async function () {
@@ -82,7 +90,7 @@ describe('Document locations', function () {
       uri: fixture('petstore.openapi.json'),
       jsonPointer: '/paths/~1pet~1{petId}/get',
     });
-    assert.isAbove(location?.line ?? 0, 1);
+    assert.isAbove(location?.range?.start.line ?? 0, 0);
     assert.deepEqual(locationsOf(events, 'openapi-operation-request-settled'), [location]);
   });
 
@@ -91,14 +99,12 @@ describe('Document locations', function () {
       sourceMap: true,
     });
 
-    assert.deepEqual(locationsOf(events, 'openapi-operation-request-start'), [
-      {
-        uri: fixture('external-pathitem/paths/pets.json'),
-        jsonPointer: '/get',
-        line: 2,
-        column: 10,
-      },
-    ]);
+    const [location] = locationsOf(events, 'openapi-operation-request-start');
+    assert.deepEqual(placeOf(location), {
+      uri: fixture('external-pathitem/paths/pets.json'),
+      jsonPointer: '/get',
+    });
+    assert.deepEqual(startOf(location), [2, 10]);
   });
 
   specify(
@@ -111,13 +117,19 @@ describe('Document locations', function () {
       const uri = fixture('workflow-control-flow.arazzo.yaml');
 
       const [criterion] = locationsOf(events, 'criterion-evaluated');
-      assert.deepInclude(criterion, { uri, line: 642, column: 13 });
+      assert.strictEqual(criterion?.uri, uri);
+      // the whole `condition: $statusCode == 200` entry, as an LSP range
+      assert.deepEqual(criterion?.range, {
+        start: { line: 641, character: 12 },
+        end: { line: 641, character: 41 },
+      });
       assert.match(
         criterion?.jsonPointer ?? '',
         /^\/workflows\/\d+\/steps\/0\/successCriteria\/0$/,
       );
       const [action] = locationsOf(events, 'action-selected');
-      assert.deepInclude(action, { uri, line: 636, column: 9 });
+      assert.strictEqual(action?.uri, uri);
+      assert.deepEqual(startOf(action), [636, 9]);
       assert.match(action?.jsonPointer ?? '', /^\/workflows\/\d+\/failureActions\/0$/);
     },
   );
@@ -127,14 +139,12 @@ describe('Document locations', function () {
       sourceMap: true,
     });
 
-    assert.deepEqual(locationsOf(events, 'openapi-operation-request-start'), [
-      {
-        uri: fixture('chained-pathitem/paths/pets.json'),
-        jsonPointer: '/collection/get',
-        line: 3,
-        column: 12,
-      },
-    ]);
+    const [location] = locationsOf(events, 'openapi-operation-request-start');
+    assert.deepEqual(placeOf(location), {
+      uri: fixture('chained-pathitem/paths/pets.json'),
+      jsonPointer: '/collection/get',
+    });
+    assert.deepEqual(startOf(location), [3, 12]);
   });
 
   specify('should locate steps and criteria in the result trace', async function () {
@@ -148,8 +158,8 @@ describe('Document locations', function () {
     });
 
     const [step] = result.steps;
-    assert.deepInclude(step.location, { line: 639, column: 9 });
-    assert.deepInclude(step.successCriteria[0].location, { line: 642, column: 13 });
+    assert.deepEqual(startOf(step.location), [639, 9]);
+    assert.deepEqual(startOf(step.successCriteria[0].location), [642, 13]);
   });
 
   specify('should reject a malformed document with source maps too', async function () {
@@ -172,16 +182,14 @@ describe('Document locations', function () {
       sourceMap: true,
     });
 
-    assert.deepEqual(locationsOf(dependsOn, 'dependency-start'), [
-      {
-        uri: fixture('cross-document.arazzo.yaml'),
-        jsonPointer: '/workflows/1/dependsOn/0',
-        line: 45,
-        column: 9,
-      },
-    ]);
+    const [entry] = locationsOf(dependsOn, 'dependency-start');
+    assert.deepEqual(placeOf(entry), {
+      uri: fixture('cross-document.arazzo.yaml'),
+      jsonPointer: '/workflows/1/dependsOn/0',
+    });
+    assert.deepEqual(startOf(entry), [45, 9]);
     const [, child] = locationsOf(step, 'workflow-start');
     assert.strictEqual(child?.uri, fixture('cross-document-child.arazzo.yaml'));
-    assert.isNumber(child?.line);
+    assert.isDefined(child?.range);
   });
 });
