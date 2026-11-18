@@ -55,7 +55,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@babel/runtime-corejs3": "^8.1.0",
-    "@speclynx/api-languageservice": "^3.0.4",
+    "@speclynx/api-languageservice": "^3.0.5",
     "@speclynx/apidom-error": "^7.0.2",
     "@speclynx/apidom-ns-arazzo-1": "^7.0.2",
     "@speclynx/apidom-reference": "^7.0.2",
