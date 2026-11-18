@@ -16,6 +16,7 @@ import {
   isFailureActionElement,
   isStepElement,
   isSuccessActionElement,
+  isWorkflowDependsOnElement,
   isWorkflowElement,
   type SourceDescriptionElement,
   type WorkflowElement,
@@ -198,16 +199,11 @@ class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
           isStepElement(element) ||
           isCriterionElement(element) ||
           isSuccessActionElement(element) ||
-          isFailureActionElement(element);
+          isFailureActionElement(element) ||
+          isWorkflowDependsOnElement(path.parentPath?.node);
         if (!located) return;
 
-        const pointer = path.formatPath('jsonpointer');
-        element.meta.set('json-pointer', pointer);
-        if (isWorkflowElement(element) && isArrayElement(element.dependsOn)) {
-          [...element.dependsOn].forEach((entry, index) => {
-            entry.meta.set('json-pointer', `${pointer}/dependsOn/${index}`);
-          });
-        }
+        element.meta.set('json-pointer', path.formatPath('jsonpointer'));
       },
     });
   }
