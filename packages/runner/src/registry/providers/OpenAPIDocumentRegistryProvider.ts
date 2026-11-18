@@ -11,7 +11,7 @@ import {
   isStringElement,
   type Element,
 } from '@speclynx/apidom-datamodel';
-import { evaluate } from '@speclynx/apidom-json-pointer';
+import { evaluate, URIFragmentIdentifier } from '@speclynx/apidom-json-pointer';
 import {
   readFile,
   File,
@@ -180,7 +180,7 @@ class OpenAPIDocumentRegistryProvider extends DocumentRegistryProvider {
       visited.add(target);
 
       const file = url.sanitize(url.stripHash(target));
-      const jsonPointer = OpenAPIDocumentRegistryProvider.#decode(url.getHash(target).slice(1));
+      const jsonPointer = URIFragmentIdentifier.fromURIReference(target);
       const root = file === entry ? parseResult : references.find((ref) => ref.uri === file)?.value;
       const document = isParseResultElement(root) ? root.result : undefined;
       if (document === undefined) return undefined;
@@ -212,15 +212,6 @@ class OpenAPIDocumentRegistryProvider extends DocumentRegistryProvider {
       value.meta.set('ref-origin', definition.uri);
       value.meta.set('json-pointer', `${definition.jsonPointer}/${toValue(key) as string}`);
     });
-  }
-
-  // a stray `%` the reference layer tolerated must not fail the load
-  static #decode(fragment: string): string {
-    try {
-      return decodeURIComponent(fragment);
-    } catch {
-      return fragment;
-    }
   }
 
   #buildParseOptions(): ApiDOMReferenceOptions {
