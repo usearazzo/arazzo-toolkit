@@ -1,5 +1,5 @@
 import { toValue } from '@speclynx/apidom-core';
-import { isArrayElement, isStringElement, type Element } from '@speclynx/apidom-datamodel';
+import { isArrayElement, isStringElement } from '@speclynx/apidom-datamodel';
 import {
   isCriterionElement,
   type CriterionElement,
@@ -7,6 +7,7 @@ import {
 } from '@speclynx/apidom-ns-arazzo-1';
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
+import type { DocumentLocation } from '../document/APIDocument.ts';
 import type DocumentRegistry from '../registry/DocumentRegistry.ts';
 import type {
   OpenAPIOperationExecuteOptions,
@@ -121,6 +122,10 @@ export interface CriterionEvaluationRecord {
    * size are in the attempt's `openapi-operation-request-settled` event.
    */
   readonly values: Readonly<Record<string, unknown>>;
+  /**
+   * Where the criterion is written.
+   */
+  readonly location: DocumentLocation;
   /**
    * Why the condition could not be evaluated — present only then, with `met`
    * `false`.
@@ -239,8 +244,6 @@ export type StepExecuteOptions =
  * @public
  */
 class StepExecutor {
-  static readonly #criteria = new WeakMap<CriterionEvaluationRecord, Element>();
-
   readonly #document: ArazzoDocument;
   readonly #registry: DocumentRegistry;
   readonly #locatorNormalizer: OpenAPIOperationLocatorNormalizer;
@@ -517,9 +520,7 @@ class StepExecutor {
     // evaluated one after another, in list order, like the actions' criteria.
     const records: CriterionEvaluationRecord[] = [];
     for (const criterion of [...criteria] as CriterionElement[]) {
-      const record = await this.#evaluateCriterion(criterion, context);
-      StepExecutor.#criteria.set(record, criterion);
-      records.push(record);
+      records.push(await this.#evaluateCriterion(criterion, context));
     }
     return records;
   }
@@ -559,7 +560,6 @@ class StepExecutor {
         ...(await this.#evaluateCriterion(criterion, context)),
         actionName: toValue(action.name) as string,
       };
-      StepExecutor.#criteria.set(record, criterion);
       actionCriteria.push(record);
       return record.met;
     };
@@ -603,6 +603,7 @@ class StepExecutor {
     context: RuntimeExpressionContext,
   ): Promise<CriterionEvaluationRecord> {
     const condition = toValue(criterion.condition) as string;
+    const location = this.#document.locationOf(criterion);
     const values: Record<string, unknown> = {};
     const resolve = async (expression: string): Promise<unknown> => {
       const value = await this.#evaluate(context, expression);
@@ -612,8 +613,14 @@ class StepExecutor {
     };
     try {
       const { met, error } = await this.#criterionEvaluator.evaluate(criterion, resolve);
-      if (error === undefined) return { condition, met, values };
-      return { condition, met, values, diagnostic: { code: error.reason, message: error.message } };
+      if (error === undefined) return { condition, met, values, location };
+      return {
+        condition,
+        met,
+        values,
+        location,
+        diagnostic: { code: error.reason, message: error.message },
+      };
     } catch (error: unknown) {
       // a step that calls a workflow made no HTTP call, so a condition on one
       // fails like any unevaluable condition; the diagnostic keeps the
@@ -626,21 +633,12 @@ class StepExecutor {
           condition,
           met: false,
           values,
+          location,
           diagnostic: { code: error.reason, message: error.message },
         };
       }
       throw error;
     }
-  }
-
-  /**
-   * The Criterion Object a record this executor produced was evaluated from,
-   * so an event can name where the criterion is written. Records are keyed
-   * weakly: a record no one holds is forgotten with its criterion.
-   * @internal
-   */
-  static criterionOf(record: CriterionEvaluationRecord): Element | undefined {
-    return StepExecutor.#criteria.get(record);
   }
 
   /**

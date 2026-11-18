@@ -260,6 +260,10 @@ export interface RetryReferenceRecord {
  */
 export interface StepRunRecord {
   readonly stepId: string;
+  /**
+   * Where the step is written.
+   */
+  readonly location: DocumentLocation;
   readonly successful: boolean;
   readonly action: SelectedAction | undefined;
   /**
@@ -867,7 +871,6 @@ class WorkflowExecutor {
         this.#observedAttempt(
           this.#stepAttempt(step, stepId, invocation, scope, subWorkflows),
           stepFrame,
-          invocation.document,
         ),
         invocation,
         scope,
@@ -912,6 +915,7 @@ class WorkflowExecutor {
       const stepSettledAt = this.#now();
       trace.push({
         stepId: outcome.stepId,
+        location: invocation.document.locationOf(step),
         successful: outcome.successful,
         action,
         attempts,
@@ -1135,7 +1139,6 @@ class WorkflowExecutor {
   #observedAttempt(
     runAttempt: () => Promise<StepAttemptOutcome>,
     stepFrame: StepFrame,
-    document: ArazzoDocument,
   ): (attempt: number) => Promise<StepAttemptOutcome> {
     const events = this.#events;
     if (events === undefined) return runAttempt;
@@ -1144,17 +1147,13 @@ class WorkflowExecutor {
       const attemptFrame = { ...stepFrame, attempt };
       events.emit({ type: 'step-attempt', ...attemptFrame });
       const outcome = await runAttempt();
-      const locationOf = (criterion: CriterionEvaluationRecord): DocumentLocation | undefined => {
-        const element = StepExecutor.criterionOf(criterion);
-        return element === undefined ? undefined : document.locationOf(element);
-      };
       for (const criterion of outcome.successCriteria) {
         events.emit({
           type: 'criterion-evaluated',
           ...attemptFrame,
           kind: 'success',
           criterion,
-          location: locationOf(criterion),
+          location: criterion.location,
         });
       }
       for (const criterion of outcome.actionCriteria) {
@@ -1163,7 +1162,7 @@ class WorkflowExecutor {
           ...attemptFrame,
           kind: 'action',
           criterion,
-          location: locationOf(criterion),
+          location: criterion.location,
         });
       }
       return outcome;
@@ -1301,7 +1300,6 @@ class WorkflowExecutor {
         this.#observedAttempt(
           this.#stepAttempt(refStep, refStepId, invocation, scope, refSubWorkflows),
           { ...stepFrame, stepId: refStepId },
-          invocation.document,
         ),
         invocation,
         scope,
@@ -1786,7 +1784,7 @@ class WorkflowExecutor {
       );
     }
     const extracted = this.#extractor.extract(document, workflowId);
-    const location = this.#events === undefined ? undefined : document.locationOf(extracted);
+    const location = document.locationOf(extracted);
     this.#events?.emit({ type: 'workflow-normalize-start', ...frame, location });
     const workflow = await this.#normalizer.normalize(extracted, document);
     this.#events?.emit({ type: 'workflow-normalize-settled', ...frame, location });

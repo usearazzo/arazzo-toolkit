@@ -107,7 +107,7 @@ export interface DependencyStartEvent extends WorkflowExecutionEventBase {
   /**
    * Where the `dependsOn` entry is written.
    */
-  readonly location?: DocumentLocation;
+  readonly location: DocumentLocation;
   readonly dependency: WorkflowExecutionDependency;
 }
 
@@ -136,7 +136,7 @@ export interface StepStartEvent extends WorkflowExecutionStepEventBase {
   /**
    * Where the step is written.
    */
-  readonly location?: DocumentLocation;
+  readonly location: DocumentLocation;
 }
 
 /**
@@ -163,7 +163,7 @@ export interface CriterionEvaluatedEvent extends WorkflowExecutionStepEventBase 
   /**
    * Where the criterion is written.
    */
-  readonly location?: DocumentLocation;
+  readonly location: DocumentLocation;
   readonly attempt: number;
   /**
    * `success` for one of the step's `successCriteria`, `action` for a
@@ -222,7 +222,7 @@ export interface RetryReferenceStartEvent extends WorkflowExecutionStepEventBase
   /**
    * Where the `retry` action that names the reference is written.
    */
-  readonly location?: DocumentLocation;
+  readonly location: DocumentLocation;
   readonly attempt: number;
   readonly kind: RetryReferenceRecord['kind'];
   readonly id: RetryReferenceRecord['id'];
@@ -262,7 +262,7 @@ export interface WorkflowNormalizeStartEvent extends WorkflowExecutionEventBase 
   /**
    * Where the workflow is written.
    */
-  readonly location?: DocumentLocation;
+  readonly location: DocumentLocation;
 }
 
 /**
@@ -274,7 +274,7 @@ export interface WorkflowNormalizeSettledEvent extends WorkflowExecutionEventBas
   /**
    * Where the workflow is written.
    */
-  readonly location?: DocumentLocation;
+  readonly location: DocumentLocation;
 }
 
 /**

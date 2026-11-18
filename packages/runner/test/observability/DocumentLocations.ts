@@ -5,6 +5,7 @@ import { assert } from 'chai';
 
 import {
   ArazzoRunner,
+  DocumentLoadError,
   type ArazzoRunnerEvent,
   type ArazzoRunnerLoadOptions,
   type DocumentLocation,
@@ -120,6 +121,48 @@ describe('Document locations', function () {
       assert.match(action?.jsonPointer ?? '', /^\/workflows\/\d+\/failureActions\/0$/);
     },
   );
+
+  specify('should follow a chain of $ref path items to the operation', async function () {
+    const events = await run('chained-pathitem/workflow.arazzo.yaml', 'testWorkflow', {
+      sourceMap: true,
+    });
+
+    assert.deepEqual(locationsOf(events, 'openapi-operation-request-start'), [
+      {
+        uri: fixture('chained-pathitem/paths/pets.json'),
+        jsonPointer: '/collection/get',
+        line: 3,
+        column: 12,
+      },
+    ]);
+  });
+
+  specify('should locate steps and criteria in the result trace', async function () {
+    const runner = await ArazzoRunner.load(fixture('workflow-control-flow.arazzo.yaml'), {
+      httpClient: respond(500),
+      sourceMap: true,
+    });
+
+    const result = await runner.execute('inheritsFailureActions', {
+      inputs: { status: 'available' },
+    });
+
+    const [step] = result.steps;
+    assert.deepInclude(step.location, { line: 639, column: 9 });
+    assert.deepInclude(step.successCriteria[0].location, { line: 642, column: 13 });
+  });
+
+  specify('should reject a malformed document with source maps too', async function () {
+    for (const sourceMap of [false, true]) {
+      let caught: unknown;
+      try {
+        await ArazzoRunner.load(fixture('malformed.arazzo.yaml'), { sourceMap });
+      } catch (error) {
+        caught = error;
+      }
+      assert.instanceOf(caught, DocumentLoadError, `sourceMap: ${sourceMap}`);
+    }
+  });
 
   specify('should locate a dependsOn entry and a foreign workflow', async function () {
     const dependsOn = await run('cross-document.arazzo.yaml', 'crossDocumentDependsOn', {

@@ -1,6 +1,8 @@
 import type { PartialDeep } from 'type-fest';
 import type { ApiDOMReferenceOptions } from '@speclynx/apidom-reference/configuration/empty';
 import { ObjectElement, type RefElement } from '@speclynx/apidom-datamodel';
+import { toValue } from '@speclynx/apidom-core';
+import { ParseError, type ParseResultElement } from '@usearazzo/parser';
 
 import type APIDocument from '../../document/APIDocument.ts';
 
@@ -46,6 +48,18 @@ abstract class DocumentRegistryProvider {
    * Loads and produces a document from a URI.
    */
   abstract provide(uri: string): Promise<APIDocument>;
+
+  /**
+   * Rejects a document the parser could only partly read. The strict parsers
+   * throw on a syntax error; the lenient ones that source maps need record it
+   * and parse what they can instead, so a document must load with source maps
+   * exactly when it loads without.
+   */
+  protected static assertParsed(uri: string, parseResult: ParseResultElement): void {
+    const [error] = parseResult.errors;
+    if (error === undefined) return;
+    throw new ParseError(`Failed to parse the document at "${uri}": ${toValue(error)}`);
+  }
 }
 
 export default DocumentRegistryProvider;

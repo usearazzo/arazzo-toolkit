@@ -34,6 +34,7 @@ type CannedStatus = 200 | 500 | 503;
 
 interface StepBuilder {
   readonly stepId: string;
+  readonly location: StepRunRecord['location'];
   readonly startedAt: number;
   successCriteria: CriterionEvaluationRecord[];
   actionCriteria: CriterionEvaluationRecord[];
@@ -123,6 +124,7 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
       case 'step-start':
         top().step = {
           stepId: event.stepId,
+          location: event.location,
           startedAt: event.timestamp,
           successCriteria: [],
           actionCriteria: [],
@@ -172,6 +174,7 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
         const step = frame.step as StepBuilder;
         frame.steps.push({
           stepId: step.stepId,
+          location: step.location,
           successful: event.successful,
           action: step.action,
           attempts: event.attempts,

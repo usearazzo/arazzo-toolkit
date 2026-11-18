@@ -1,11 +1,22 @@
 import type { ParseResultElement } from '@usearazzo/parser';
 import { parseOpenAPI, defaultParseOpenAPIOptions } from '@usearazzo/parser';
-import { dereferenceOpenAPIElement, defaultDereferenceOpenAPIOptions } from '@usearazzo/resolver';
-import { isStringElement } from '@speclynx/apidom-datamodel';
+import {
+  dereferenceOpenAPIElement,
+  defaultDereferenceOpenAPIOptions,
+  resolveOpenAPIElement,
+} from '@usearazzo/resolver';
+import {
+  isObjectElement,
+  isParseResultElement,
+  isStringElement,
+  type Element,
+} from '@speclynx/apidom-datamodel';
+import { evaluate } from '@speclynx/apidom-json-pointer';
 import {
   readFile,
   File,
   mergeOptions,
+  url,
   type ApiDOMReferenceOptions,
 } from '@speclynx/apidom-reference/configuration/empty';
 import { UnmatchedResolverError } from '@speclynx/apidom-reference/configuration/empty';
@@ -89,12 +100,16 @@ class OpenAPIDocumentRegistryProvider extends DocumentRegistryProvider {
    */
   async provide(uri: string): Promise<OpenAPIDocument> {
     const parseResult: ParseResultElement = await parseOpenAPI(uri, this.#buildParseOptions());
-    const operationIndex = await this.#buildOperationIndex(parseResult);
+    DocumentRegistryProvider.assertParsed(uri, parseResult);
+    const operationIndex = await this.#buildOperationIndex(uri, parseResult);
 
     return new OpenAPIDocument(uri, parseResult, operationIndex);
   }
 
-  async #buildOperationIndex(parseResult: ParseResultElement): Promise<OpenAPIOperationIndex> {
+  async #buildOperationIndex(
+    uri: string,
+    parseResult: ParseResultElement,
+  ): Promise<OpenAPIOperationIndex> {
     const index = new OpenAPIOperationIndex();
     const dereferenceOptions = this.#buildDereferenceOptions(parseResult);
 
@@ -105,7 +120,16 @@ class OpenAPIDocumentRegistryProvider extends DocumentRegistryProvider {
         if (!pathItem.hasMetaProperty('path')) return path.skip();
         if (!isStringElement(pathItem.$ref)) return;
 
+        const definition = await OpenAPIDocumentRegistryProvider.#definitionOf(
+          pathItem,
+          uri,
+          parseResult,
+          dereferenceOptions,
+        );
         const pathItemDereferenced = await dereferenceOpenAPIElement(pathItem, dereferenceOptions);
+        if (definition !== undefined) {
+          OpenAPIDocumentRegistryProvider.#recordOperations(pathItemDereferenced, definition);
+        }
         path.replaceWith(pathItemDereferenced);
       },
 
@@ -126,6 +150,73 @@ class OpenAPIDocumentRegistryProvider extends DocumentRegistryProvider {
     parseResult.replaceResult(apiDereferenced!);
 
     return index;
+  }
+
+  /**
+   * Where the Path Item Object a `$ref` path item stands for is written: the
+   * reference followed through every further `$ref` it lands on, across the
+   * files it references. `undefined` when the chain cannot be followed (a
+   * cycle, or a target outside the files the path item references).
+   */
+  static async #definitionOf(
+    pathItem: OpenAPIPathItemElement,
+    uri: string,
+    parseResult: ParseResultElement,
+    options: ApiDOMReferenceOptions,
+  ): Promise<{ uri: string; jsonPointer: string } | undefined> {
+    const references = await resolveOpenAPIElement(pathItem, options);
+    const entry = url.sanitize(url.stripHash(uri));
+    const visited = new Set<string>();
+    let base = uri;
+    let reference = toValue(pathItem.$ref) as string;
+
+    for (;;) {
+      const target = url.resolve(base, reference);
+      if (visited.has(target)) return undefined;
+      visited.add(target);
+
+      const file = url.sanitize(url.stripHash(target));
+      const jsonPointer = OpenAPIDocumentRegistryProvider.#decode(url.getHash(target).slice(1));
+      const root = file === entry ? parseResult : references.find((ref) => ref.uri === file)?.value;
+      const document = isParseResultElement(root) ? root.result : undefined;
+      if (document === undefined) return undefined;
+
+      let element: Element;
+      try {
+        element = evaluate<Element>(document, jsonPointer);
+      } catch {
+        return undefined;
+      }
+      const next = isObjectElement(element) ? element.get('$ref') : undefined;
+      if (!isStringElement(next)) return { uri: file, jsonPointer };
+      base = file;
+      reference = toValue(next) as string;
+    }
+  }
+
+  /**
+   * Records, on each operation of a dereferenced path item, the document and
+   * JSON Pointer it is written at, for the events to locate it by.
+   */
+  static #recordOperations(
+    pathItem: Element,
+    definition: { uri: string; jsonPointer: string },
+  ): void {
+    if (!isObjectElement(pathItem)) return;
+    pathItem.forEach((value, key) => {
+      if (value.element !== 'operation') return;
+      value.meta.set('ref-origin', definition.uri);
+      value.meta.set('json-pointer', `${definition.jsonPointer}/${toValue(key) as string}`);
+    });
+  }
+
+  // a stray `%` the reference layer tolerated must not fail the load
+  static #decode(fragment: string): string {
+    try {
+      return decodeURIComponent(fragment);
+    } catch {
+      return fragment;
+    }
   }
 
   #buildParseOptions(): ApiDOMReferenceOptions {

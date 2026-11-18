@@ -1,0 +1,8 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Chained path item", "version": "1.0.0" },
+  "servers": [{ "url": "https://api.example.com" }],
+  "paths": {
+    "/pets": { "$ref": "./paths/alias.json#/pets" }
+  }
+}

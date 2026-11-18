@@ -72,10 +72,12 @@ export interface ArazzoRunnerLoadOptions
    */
   readonly reference?: ArazzoRunnerReferenceOptions;
   /**
-   * Parses the documents with source maps, so the `location` of every event
-   * carries a line and column. Off by default: source-mapped parsing is
-   * slower and keeps more in memory. A `registry` passed alongside parses as
-   * its own providers say.
+   * Parses the documents with source maps, so every `location` (on events,
+   * and on the result's steps and criteria) carries a line and column. Off by
+   * default: source-mapped parsing is slower and keeps more in memory. It
+   * changes no other behaviour: a document that fails to parse without it
+   * fails with it. A `registry` passed alongside parses as its own providers
+   * say.
    */
   readonly sourceMap?: boolean;
   /**

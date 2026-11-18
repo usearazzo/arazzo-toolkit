@@ -102,6 +102,7 @@ class ArazzoDocumentRegistryProvider extends DocumentRegistryProvider {
    */
   async provide(uri: string): Promise<ArazzoDocument> {
     const parseResult = await parseArazzo(uri, this.#buildParseOptions());
+    DocumentRegistryProvider.assertParsed(uri, parseResult);
     const { workflowIndex, stepIndex, sourceDescriptionIndex } = this.#buildIndexes(
       uri,
       parseResult,

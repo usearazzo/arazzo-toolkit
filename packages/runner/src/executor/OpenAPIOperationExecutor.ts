@@ -385,7 +385,7 @@ class OpenAPIOperationExecutor {
     // observer.
     let located: DocumentLocation | undefined;
     const location = (): DocumentLocation =>
-      (located ??= locator.document.operationLocation(operation, locator.jsonPointer));
+      (located ??= locator.document.locationOf(operation, locator.jsonPointer));
     const declaredOperationId = toValue(operation.operationId);
     const context: RequestContext = {
       operation: {

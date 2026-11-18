@@ -1,0 +1,3 @@
+{
+  "pets": { "$ref": "./pets.json#/collection" }
+}
