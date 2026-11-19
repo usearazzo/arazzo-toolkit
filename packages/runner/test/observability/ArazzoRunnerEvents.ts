@@ -110,13 +110,15 @@ describe('ArazzoRunner events', function () {
   });
 
   specify(
-    'should keep the runId of request events whatever an interceptor does',
+    'should keep request events as they were whatever an interceptor does',
     async function () {
       const events: ArazzoRunnerEvent[] = [];
       const runner = await ArazzoRunner.load(entryPath, {
         httpClient,
         requestInterceptor: (_request, context) => {
-          (context as { runId?: string }).runId = 'rewritten';
+          const writable = context as { runId?: string; operation: { jsonPointer: string } };
+          writable.runId = 'rewritten';
+          writable.operation.jsonPointer = '/rewritten';
         },
         observer: (event) => events.push(event),
       });
@@ -128,7 +130,10 @@ describe('ArazzoRunner events', function () {
         event.type.startsWith('openapi-operation-request-'),
       );
       assert.isNotEmpty(requests);
-      for (const event of requests) assert.strictEqual(event.runId, start?.runId);
+      for (const event of requests) {
+        assert.strictEqual(event.runId, start?.runId);
+        assert.notStrictEqual(event.operation.jsonPointer, '/rewritten');
+      }
     },
   );
 

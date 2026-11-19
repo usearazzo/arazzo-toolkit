@@ -410,8 +410,6 @@ class OpenAPIOperationExecutor {
     this.#events?.emit({
       type: 'openapi-operation-normalize-start',
       ...context,
-      // explicit, so an interceptor editing the context cannot change it
-      runId,
       location: location(),
     });
     const normalizedOperation = await this.#operationNormalizer.normalize(
@@ -421,14 +419,12 @@ class OpenAPIOperationExecutor {
     this.#events?.emit({
       type: 'openapi-operation-normalize-settled',
       ...context,
-      runId,
       location: location(),
     });
     const assembled = this.#documentAssembler.assemble(normalizedOperation, locator.document);
     this.#events?.emit({
       type: 'openapi-operation-assembled',
       ...context,
-      runId,
       location: location(),
     });
 
@@ -492,7 +488,9 @@ class OpenAPIOperationExecutor {
     }
 
     this.#deliverHeadersAndCookies(request, undeclared);
-    request = await this.#finalizeRequest(request, requestInterceptor, context);
+    // the interceptors get a copy: what they do to it must not reach the events
+    // built from the context after them
+    request = await this.#finalizeRequest(request, requestInterceptor, structuredClone(context));
 
     // capture the request as sent, so `$url` / `$method` / `$request.*` can be
     // evaluated after execution; headers are copied so a transport-side
@@ -507,7 +505,6 @@ class OpenAPIOperationExecutor {
     this.#events?.emit({
       type: 'openapi-operation-request-start',
       ...context,
-      runId,
       location: location(),
       request: {
         method: request.method,
@@ -531,7 +528,6 @@ class OpenAPIOperationExecutor {
     this.#events?.emit({
       type: 'openapi-operation-request-settled',
       ...context,
-      runId,
       location: location(),
       response: {
         status: response.status,
