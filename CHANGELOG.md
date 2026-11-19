@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.34](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.33...v1.0.1-alpha.34) (2026-11-19)
+
+### Features
+
+- **runner:** emit HTTP request events, redact at export ([#356](https://github.com/usearazzo/arazzo-toolkit/issues/356)) ([e872d25](https://github.com/usearazzo/arazzo-toolkit/commit/e872d25bc6af721c25b0cf0aec515ebf4ab785f3)), closes [#85](https://github.com/usearazzo/arazzo-toolkit/issues/85)
+- **runner:** emit structured execution events to an observer ([#355](https://github.com/usearazzo/arazzo-toolkit/issues/355)) ([3eacded](https://github.com/usearazzo/arazzo-toolkit/commit/3eacdedf2dd777a404433f69e3747006f48ce877)), closes [#85](https://github.com/usearazzo/arazzo-toolkit/issues/85)
+- **runner:** locate events and trace records in their documents ([#362](https://github.com/usearazzo/arazzo-toolkit/issues/362)) ([013c4cb](https://github.com/usearazzo/arazzo-toolkit/commit/013c4cb9d2abb7da3452e44ecf2496007fd9a6b8)), closes [#85](https://github.com/usearazzo/arazzo-toolkit/issues/85)
+
 ## [1.0.1-alpha.33](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.32...v1.0.1-alpha.33) (2026-11-16)
 
 ### Bug Fixes

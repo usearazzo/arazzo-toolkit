@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.34](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.33...v1.0.1-alpha.34) (2026-11-19)
+
+### Features
+
+- **runner:** locate events and trace records in their documents ([#362](https://github.com/usearazzo/arazzo-toolkit/issues/362)) ([013c4cb](https://github.com/usearazzo/arazzo-toolkit/commit/013c4cb9d2abb7da3452e44ecf2496007fd9a6b8)), closes [#85](https://github.com/usearazzo/arazzo-toolkit/issues/85)
+
 ## [1.0.1-alpha.33](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.32...v1.0.1-alpha.33) (2026-11-16)
 
 **Note:** Version bump only for package @usearazzo/resolver
