@@ -91,6 +91,24 @@ describe('ArazzoRunner events', function () {
     assert.deepEqual(operations[0].step, { workflowId: 'linear', stepId: 'findPets' });
   });
 
+  specify("should hand interceptors the run's runId", async function () {
+    const events: ArazzoRunnerEvent[] = [];
+    const contexts: RequestContext[] = [];
+    const runner = await ArazzoRunner.load(entryPath, {
+      httpClient,
+      requestInterceptor: (_request, context) => {
+        contexts.push(context);
+      },
+      observer: (event) => events.push(event),
+    });
+
+    await runner.execute('linear', { inputs: { status: 'available' } });
+
+    const start = events.find((event) => event.type === 'workflow-start');
+    assert.isNotEmpty(contexts);
+    for (const context of contexts) assert.strictEqual(context.runId, start?.runId);
+  });
+
   specify("should not share an interceptor's request context with events", async function () {
     const contexts: RequestContext[] = [];
     const events: ArazzoRunnerEvent[] = [];
