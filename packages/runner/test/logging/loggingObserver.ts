@@ -61,6 +61,19 @@ describe('loggingObserver', function () {
     assert.strictEqual(workflow.message, 'workflow linear failed');
   });
 
+  specify('should leave the failure of a transfer target to the target', async function () {
+    const records = await run('transfersToTarget', 500);
+
+    const settled = byType(records, 'workflow-settled');
+    const source = settled.find((record) => record.fields.workflowId === 'transfersToTarget');
+    const target = settled.find((record) => record.fields.workflowId === 'transferTarget');
+    assert.deepEqual(
+      [source?.level, source?.message],
+      ['info', 'workflow transfersToTarget transferred'],
+    );
+    assert.deepEqual([target?.level, target?.message], ['error', 'workflow transferTarget failed']);
+  });
+
   specify('should mask credentials in messages and fields', async function () {
     const records = await run('linear', 200);
 
