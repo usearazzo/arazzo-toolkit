@@ -155,9 +155,18 @@ const openTelemetryObserver = (
     release(runId, spans);
   };
 
-  // an event of the innermost open span: the step's, for the events below
-  const addEvent = (runId: string, name: string, attributes: Attributes): void => {
-    runs.get(keyOf(runId))?.stack.at(-1)?.addEvent(name, attributes);
+  // an event of the innermost open span: the step's, for the events below. It
+  // names its step, since a retry's stepId reference reports under the
+  // referenced step while the retrying step's span is the one open
+  const addEvent = (
+    event: { readonly runId: string; readonly stepId: string },
+    name: string,
+    attributes: Attributes,
+  ): void => {
+    runs
+      .get(keyOf(event.runId))
+      ?.stack.at(-1)
+      ?.addEvent(name, { 'arazzo.step.id': event.stepId, ...attributes });
   };
 
   const locationAttributes = ({ uri, jsonPointer }: DocumentLocation): Attributes => ({
@@ -196,10 +205,10 @@ const openTelemetryObserver = (
         settle(event.runId, !event.successful, { 'arazzo.step.attempts': event.attempts });
         return;
       case 'step-attempt':
-        addEvent(event.runId, 'attempt', { 'arazzo.step.attempt': event.attempt });
+        addEvent(event, 'attempt', { 'arazzo.step.attempt': event.attempt });
         return;
       case 'criterion-evaluated':
-        addEvent(event.runId, 'criterion', {
+        addEvent(event, 'criterion', {
           'arazzo.step.attempt': event.attempt,
           'arazzo.criterion.kind': event.kind,
           'arazzo.criterion.condition': event.criterion.condition,
@@ -207,7 +216,7 @@ const openTelemetryObserver = (
         });
         return;
       case 'action-selected':
-        addEvent(event.runId, 'action', {
+        addEvent(event, 'action', {
           'arazzo.step.attempt': event.attempt,
           'arazzo.action.transition': event.transition.kind,
           ...(event.action === undefined
@@ -216,14 +225,14 @@ const openTelemetryObserver = (
         });
         return;
       case 'retry-wait':
-        addEvent(event.runId, 'retry-wait', {
+        addEvent(event, 'retry-wait', {
           'arazzo.step.attempt': event.attempt,
           'arazzo.retry.delay_ms': event.delayMs,
         });
         return;
       case 'retry-reference-start':
       case 'retry-reference-settled':
-        addEvent(event.runId, event.type, {
+        addEvent(event, event.type, {
           'arazzo.step.attempt': event.attempt,
           'arazzo.retry.reference.kind': event.kind,
           'arazzo.retry.reference.id': event.id,
@@ -250,7 +259,11 @@ const openTelemetryObserver = (
         span.updateName(event.request.method);
         span.setAttributes({
           'http.request.method': event.request.method,
-          'url.full': redactor.event(event).request.url,
+          // only the URL is masked: headers and a captured body are not walked
+          'url.full': redactor.event({
+            ...event,
+            request: { ...event.request, headers: {}, body: undefined },
+          }).request.url,
         });
         return;
       }
