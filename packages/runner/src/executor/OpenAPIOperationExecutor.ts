@@ -488,9 +488,13 @@ class OpenAPIOperationExecutor {
     }
 
     this.#deliverHeadersAndCookies(request, undeclared);
-    // the interceptors get a copy: what they do to it must not reach the events
-    // built from the context after them
-    request = await this.#finalizeRequest(request, requestInterceptor, structuredClone(context));
+    // the interceptors share a copy: what they do to it must not reach the
+    // events built from the context after them
+    const interceptorContext =
+      this.#requestInterceptor === undefined && requestInterceptor === undefined
+        ? context
+        : structuredClone(context);
+    request = await this.#finalizeRequest(request, requestInterceptor, interceptorContext);
 
     // capture the request as sent, so `$url` / `$method` / `$request.*` can be
     // evaluated after execution; headers are copied so a transport-side
