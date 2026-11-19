@@ -65,7 +65,8 @@ const defaultLevel = (event: ArazzoRunnerEvent): LogLevel => {
     case 'step-start':
       return 'info';
     case 'workflow-settled':
-      return event.settledStatus === 'failed' ? 'error' : 'info';
+      // a transferred workflow did not fail itself: its target reports its own outcome
+      return event.status === 'failed' ? 'error' : 'info';
     case 'step-settled':
       return event.successful ? 'info' : 'warn';
     default:
@@ -80,9 +81,7 @@ const message = (event: ArazzoRunnerEvent): string => {
     case 'workflow-start':
       return `workflow ${event.workflowId} started${event.via === 'root' ? '' : ` (${event.via})`}`;
     case 'workflow-settled':
-      return event.status === 'transferred'
-        ? `workflow ${event.workflowId} transferred`
-        : `workflow ${event.workflowId} ${event.settledStatus}`;
+      return `workflow ${event.workflowId} ${event.status}`;
     case 'workflow-normalize-start':
       return `workflow ${event.workflowId} normalizing`;
     case 'workflow-normalize-settled':
@@ -165,8 +164,9 @@ const fields = (event: ArazzoRunnerEvent): Readonly<Record<string, unknown>> => 
  * Events carry no level, so this adapter gives them one: `info` for workflows
  * and steps starting and settling, `warn` for a failed step, `error` for a
  * failed workflow, and `debug` for attempts, criteria, actions, retries,
- * document loads, normalization and requests. `levels` overrides it per event
- * type.
+ * dependencies, document loads, normalization and requests. A workflow that
+ * transferred to another is `info`: the workflow it transferred to reports its
+ * own outcome. `levels` overrides it per event type.
  *
  * ```js
  * import pino from 'pino';
