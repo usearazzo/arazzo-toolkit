@@ -62,26 +62,32 @@ export interface EventStream extends AsyncIterable<ArazzoRunnerEvent> {
  * cancelled stream) stops the queuing: the run goes on unobserved.
  * @public
  */
+/**
+ * Queued after the last event by `error()`, so the events before it are
+ * still read.
+ */
+interface Failure {
+  readonly failure: unknown;
+}
+
+const isFailure = (chunk: ArazzoRunnerEvent | Failure): chunk is Failure => 'failure' in chunk;
+
 const eventStream = (options: EventStreamOptions = {}): EventStream => {
   const redactor = options.redactor ?? new Redactor();
-  // queued after the last event by error(), so the events before it are still read
-  const failure = Symbol('failure');
-  let reason: unknown;
-  let controller!: ReadableStreamDefaultController<ArazzoRunnerEvent | typeof failure>;
+  let controller!: ReadableStreamDefaultController<ArazzoRunnerEvent | Failure>;
   let open = true;
 
-  const source = new ReadableStream<ArazzoRunnerEvent | typeof failure>({
+  const stream = new ReadableStream<ArazzoRunnerEvent | Failure>({
     start(streamController) {
       controller = streamController;
     },
     cancel() {
       open = false;
     },
-  });
-  const stream = source.pipeThrough(
-    new TransformStream<ArazzoRunnerEvent | typeof failure, ArazzoRunnerEvent>({
+  }).pipeThrough(
+    new TransformStream<ArazzoRunnerEvent | Failure, ArazzoRunnerEvent>({
       transform(chunk, output) {
-        if (chunk === failure) output.error(reason);
+        if (isFailure(chunk)) output.error(chunk.failure);
         else output.enqueue(chunk);
       },
     }),
@@ -97,28 +103,14 @@ const eventStream = (options: EventStreamOptions = {}): EventStream => {
       open = false;
       controller.close();
     },
-    error: (cause) => {
+    error: (reason) => {
       if (!open) return;
       open = false;
-      reason = cause;
-      controller.enqueue(failure);
+      controller.enqueue({ failure: reason });
       controller.close();
     },
-    async *[Symbol.asyncIterator]() {
-      const reader = stream.getReader();
-      try {
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) return;
-          yield value;
-        }
-      } finally {
-        // a consumer that breaks out early cancels the stream, ending the queuing;
-        // a stream already closed or failed has nothing left to cancel
-        await reader.cancel().catch(() => undefined);
-        reader.releaseLock();
-      }
-    },
+    // a consumer that breaks out early cancels the stream, ending the queuing
+    [Symbol.asyncIterator]: () => stream[Symbol.asyncIterator](),
   };
 };
 
