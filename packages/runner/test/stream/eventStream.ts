@@ -67,6 +67,24 @@ describe('eventStream', function () {
     assert.match((caught as Error).message, /noSuchWorkflow/);
   });
 
+  specify('should deliver the events queued before error, then reject', async function () {
+    const events = eventStream();
+    events.observer({ type: 'document-load-start', timestamp: 0, uri: 'a' });
+    events.observer({ type: 'document-load-settled', timestamp: 1, uri: 'a' });
+    events.error(new Error('run failed'));
+
+    const read: string[] = [];
+    let caught: unknown;
+    try {
+      for await (const event of events) read.push(event.type);
+    } catch (error) {
+      caught = error;
+    }
+
+    assert.deepEqual(read, ['document-load-start', 'document-load-settled']);
+    assert.strictEqual((caught as Error).message, 'run failed');
+  });
+
   specify('should stop queuing when the consumer stops early', async function () {
     const events = eventStream();
     const runner = await load(events);
