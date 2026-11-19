@@ -59,7 +59,33 @@ A runner is four building blocks, composed bottom-up; `ArazzoRunner` composes th
   <img alt="Runner architecture: WorkflowExecutor runs steps through StepExecutor, which runs OpenAPI operations through OpenAPIOperationExecutor and the HTTPClient; DocumentRegistry supplies documents to all three executors" src="https://raw.githubusercontent.com/usearazzo/arazzo-toolkit/main/packages/runner/assets/architecture.svg">
 </p>
 
-A step whose criteria go unmet is a result, not an error: the run resolves with `status: 'failed'`. A criterion whose condition cannot be evaluated (an invalid regex, JSONPath, XPath or simple condition, or non-XML data under an `xpath` query) counts as unmet, as Arazzo 1.1.0 requires, rather than throwing. So does a criterion of a step that calls a workflow when it reads `$statusCode`, `$url`, `$method`, `$request` or `$response`: that step made no HTTP call. Each step record's `successCriteria` and `actionCriteria` list every criterion its last attempt evaluated, as a `CriterionEvaluationRecord` with the condition, whether it was met, the action's name for an action criterion and, when it could not be evaluated, a `diagnostic` with a `code` and `message`, never request or response data. The type-specific criterion evaluators raise an unevaluable condition as `CriterionEvaluationError`, a `CriterionError` subclass, and every `CriterionError` carries a `reason`. `CriterionError`, `ExecutionError`, `ResolverError` and `RuntimeExpressionError` each list the reasons they can carry as static fields (`CriterionError.InvalidRegex`, `ExecutionError.OperationNotFound`), typed by `CriterionErrorReason`, `ExecutionErrorReason`, `ResolverErrorReason` and `RuntimeExpressionErrorReason`. Only a document that cannot be loaded or run as written, a request that cannot be built or sent, or a cancelled run throws, and every such error extends `ArazzoRunnerError`; a document that cannot be read or loaded (a missing file, an HTTP error, an unresolvable reference) throws `DocumentLoadError` with the underlying failure as its `cause`.
+### Failed runs and errors
+
+A run that goes wrong mostly comes back as a result, not an exception.
+
+**A failed step doesn't throw.** When a step's criteria go unmet, the run resolves with `status: 'failed'`.
+
+**A criterion that can't be evaluated counts as unmet**, as Arazzo 1.1.0 requires. That covers:
+
+- an invalid regex, JSONPath, XPath or simple condition;
+- non-XML data under an `xpath` query;
+- `$statusCode`, `$url`, `$method`, `$request` or `$response` read by a step that calls a workflow, which made no HTTP call.
+
+**Every criterion is recorded.** A step record's `successCriteria` and `actionCriteria` list each criterion its last attempt evaluated, as a `CriterionEvaluationRecord`:
+
+- the condition, and whether it was met;
+- for an action criterion, the action's name;
+- when it couldn't be evaluated, a `diagnostic` with a `code` and a `message`. A diagnostic never includes request or response data.
+
+**Only three things throw:**
+
+- a document that can't be loaded or run as written;
+- a request that can't be built or sent;
+- a cancelled run.
+
+Every error the runner throws extends `ArazzoRunnerError`. A document that can't be read or loaded (a missing file, an HTTP error, an unresolvable reference) throws `DocumentLoadError`, with the underlying failure as its `cause`.
+
+**Errors carry a reason you can compare.** `CriterionError`, `ExecutionError`, `ResolverError` and `RuntimeExpressionError` list their reasons as static fields, such as `ExecutionError.OperationNotFound`. Each `reason` is typed: `ExecutionErrorReason` and its siblings. The type-specific criterion evaluators (`RegexCriterionEvaluator` and its siblings) throw an unevaluable condition as `CriterionEvaluationError`, a `CriterionError` subclass. `CriterionEvaluator` and the runner turn it into an unmet criterion, so you only see it when you call a type-specific evaluator directly.
 
 ## Installation
 
