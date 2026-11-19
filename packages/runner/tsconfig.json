@@ -1,14 +1,7 @@
 {
   "extends": "../../tsconfig.json",
-  "include": [
-    "src/**/*",
-    "test/**/*"
-  ],
+  "include": ["src/**/*", "test/**/*"],
   "compilerOptions": {
-    "paths": {
-      "@usearazzo/runner": [
-        "./src/index.ts"
-      ]
-    }
+    "paths": { "@usearazzo/runner": ["./src/index.ts"] }
   }
 }
