@@ -147,6 +147,26 @@ describe('Document locations', function () {
     assert.deepEqual(startOf(location), [3, 12]);
   });
 
+  specify(
+    'should locate an operation written next to a $ref where it is written',
+    async function () {
+      const events = await run('sibling-pathitem/workflow.arazzo.yaml', 'testWorkflow', {
+        sourceMap: true,
+      });
+
+      const [sibling, referenced] = locationsOf(events, 'openapi-operation-request-start');
+      assert.deepEqual(placeOf(sibling), {
+        uri: fixture('sibling-pathitem/openapi.json'),
+        jsonPointer: '/paths/~1pets/post',
+      });
+      assert.deepEqual(startOf(sibling), [8, 15]);
+      assert.deepEqual(placeOf(referenced), {
+        uri: fixture('sibling-pathitem/paths/pets.json'),
+        jsonPointer: '/collection/get',
+      });
+    },
+  );
+
   specify('should locate steps and criteria in the result trace', async function () {
     const runner = await ArazzoRunner.load(fixture('workflow-control-flow.arazzo.yaml'), {
       httpClient: respond(500),

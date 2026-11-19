@@ -109,6 +109,12 @@ class OpenAPIDocumentRegistryProvider extends DocumentRegistryProvider {
         if (!pathItem.hasMetaProperty('path')) return path.skip();
         if (!isStringElement(pathItem.$ref)) return;
 
+        // an operation written next to the `$ref` stays where it is written
+        const pointer = path.formatPath('jsonpointer');
+        pathItem.forEach((value, key) => {
+          if (value.element !== 'operation') return;
+          value.meta.set('json-pointer', `${pointer}/${toValue(key) as string}`);
+        });
         path.replaceWith(await dereferenceOpenAPIElement(pathItem, dereferenceOptions));
       },
 
@@ -117,15 +123,18 @@ class OpenAPIDocumentRegistryProvider extends DocumentRegistryProvider {
         const operationId = toValue(operation.operationId);
         const pointer = path.formatPath('jsonpointer');
         // where the operation is written, for the events to locate it by: an
-        // operation of a `$ref` path item is written where that path item is
-        const member = path.parentPath?.node as MemberElement;
-        const pathItem = path.parentPath?.parentPath?.node as Element;
-        const definition = toValue(pathItem.meta.get('ref-origin-pointer'));
-        if (typeof definition === 'string') {
-          operation.meta.set('ref-origin', toValue(pathItem.meta.get('ref-origin')));
-          operation.meta.set('json-pointer', `${definition}/${toValue(member.key) as string}`);
-        } else {
-          operation.meta.set('json-pointer', pointer);
+        // operation of a `$ref` path item is written where that path item is,
+        // unless it was written next to the `$ref` and so already located
+        if (!operation.hasMetaProperty('json-pointer')) {
+          const member = path.parentPath?.node as MemberElement;
+          const pathItem = path.parentPath?.parentPath?.node as Element;
+          const definition = toValue(pathItem.meta.get('ref-origin-pointer'));
+          if (typeof definition === 'string') {
+            operation.meta.set('ref-origin', toValue(pathItem.meta.get('ref-origin')));
+            operation.meta.set('json-pointer', `${definition}/${toValue(member.key) as string}`);
+          } else {
+            operation.meta.set('json-pointer', pointer);
+          }
         }
 
         if (typeof operationId !== 'string') return path.skip();
