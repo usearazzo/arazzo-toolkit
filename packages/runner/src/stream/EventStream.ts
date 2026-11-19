@@ -36,8 +36,9 @@ export interface EventStream extends AsyncIterable<ArazzoRunnerEvent> {
    */
   close(): void;
   /**
-   * Fails the stream: reading it then rejects with `reason`. Call it when
-   * `execute` rejects; events after it are dropped.
+   * Fails the stream once the queued events are read: reading it then rejects
+   * with `reason`. Call it when `execute` rejects; events after it are
+   * dropped.
    */
   error(reason: unknown): void;
 }
@@ -63,10 +64,13 @@ export interface EventStream extends AsyncIterable<ArazzoRunnerEvent> {
  */
 const eventStream = (options: EventStreamOptions = {}): EventStream => {
   const redactor = options.redactor ?? new Redactor();
-  let controller!: ReadableStreamDefaultController<ArazzoRunnerEvent>;
+  // queued after the last event by error(), so the events before it are still read
+  const failure = Symbol('failure');
+  let reason: unknown;
+  let controller!: ReadableStreamDefaultController<ArazzoRunnerEvent | typeof failure>;
   let open = true;
 
-  const stream = new ReadableStream<ArazzoRunnerEvent>({
+  const source = new ReadableStream<ArazzoRunnerEvent | typeof failure>({
     start(streamController) {
       controller = streamController;
     },
@@ -74,6 +78,14 @@ const eventStream = (options: EventStreamOptions = {}): EventStream => {
       open = false;
     },
   });
+  const stream = source.pipeThrough(
+    new TransformStream<ArazzoRunnerEvent | typeof failure, ArazzoRunnerEvent>({
+      transform(chunk, output) {
+        if (chunk === failure) output.error(reason);
+        else output.enqueue(chunk);
+      },
+    }),
+  );
 
   return {
     observer: (event) => {
@@ -85,10 +97,12 @@ const eventStream = (options: EventStreamOptions = {}): EventStream => {
       open = false;
       controller.close();
     },
-    error: (reason) => {
+    error: (cause) => {
       if (!open) return;
       open = false;
-      controller.error(reason);
+      reason = cause;
+      controller.enqueue(failure);
+      controller.close();
     },
     async *[Symbol.asyncIterator]() {
       const reader = stream.getReader();
