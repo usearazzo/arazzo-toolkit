@@ -79,6 +79,8 @@ describe('openTelemetryObserver', function () {
       step.events.map((event) => event.name),
       ['attempt', 'criterion', 'action'],
     );
+    for (const event of step.events)
+      assert.strictEqual(event.attributes?.['arazzo.step.id'], 'findPets');
   });
 
   specify('should mark a failed step, workflow and request as errors', async function () {
