@@ -44,6 +44,16 @@ export interface EventStream extends AsyncIterable<ArazzoRunnerEvent> {
 }
 
 /**
+ * Queued after the last event by `error()`, so the events before it are
+ * still read.
+ */
+interface Failure {
+  readonly failure: unknown;
+}
+
+const isFailure = (chunk: ArazzoRunnerEvent | Failure): chunk is Failure => 'failure' in chunk;
+
+/**
  * Turns a run's events into a stream. The run cannot end it itself (one
  * that throws leaves its workflows unsettled), so the caller ends it:
  *
@@ -62,16 +72,6 @@ export interface EventStream extends AsyncIterable<ArazzoRunnerEvent> {
  * cancelled stream) stops the queuing: the run goes on unobserved.
  * @public
  */
-/**
- * Queued after the last event by `error()`, so the events before it are
- * still read.
- */
-interface Failure {
-  readonly failure: unknown;
-}
-
-const isFailure = (chunk: ArazzoRunnerEvent | Failure): chunk is Failure => 'failure' in chunk;
-
 const eventStream = (options: EventStreamOptions = {}): EventStream => {
   const redactor = options.redactor ?? new Redactor();
   let controller!: ReadableStreamDefaultController<ArazzoRunnerEvent | Failure>;
