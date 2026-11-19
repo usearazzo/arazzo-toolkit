@@ -146,6 +146,7 @@ const result = await runner.execute('authenticateAndOrderPet', {
 | Mask credentials before logging or exporting events | `new Redactor().event(event)` | [Observing a run](https://usearazzo.com/docs/runner/#observability) |
 | Send the events to several consumers at once | `combineObservers(...observers)` | [Observing a run](https://usearazzo.com/docs/runner/#observability) |
 | Log a run through pino, winston, the console or any logger, masked | `loggingObserver(log)` from `@usearazzo/runner/logging` | [Observing a run](https://usearazzo.com/docs/runner/#observability) |
+| Read a run's events with `for await`, or pipe them as a `ReadableStream`, masked | `eventStream()` from `@usearazzo/runner/stream` | [Observing a run](https://usearazzo.com/docs/runner/#observability) |
 | Compose the building blocks yourself | `DocumentRegistry`, the executors | [Runner API Reference](https://usearazzo.com/docs/runner/) |
 
 Retrieving documents and calling APIs are separate: credentials for one never reach the other.
