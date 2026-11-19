@@ -170,6 +170,7 @@ export type {
   ArazzoRunnerEventBase,
   ArazzoRunnerObserver,
 } from './observability/ArazzoRunnerEvent.ts';
+export { default as combineObservers } from './observability/combineObservers.ts';
 export type {
   WorkflowExecutionEvent,
   WorkflowExecutionEventBase,
