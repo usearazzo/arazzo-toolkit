@@ -37,6 +37,11 @@
       "types": "./types/logging.d.ts",
       "import": "./src/logging/index.mjs",
       "require": "./src/logging/index.cjs"
+    },
+    "./stream": {
+      "types": "./types/stream.d.ts",
+      "import": "./src/stream/index.mjs",
+      "require": "./src/stream/index.cjs"
     }
   },
   "types": "./types/runner.d.ts",
@@ -44,6 +49,9 @@
     "*": {
       "logging": [
         "./types/logging.d.ts"
+      ],
+      "stream": [
+        "./types/stream.d.ts"
       ]
     }
   },
@@ -57,7 +65,7 @@
     "lint:fix": "eslint ./ --fix",
     "clean": "rimraf --glob 'src/**/*.mjs' 'src/**/*.cjs' 'test/**/*.mjs' ./dist ./types",
     "typescript:check-types": "tsc --noEmit",
-    "typescript:declaration": "tsc -p tsconfig.declaration.json && api-extractor run -l -c ./config/api-extractor/api-extractor.json && api-extractor run -l -c ./config/api-extractor/logging.json",
+    "typescript:declaration": "tsc -p tsconfig.declaration.json && api-extractor run -l -c ./config/api-extractor/api-extractor.json && api-extractor run -l -c ./config/api-extractor/logging.json && api-extractor run -l -c ./config/api-extractor/stream.json",
     "test": "npm run build:es && cross-env BABEL_ENV=es babel test --out-dir test --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward' && cross-env NODE_ENV=test mocha",
     "test:e2e": "npm run build:es && cross-env BABEL_ENV=es babel test --out-dir test --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward' && cross-env NODE_ENV=test mocha --config .mocharc.e2e.json",
     "prepack": "copyfiles -u 2 ../../LICENSE . && copyfiles -u 2 ../../NOTICE .",
@@ -102,6 +110,7 @@
     "dist/",
     "types/runner.d.ts",
     "types/logging.d.ts",
+    "types/stream.d.ts",
     "LICENSE",
     "NOTICE",
     "README.md",
