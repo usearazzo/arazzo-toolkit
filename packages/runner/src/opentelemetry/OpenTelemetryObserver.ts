@@ -9,12 +9,7 @@ import {
   type Tracer,
 } from '@opentelemetry/api';
 import { toValue } from '@speclynx/apidom-core';
-import {
-  Redactor,
-  type ArazzoRunnerEvent,
-  type ArazzoRunnerObserver,
-  type RequestInterceptor,
-} from '@usearazzo/runner';
+import { Redactor, type ArazzoRunnerObserver, type RequestInterceptor } from '@usearazzo/runner';
 
 /**
  * Options for {@link openTelemetryObserver}.
@@ -27,9 +22,10 @@ export interface OpenTelemetryObserverOptions {
    */
   readonly tracer?: Tracer;
   /**
-   * Masks each event before it becomes span data. A `new Redactor()` with the
-   * default field patterns when omitted; there is no way to export unmasked
-   * events through this adapter.
+   * Masks the request URL before it becomes `url.full`, the one span attribute
+   * that can carry a credential. A `new Redactor()` with the default field
+   * patterns when omitted; there is no way to export an unmasked URL through
+   * this adapter.
    */
   readonly redactor?: Redactor;
 }
@@ -46,10 +42,11 @@ export interface OpenTelemetryObserver {
    */
   readonly observer: ArazzoRunnerObserver;
   /**
-   * Propagates the trace context into each request (a `traceparent` header
-   * with the default W3C propagator), so the API's own spans join the run's
-   * trace under the request's span. Add it as the runner's
-   * `requestInterceptor`.
+   * Propagates the trace context into each request through the propagator
+   * registered globally (a `traceparent` header with W3C trace context, which
+   * the Node SDK registers by default), so the API's own spans join the run's
+   * trace under the request's span. Without a registered propagator it adds
+   * nothing. Add it as the runner's `requestInterceptor`.
    */
   readonly requestInterceptor: RequestInterceptor;
   /**
@@ -57,6 +54,10 @@ export interface OpenTelemetryObserver {
    * throws leaves its workflows and steps without their settled events, so
    * their spans would stay open and never be exported. With an `error`, those
    * spans are marked as failed and record it.
+   *
+   * It ends the open spans of every run the adapter traces. With concurrent
+   * runs, call it once they have all settled, or give each its own runner and
+   * adapter.
    */
   end(error?: unknown): void;
 }
@@ -97,7 +98,9 @@ const NAME = '@usearazzo/runner';
  *
  * A workflow called at the top of a run starts under the context active when
  * its first event arrives, so wrapping `execute` in a span of your own nests
- * the run under it.
+ * the run under it. Spans are told apart by run through the events' `runId`:
+ * an operation executor used on its own, without one, is traced as one run, so
+ * give concurrent calls a `runId` each.
  * @public
  */
 const openTelemetryObserver = (
@@ -134,129 +137,132 @@ const openTelemetryObserver = (
     if (spans.stack.length === 0 && spans.request === undefined) runs.delete(runId);
   };
 
+  // the URL is the one field a span takes that can carry a credential, so it
+  // is the only one event
   const observer: ArazzoRunnerObserver = (event) => {
-    const masked: ArazzoRunnerEvent = redactor.event(event);
-    switch (masked.type) {
+    switch (event.type) {
       case 'workflow-start': {
-        const spans = spansOf(masked.runId);
+        const spans = spansOf(event.runId);
         spans.stack.push(
-          start(spans, `workflow ${masked.workflowId}`, SpanKind.INTERNAL, {
-            'arazzo.run.id': masked.runId,
-            'arazzo.workflow.id': masked.workflowId,
-            'arazzo.workflow.via': masked.via,
-            'arazzo.document.uri': masked.location.uri,
-            ...(masked.location.jsonPointer === undefined
+          start(spans, `workflow ${event.workflowId}`, SpanKind.INTERNAL, {
+            'arazzo.run.id': event.runId,
+            'arazzo.workflow.id': event.workflowId,
+            'arazzo.workflow.via': event.via,
+            'arazzo.document.uri': event.location.uri,
+            ...(event.location.jsonPointer === undefined
               ? {}
-              : { 'arazzo.document.json_pointer': masked.location.jsonPointer }),
+              : { 'arazzo.document.json_pointer': event.location.jsonPointer }),
           }),
         );
         return;
       }
       case 'workflow-settled':
-        settle(spansOf(masked.runId), masked.runId, masked.settledStatus === 'failed', {
-          'arazzo.workflow.status': masked.status,
-          'arazzo.workflow.settled_status': masked.settledStatus,
+        // a transferred workflow did not fail itself: its target reports its own outcome
+        settle(spansOf(event.runId), event.runId, event.status === 'failed', {
+          'arazzo.workflow.status': event.status,
+          'arazzo.workflow.settled_status': event.settledStatus,
         });
         return;
       case 'step-start': {
-        const spans = spansOf(masked.runId);
+        const spans = spansOf(event.runId);
         spans.stack.push(
-          start(spans, `step ${masked.stepId}`, SpanKind.INTERNAL, {
-            'arazzo.run.id': masked.runId,
-            'arazzo.workflow.id': masked.workflowId,
-            'arazzo.step.id': masked.stepId,
-            'arazzo.document.uri': masked.location.uri,
-            ...(masked.location.jsonPointer === undefined
+          start(spans, `step ${event.stepId}`, SpanKind.INTERNAL, {
+            'arazzo.run.id': event.runId,
+            'arazzo.workflow.id': event.workflowId,
+            'arazzo.step.id': event.stepId,
+            'arazzo.document.uri': event.location.uri,
+            ...(event.location.jsonPointer === undefined
               ? {}
-              : { 'arazzo.document.json_pointer': masked.location.jsonPointer }),
+              : { 'arazzo.document.json_pointer': event.location.jsonPointer }),
           }),
         );
         return;
       }
       case 'step-settled':
-        settle(spansOf(masked.runId), masked.runId, !masked.successful, {
-          'arazzo.step.attempts': masked.attempts,
+        settle(spansOf(event.runId), event.runId, !event.successful, {
+          'arazzo.step.attempts': event.attempts,
         });
         return;
       case 'step-attempt':
-        spansOf(masked.runId)
+        spansOf(event.runId)
           .stack.at(-1)
-          ?.addEvent('attempt', { 'arazzo.step.attempt': masked.attempt });
+          ?.addEvent('attempt', { 'arazzo.step.attempt': event.attempt });
         return;
       case 'criterion-evaluated':
-        spansOf(masked.runId).stack.at(-1)?.addEvent('criterion', {
-          'arazzo.step.attempt': masked.attempt,
-          'arazzo.criterion.kind': masked.kind,
-          'arazzo.criterion.condition': masked.criterion.condition,
-          'arazzo.criterion.met': masked.criterion.met,
+        spansOf(event.runId).stack.at(-1)?.addEvent('criterion', {
+          'arazzo.step.attempt': event.attempt,
+          'arazzo.criterion.kind': event.kind,
+          'arazzo.criterion.condition': event.criterion.condition,
+          'arazzo.criterion.met': event.criterion.met,
         });
         return;
       case 'action-selected':
-        spansOf(masked.runId)
+        spansOf(event.runId)
           .stack.at(-1)
           ?.addEvent('action', {
-            'arazzo.step.attempt': masked.attempt,
-            'arazzo.action.transition': masked.transition.kind,
-            ...(masked.action === undefined
+            'arazzo.step.attempt': event.attempt,
+            'arazzo.action.transition': event.transition.kind,
+            ...(event.action === undefined
               ? {}
-              : { 'arazzo.action.name': String(toValue(masked.action.name)) }),
+              : { 'arazzo.action.name': String(toValue(event.action.name)) }),
           });
         return;
       case 'retry-wait':
-        spansOf(masked.runId).stack.at(-1)?.addEvent('retry-wait', {
-          'arazzo.step.attempt': masked.attempt,
-          'arazzo.retry.delay_ms': masked.delayMs,
+        spansOf(event.runId).stack.at(-1)?.addEvent('retry-wait', {
+          'arazzo.step.attempt': event.attempt,
+          'arazzo.retry.delay_ms': event.delayMs,
         });
         return;
       case 'retry-reference-start':
       case 'retry-reference-settled':
-        spansOf(masked.runId)
+        spansOf(event.runId)
           .stack.at(-1)
-          ?.addEvent(masked.type, {
-            'arazzo.step.attempt': masked.attempt,
-            'arazzo.retry.reference.kind': masked.kind,
-            'arazzo.retry.reference.id': masked.id,
-            ...(masked.type === 'retry-reference-settled'
-              ? { 'arazzo.retry.reference.successful': masked.successful }
+          ?.addEvent(event.type, {
+            'arazzo.step.attempt': event.attempt,
+            'arazzo.retry.reference.kind': event.kind,
+            'arazzo.retry.reference.id': event.id,
+            ...(event.type === 'retry-reference-settled'
+              ? { 'arazzo.retry.reference.successful': event.successful }
               : {}),
           });
         return;
       case 'openapi-operation-assembled': {
         // started before the request is built, so the request interceptor can
         // propagate this span's context
-        const spans = spansOf(masked.runId);
+        const spans = spansOf(event.runId);
         spans.request = start(
           spans,
-          masked.operation.operationId ?? masked.operation.jsonPointer,
+          event.operation.operationId ?? event.operation.jsonPointer,
           SpanKind.CLIENT,
           {
-            'arazzo.operation.document_uri': masked.operation.documentURI,
-            'arazzo.operation.json_pointer': masked.operation.jsonPointer,
-            ...(masked.operation.operationId === undefined
+            'arazzo.operation.document_uri': event.operation.documentURI,
+            'arazzo.operation.json_pointer': event.operation.jsonPointer,
+            ...(event.operation.operationId === undefined
               ? {}
-              : { 'arazzo.operation.id': masked.operation.operationId }),
+              : { 'arazzo.operation.id': event.operation.operationId }),
           },
         );
         return;
       }
       case 'openapi-operation-request-start': {
-        const span = spansOf(masked.runId).request;
-        span?.updateName(masked.request.method);
-        span?.setAttributes({
-          'http.request.method': masked.request.method,
-          'url.full': masked.request.url,
+        const span = spansOf(event.runId).request;
+        if (span === undefined) return;
+        span.updateName(event.request.method);
+        span.setAttributes({
+          'http.request.method': event.request.method,
+          'url.full': redactor.event(event).request.url,
         });
         return;
       }
       case 'openapi-operation-request-settled': {
-        const spans = spansOf(masked.runId);
+        const spans = spansOf(event.runId);
         const span = spans.request;
         if (span === undefined) return;
-        span.setAttribute('http.response.status_code', masked.response.status);
-        if (masked.response.status >= 400) span.setStatus({ code: SpanStatusCode.ERROR });
+        span.setAttribute('http.response.status_code', event.response.status);
+        if (event.response.status >= 400) span.setStatus({ code: SpanStatusCode.ERROR });
         span.end();
         spans.request = undefined;
-        if (spans.stack.length === 0) runs.delete(masked.runId ?? '');
+        if (spans.stack.length === 0) runs.delete(event.runId ?? '');
         return;
       }
       default:

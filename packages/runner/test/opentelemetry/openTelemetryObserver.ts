@@ -90,6 +90,16 @@ describe('openTelemetryObserver', function () {
     assert.strictEqual(request.status.code, SpanStatusCode.ERROR);
   });
 
+  specify('should mark only the failed target of a transfer as an error', async function () {
+    const { spans } = await trace('transfersToTarget', 500);
+
+    assert.strictEqual(
+      named(spans, 'workflow transfersToTarget').status.code,
+      SpanStatusCode.UNSET,
+    );
+    assert.strictEqual(named(spans, 'workflow transferTarget').status.code, SpanStatusCode.ERROR);
+  });
+
   specify('should end the spans of a run that throws with its error', async function () {
     const { spans, thrown } = await trace('noSuchWorkflow', 200);
 
