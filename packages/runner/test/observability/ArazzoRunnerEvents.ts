@@ -109,6 +109,29 @@ describe('ArazzoRunner events', function () {
     for (const context of contexts) assert.strictEqual(context.runId, start?.runId);
   });
 
+  specify(
+    'should keep the runId of request events whatever an interceptor does',
+    async function () {
+      const events: ArazzoRunnerEvent[] = [];
+      const runner = await ArazzoRunner.load(entryPath, {
+        httpClient,
+        requestInterceptor: (_request, context) => {
+          (context as { runId?: string }).runId = 'rewritten';
+        },
+        observer: (event) => events.push(event),
+      });
+
+      await runner.execute('linear', { inputs: { status: 'available' } });
+
+      const start = events.find((event) => event.type === 'workflow-start');
+      const requests = events.filter((event): event is OpenAPIOperationEvent =>
+        event.type.startsWith('openapi-operation-request-'),
+      );
+      assert.isNotEmpty(requests);
+      for (const event of requests) assert.strictEqual(event.runId, start?.runId);
+    },
+  );
+
   specify("should not share an interceptor's request context with events", async function () {
     const contexts: RequestContext[] = [];
     const events: ArazzoRunnerEvent[] = [];
