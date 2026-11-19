@@ -9,7 +9,12 @@ import {
   type Tracer,
 } from '@opentelemetry/api';
 import { toValue } from '@speclynx/apidom-core';
-import { Redactor, type ArazzoRunnerObserver, type RequestInterceptor } from '@usearazzo/runner';
+import {
+  Redactor,
+  type ArazzoRunnerObserver,
+  type DocumentLocation,
+  type RequestInterceptor,
+} from '@usearazzo/runner';
 
 /**
  * Options for {@link openTelemetryObserver}.
@@ -108,16 +113,23 @@ const openTelemetryObserver = (
 ): OpenTelemetryObserver => {
   const tracer = options.tracer ?? trace.getTracer(NAME);
   const redactor = options.redactor ?? new Redactor();
+  // keyed by runId: an executor used without one is traced as the run ''
   const runs = new Map<string, OpenSpans>();
+  const keyOf = (runId: string | undefined): string => runId ?? '';
 
   const spansOf = (runId: string | undefined): OpenSpans => {
-    const key = runId ?? '';
+    const key = keyOf(runId);
     let spans = runs.get(key);
     if (spans === undefined) {
       spans = { stack: [] };
       runs.set(key, spans);
     }
     return spans;
+  };
+
+  // a run with nothing open is forgotten
+  const release = (runId: string | undefined, spans: OpenSpans): void => {
+    if (spans.stack.length === 0 && spans.request === undefined) runs.delete(keyOf(runId));
   };
 
   // a span's parent is the innermost span open in its run, or the active context
@@ -128,68 +140,66 @@ const openTelemetryObserver = (
     return tracer.startSpan(name, { kind, attributes }, parentContext);
   };
 
-  const settle = (spans: OpenSpans, runId: string, failed: boolean, attributes: Attributes) => {
-    const span = spans.stack.pop();
-    if (span === undefined) return;
+  const push = (runId: string, name: string, attributes: Attributes): void => {
+    const spans = spansOf(runId);
+    spans.stack.push(start(spans, name, SpanKind.INTERNAL, attributes));
+  };
+
+  const settle = (runId: string, failed: boolean, attributes: Attributes): void => {
+    const spans = runs.get(keyOf(runId));
+    const span = spans?.stack.pop();
+    if (spans === undefined || span === undefined) return;
     span.setAttributes(attributes);
     if (failed) span.setStatus({ code: SpanStatusCode.ERROR });
     span.end();
-    if (spans.stack.length === 0 && spans.request === undefined) runs.delete(runId);
+    release(runId, spans);
   };
 
+  // an event of the innermost open span: the step's, for the events below
+  const addEvent = (runId: string, name: string, attributes: Attributes): void => {
+    runs.get(keyOf(runId))?.stack.at(-1)?.addEvent(name, attributes);
+  };
+
+  const locationAttributes = ({ uri, jsonPointer }: DocumentLocation): Attributes => ({
+    'arazzo.document.uri': uri,
+    ...(jsonPointer === undefined ? {} : { 'arazzo.document.json_pointer': jsonPointer }),
+  });
+
   // the URL is the one field a span takes that can carry a credential, so it
-  // is the only one event
+  // is the only one masked
   const observer: ArazzoRunnerObserver = (event) => {
     switch (event.type) {
-      case 'workflow-start': {
-        const spans = spansOf(event.runId);
-        spans.stack.push(
-          start(spans, `workflow ${event.workflowId}`, SpanKind.INTERNAL, {
-            'arazzo.run.id': event.runId,
-            'arazzo.workflow.id': event.workflowId,
-            'arazzo.workflow.via': event.via,
-            'arazzo.document.uri': event.location.uri,
-            ...(event.location.jsonPointer === undefined
-              ? {}
-              : { 'arazzo.document.json_pointer': event.location.jsonPointer }),
-          }),
-        );
+      case 'workflow-start':
+        push(event.runId, `workflow ${event.workflowId}`, {
+          'arazzo.run.id': event.runId,
+          'arazzo.workflow.id': event.workflowId,
+          'arazzo.workflow.via': event.via,
+          ...locationAttributes(event.location),
+        });
         return;
-      }
       case 'workflow-settled':
         // a transferred workflow did not fail itself: its target reports its own outcome
-        settle(spansOf(event.runId), event.runId, event.status === 'failed', {
+        settle(event.runId, event.status === 'failed', {
           'arazzo.workflow.status': event.status,
           'arazzo.workflow.settled_status': event.settledStatus,
         });
         return;
-      case 'step-start': {
-        const spans = spansOf(event.runId);
-        spans.stack.push(
-          start(spans, `step ${event.stepId}`, SpanKind.INTERNAL, {
-            'arazzo.run.id': event.runId,
-            'arazzo.workflow.id': event.workflowId,
-            'arazzo.step.id': event.stepId,
-            'arazzo.document.uri': event.location.uri,
-            ...(event.location.jsonPointer === undefined
-              ? {}
-              : { 'arazzo.document.json_pointer': event.location.jsonPointer }),
-          }),
-        );
-        return;
-      }
-      case 'step-settled':
-        settle(spansOf(event.runId), event.runId, !event.successful, {
-          'arazzo.step.attempts': event.attempts,
+      case 'step-start':
+        push(event.runId, `step ${event.stepId}`, {
+          'arazzo.run.id': event.runId,
+          'arazzo.workflow.id': event.workflowId,
+          'arazzo.step.id': event.stepId,
+          ...locationAttributes(event.location),
         });
         return;
+      case 'step-settled':
+        settle(event.runId, !event.successful, { 'arazzo.step.attempts': event.attempts });
+        return;
       case 'step-attempt':
-        spansOf(event.runId)
-          .stack.at(-1)
-          ?.addEvent('attempt', { 'arazzo.step.attempt': event.attempt });
+        addEvent(event.runId, 'attempt', { 'arazzo.step.attempt': event.attempt });
         return;
       case 'criterion-evaluated':
-        spansOf(event.runId).stack.at(-1)?.addEvent('criterion', {
+        addEvent(event.runId, 'criterion', {
           'arazzo.step.attempt': event.attempt,
           'arazzo.criterion.kind': event.kind,
           'arazzo.criterion.condition': event.criterion.condition,
@@ -197,55 +207,45 @@ const openTelemetryObserver = (
         });
         return;
       case 'action-selected':
-        spansOf(event.runId)
-          .stack.at(-1)
-          ?.addEvent('action', {
-            'arazzo.step.attempt': event.attempt,
-            'arazzo.action.transition': event.transition.kind,
-            ...(event.action === undefined
-              ? {}
-              : { 'arazzo.action.name': String(toValue(event.action.name)) }),
-          });
+        addEvent(event.runId, 'action', {
+          'arazzo.step.attempt': event.attempt,
+          'arazzo.action.transition': event.transition.kind,
+          ...(event.action === undefined
+            ? {}
+            : { 'arazzo.action.name': String(toValue(event.action.name)) }),
+        });
         return;
       case 'retry-wait':
-        spansOf(event.runId).stack.at(-1)?.addEvent('retry-wait', {
+        addEvent(event.runId, 'retry-wait', {
           'arazzo.step.attempt': event.attempt,
           'arazzo.retry.delay_ms': event.delayMs,
         });
         return;
       case 'retry-reference-start':
       case 'retry-reference-settled':
-        spansOf(event.runId)
-          .stack.at(-1)
-          ?.addEvent(event.type, {
-            'arazzo.step.attempt': event.attempt,
-            'arazzo.retry.reference.kind': event.kind,
-            'arazzo.retry.reference.id': event.id,
-            ...(event.type === 'retry-reference-settled'
-              ? { 'arazzo.retry.reference.successful': event.successful }
-              : {}),
-          });
+        addEvent(event.runId, event.type, {
+          'arazzo.step.attempt': event.attempt,
+          'arazzo.retry.reference.kind': event.kind,
+          'arazzo.retry.reference.id': event.id,
+          ...(event.type === 'retry-reference-settled'
+            ? { 'arazzo.retry.reference.successful': event.successful }
+            : {}),
+        });
         return;
       case 'openapi-operation-assembled': {
         // started before the request is built, so the request interceptor can
         // propagate this span's context
         const spans = spansOf(event.runId);
-        spans.request = start(
-          spans,
-          event.operation.operationId ?? event.operation.jsonPointer,
-          SpanKind.CLIENT,
-          {
-            'arazzo.operation.document_uri': event.operation.documentURI,
-            'arazzo.operation.json_pointer': event.operation.jsonPointer,
-            ...(event.operation.operationId === undefined
-              ? {}
-              : { 'arazzo.operation.id': event.operation.operationId }),
-          },
-        );
+        const { documentURI, jsonPointer, operationId } = event.operation;
+        spans.request = start(spans, operationId ?? jsonPointer, SpanKind.CLIENT, {
+          'arazzo.operation.document_uri': documentURI,
+          'arazzo.operation.json_pointer': jsonPointer,
+          ...(operationId === undefined ? {} : { 'arazzo.operation.id': operationId }),
+        });
         return;
       }
       case 'openapi-operation-request-start': {
-        const span = spansOf(event.runId).request;
+        const span = runs.get(keyOf(event.runId))?.request;
         if (span === undefined) return;
         span.updateName(event.request.method);
         span.setAttributes({
@@ -255,14 +255,14 @@ const openTelemetryObserver = (
         return;
       }
       case 'openapi-operation-request-settled': {
-        const spans = spansOf(event.runId);
-        const span = spans.request;
-        if (span === undefined) return;
+        const spans = runs.get(keyOf(event.runId));
+        const span = spans?.request;
+        if (spans === undefined || span === undefined) return;
         span.setAttribute('http.response.status_code', event.response.status);
         if (event.response.status >= 400) span.setStatus({ code: SpanStatusCode.ERROR });
         span.end();
         spans.request = undefined;
-        if (spans.stack.length === 0) runs.delete(event.runId ?? '');
+        release(event.runId, spans);
         return;
       }
       default:
@@ -271,21 +271,23 @@ const openTelemetryObserver = (
   };
 
   const requestInterceptor: RequestInterceptor = (request, requestContext) => {
-    const span = runs.get(requestContext.runId ?? '')?.request;
+    const span = runs.get(keyOf(requestContext.runId))?.request;
     if (span === undefined) return;
     propagation.inject(trace.setSpan(context.active(), span), request.headers);
   };
 
   const end = (error?: unknown): void => {
-    for (const spans of runs.values()) {
-      const open = [...spans.stack, ...(spans.request === undefined ? [] : [spans.request])];
-      for (const span of open.reverse()) {
+    const exception = error instanceof Error ? error : String(error);
+    const status = {
+      code: SpanStatusCode.ERROR,
+      ...(error instanceof Error ? { message: error.message } : {}),
+    };
+    for (const { stack, request } of runs.values()) {
+      // innermost first: the request in flight, then the steps and workflows around it
+      for (const span of [...stack, ...(request === undefined ? [] : [request])].reverse()) {
         if (error !== undefined) {
-          span.recordException(error instanceof Error ? error : String(error));
-          span.setStatus({
-            code: SpanStatusCode.ERROR,
-            ...(error instanceof Error ? { message: error.message } : {}),
-          });
+          span.recordException(exception);
+          span.setStatus(status);
         }
         span.end();
       }
