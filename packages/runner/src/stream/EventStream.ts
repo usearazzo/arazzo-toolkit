@@ -27,7 +27,9 @@ export interface EventStream extends AsyncIterable<ArazzoRunnerEvent> {
   readonly observer: ArazzoRunnerObserver;
   /**
    * The events as a WHATWG `ReadableStream`, for piping. It has one consumer:
-   * read it or iterate this object, not both; `tee()` it for two.
+   * read it or iterate this object, not both. For two consumers, give each
+   * an `eventStream()` of its own behind `combineObservers`: a `tee()`d
+   * branch loses its unread events when the stream fails.
    */
   readonly stream: ReadableStream<ArazzoRunnerEvent>;
   /**
