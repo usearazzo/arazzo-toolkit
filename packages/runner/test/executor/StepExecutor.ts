@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { assert } from 'chai';
+import { omit } from 'ramda';
 import { toValue } from '@speclynx/apidom-core';
 import { refractStep, type StepElement } from '@speclynx/apidom-ns-arazzo-1';
 
@@ -16,6 +17,7 @@ import {
   ClientError,
   ResolverError,
   CriterionError,
+  type CriterionEvaluationRecord,
   type HTTPClient,
   type OpenAPIOperationLocator,
   type OpenAPIOperationRequest,
@@ -591,12 +593,13 @@ describe('StepExecutor', function () {
         // the first unmet criterion does not stop the others, in either list.
         // each record also carries what its condition saw.
         const saw = { $statusCode: 200 };
-        assert.deepEqual(result.successCriteria, [
+        const withoutLocation = (record: CriterionEvaluationRecord) => omit(['location'], record);
+        assert.deepEqual(result.successCriteria.map(withoutLocation), [
           { condition: '$statusCode == 201', met: false, values: saw },
           { condition: '$statusCode == 202', met: false, values: saw },
           { condition: '$statusCode == 200', met: true, values: saw },
         ]);
-        assert.deepEqual(result.actionCriteria, [
+        assert.deepEqual(result.actionCriteria.map(withoutLocation), [
           { condition: '$statusCode == 500', met: false, values: saw, actionName: 'onServerError' },
           { condition: '$statusCode == 200', met: true, values: saw, actionName: 'onServerError' },
         ]);

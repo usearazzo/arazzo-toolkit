@@ -22,6 +22,7 @@ import type HTTPClient from '../client/HTTPClient.ts';
 import httpClientFetch from '../client/HTTPClientFetch.ts';
 import type { OpenAPIOperationElement } from '../document/openapi-types.ts';
 import type OpenAPIDocument from '../document/OpenAPIDocument.ts';
+import type { DocumentLocation } from '../document/APIDocument.ts';
 import type OpenAPIOperationRequest from '../client/OpenAPIOperationRequest.ts';
 import type OpenAPIOperationResponse from '../client/OpenAPIOperationResponse.ts';
 import type { OpenAPIOperationRequestInfo } from '../client/OpenAPIOperationResponse.ts';
@@ -379,6 +380,11 @@ class OpenAPIOperationExecutor {
     // the locator, and the transport is the httpClient, so none of these
     // reach buildRequest
     const { requestInterceptor, step, runId } = executeOptions;
+    // the operation as extracted from its own document, before normalizing
+    // copies it, carries where it is written; located once, and only for an
+    // observer.
+    let located: DocumentLocation | undefined;
+    const location = (): DocumentLocation => (located ??= locator.document.locationOf(operation));
     const declaredOperationId = toValue(operation.operationId);
     const context: RequestContext = {
       operation: {
@@ -394,14 +400,29 @@ class OpenAPIOperationExecutor {
       ...(step === undefined ? {} : { step: { ...step } }),
     };
 
-    this.#events?.emit({ type: 'openapi-operation-normalize-start', ...context, runId });
+    this.#events?.emit({
+      type: 'openapi-operation-normalize-start',
+      ...context,
+      runId,
+      location: location(),
+    });
     const normalizedOperation = await this.#operationNormalizer.normalize(
       operation,
       locator.document,
     );
-    this.#events?.emit({ type: 'openapi-operation-normalize-settled', ...context, runId });
+    this.#events?.emit({
+      type: 'openapi-operation-normalize-settled',
+      ...context,
+      runId,
+      location: location(),
+    });
     const assembled = this.#documentAssembler.assemble(normalizedOperation, locator.document);
-    this.#events?.emit({ type: 'openapi-operation-assembled', ...context, runId });
+    this.#events?.emit({
+      type: 'openapi-operation-assembled',
+      ...context,
+      runId,
+      location: location(),
+    });
 
     const rest = omit(
       [
@@ -479,6 +500,7 @@ class OpenAPIOperationExecutor {
       type: 'openapi-operation-request-start',
       ...context,
       runId,
+      location: location(),
       request: {
         method: request.method,
         url: request.url,
@@ -502,6 +524,7 @@ class OpenAPIOperationExecutor {
       type: 'openapi-operation-request-settled',
       ...context,
       runId,
+      location: location(),
       response: {
         status: response.status,
         headers: response.headers,

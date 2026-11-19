@@ -21,7 +21,12 @@ export { default as OpenAPIDocumentRegistryProvider } from './registry/providers
 export type { OpenAPIDocumentRegistryProviderOptions } from './registry/providers/OpenAPIDocumentRegistryProvider.ts';
 
 /* Documents */
-export { default as APIDocument } from './document/APIDocument.ts';
+export {
+  default as APIDocument,
+  type DocumentLocation,
+  type DocumentPosition,
+  type DocumentRange,
+} from './document/APIDocument.ts';
 export { default as ArazzoDocument, type WorkflowDescriptor } from './document/ArazzoDocument.ts';
 export { default as OpenAPIDocument } from './document/OpenAPIDocument.ts';
 export type { OpenAPIOperationElement, OpenAPIPathItemElement } from './document/openapi-types.ts';

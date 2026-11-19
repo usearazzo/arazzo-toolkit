@@ -18,6 +18,7 @@ import {
 const frame = { runId: 'run-1', workflowId: 'w', path: ['w'], timestamp: 1 };
 const operation = {
   operation: { documentURI: 'https://api.example.com/openapi.json', jsonPointer: '/paths' },
+  location: { uri: 'https://api.example.com/openapi.json', jsonPointer: '/paths' },
 };
 
 const start = (
@@ -125,6 +126,7 @@ describe('Redactor', function () {
         ...frame,
         path: ['w', 'https://u:p@docs.example.com/child.arazzo.yaml#child'],
         stepId: 's',
+        location: { uri: 'flow.arazzo.yaml', jsonPointer: '/workflows/0/steps/0' },
       };
 
       assert.strictEqual(
@@ -277,9 +279,17 @@ describe('Redactor', function () {
         stepId: 's',
         attempt: 1,
         kind: 'success',
+        location: {
+          uri: 'flow.arazzo.yaml',
+          jsonPointer: '/workflows/0/steps/0/successCriteria/0',
+        },
         criterion: {
           condition: 'c',
           met: false,
+          location: {
+            uri: 'flow.arazzo.yaml',
+            jsonPointer: '/workflows/0/steps/0/successCriteria/0',
+          },
           values: {
             $statusCode: 404,
             '$inputs.password': 'p',

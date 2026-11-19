@@ -1,0 +1,14 @@
+arazzo: "1.0.1"
+info:
+  title: Malformed
+  version: "1.0.0"
+sourceDescriptions:
+  - name: petstore
+    url: ./petstore.openapi.json
+    type: openapi
+workflows:
+  - workflowId: w
+    steps:
+      - stepId: s
+        operationId: getInventory
+  bad: [unclosed

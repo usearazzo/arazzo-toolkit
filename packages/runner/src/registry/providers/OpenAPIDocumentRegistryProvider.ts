@@ -1,7 +1,7 @@
 import type { ParseResultElement } from '@usearazzo/parser';
 import { parseOpenAPI, defaultParseOpenAPIOptions } from '@usearazzo/parser';
 import { dereferenceOpenAPIElement, defaultDereferenceOpenAPIOptions } from '@usearazzo/resolver';
-import { isStringElement } from '@speclynx/apidom-datamodel';
+import { isStringElement, type Element, type MemberElement } from '@speclynx/apidom-datamodel';
 import {
   readFile,
   File,
@@ -89,12 +89,16 @@ class OpenAPIDocumentRegistryProvider extends DocumentRegistryProvider {
    */
   async provide(uri: string): Promise<OpenAPIDocument> {
     const parseResult: ParseResultElement = await parseOpenAPI(uri, this.#buildParseOptions());
-    const operationIndex = await this.#buildOperationIndex(parseResult);
+    this.assertParsed(uri, parseResult);
+    const operationIndex = await this.#buildOperationIndex(uri, parseResult);
 
     return new OpenAPIDocument(uri, parseResult, operationIndex);
   }
 
-  async #buildOperationIndex(parseResult: ParseResultElement): Promise<OpenAPIOperationIndex> {
+  async #buildOperationIndex(
+    uri: string,
+    parseResult: ParseResultElement,
+  ): Promise<OpenAPIOperationIndex> {
     const index = new OpenAPIOperationIndex();
     const dereferenceOptions = this.#buildDereferenceOptions(parseResult);
 
@@ -105,19 +109,39 @@ class OpenAPIDocumentRegistryProvider extends DocumentRegistryProvider {
         if (!pathItem.hasMetaProperty('path')) return path.skip();
         if (!isStringElement(pathItem.$ref)) return;
 
-        const pathItemDereferenced = await dereferenceOpenAPIElement(pathItem, dereferenceOptions);
-        path.replaceWith(pathItemDereferenced);
+        // an operation written next to the `$ref` stays where it is written
+        const pointer = path.formatPath('jsonpointer');
+        pathItem.forEach((value, key) => {
+          if (value.element !== 'operation') return;
+          value.meta.set('json-pointer', `${pointer}/${toValue(key) as string}`);
+        });
+        path.replaceWith(await dereferenceOpenAPIElement(pathItem, dereferenceOptions));
       },
 
       OperationElement(path: Path) {
         const operation = path.node as OpenAPIOperationElement;
         const operationId = toValue(operation.operationId);
+        const pointer = path.formatPath('jsonpointer');
+        // where the operation is written, for the events to locate it by: an
+        // operation of a `$ref` path item is written where that path item is,
+        // unless it was written next to the `$ref` and so already located
+        if (!operation.hasMetaProperty('json-pointer')) {
+          const member = path.parentPath?.node as MemberElement;
+          const pathItem = path.parentPath?.parentPath?.node as Element;
+          const definition = toValue(pathItem.meta.get('ref-origin-pointer'));
+          if (typeof definition === 'string') {
+            operation.meta.set('ref-origin', toValue(pathItem.meta.get('ref-origin')));
+            operation.meta.set('json-pointer', `${definition}/${toValue(member.key) as string}`);
+          } else {
+            operation.meta.set('json-pointer', pointer);
+          }
+        }
 
         if (typeof operationId !== 'string') return path.skip();
         if (operationId === '') return path.skip();
         if (index.has(operationId)) return path.skip();
 
-        index.set(operationId, path.formatPath('jsonpointer'));
+        index.set(operationId, pointer);
 
         path.skip();
       },

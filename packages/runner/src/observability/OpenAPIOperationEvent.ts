@@ -1,4 +1,5 @@
 import type { RequestContext } from '../executor/OpenAPIOperationExecutor.ts';
+import type { DocumentLocation } from '../document/APIDocument.ts';
 import type { ArazzoRunnerEventBase } from './ArazzoRunnerEvent.ts';
 
 /**
@@ -8,6 +9,12 @@ import type { ArazzoRunnerEventBase } from './ArazzoRunnerEvent.ts';
  * @public
  */
 export interface OpenAPIOperationEventBase extends ArazzoRunnerEventBase, RequestContext {
+  /**
+   * Where the operation is written. It differs from `operation` (where the
+   * operation was looked up) for an operation of a Path Item Object written
+   * as a `$ref`, which is written in the document the reference names.
+   */
+  readonly location: DocumentLocation;
   /**
    * The `runId` of the {@link WorkflowExecutor.execute} call the operation
    * runs for, from the execute options. Absent when the executor is used

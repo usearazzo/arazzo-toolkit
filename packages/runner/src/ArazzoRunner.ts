@@ -72,6 +72,15 @@ export interface ArazzoRunnerLoadOptions
    */
   readonly reference?: ArazzoRunnerReferenceOptions;
   /**
+   * Parses the documents with source maps, so every `location` (on events,
+   * and on the result's steps and criteria) carries the element's range. Off by
+   * default: source-mapped parsing is slower and keeps more in memory. It
+   * changes no other behaviour: a document that fails to parse without it
+   * fails with it. A `registry` passed alongside parses as its own providers
+   * say.
+   */
+  readonly sourceMap?: boolean;
+  /**
    * Receives the events of every building block the runner wires, stamped
    * with `now`: the run's workflows, steps and the decisions behind them, and
    * the machinery under them (document loads, workflow and operation
@@ -87,7 +96,10 @@ export interface ArazzoRunnerLoadOptions
  * Options for the ArazzoRunner constructor.
  * @public
  */
-export interface ArazzoRunnerOptions extends Omit<ArazzoRunnerLoadOptions, 'registry'> {
+export interface ArazzoRunnerOptions extends Omit<
+  ArazzoRunnerLoadOptions,
+  'registry' | 'sourceMap'
+> {
   /**
    * The entry Arazzo document holding the workflows to run.
    */
@@ -125,15 +137,21 @@ class ArazzoRunner {
   static async load(uri: string, options: ArazzoRunnerLoadOptions = {}): Promise<ArazzoRunner> {
     // `resolve` only, whatever else the given object carries
     const referenceOptions = pick(['resolve'], options.reference ?? {});
+    // source maps need the non-strict parsers, which are the ones that keep
+    // positions
+    const providerOptions = options.sourceMap
+      ? { ...referenceOptions, parse: { parserOpts: { sourceMap: true, strict: false } } }
+      : referenceOptions;
     const {
       registry = new DocumentRegistry({
         providers: [
-          new ArazzoDocumentRegistryProvider(referenceOptions),
-          new OpenAPIDocumentRegistryProvider(referenceOptions),
+          new ArazzoDocumentRegistryProvider(providerOptions),
+          new OpenAPIDocumentRegistryProvider(providerOptions),
         ],
         observer: options.observer,
         now: options.now,
       }),
+      sourceMap: _sourceMap,
       ...rest
     } = options;
     // acquiring a second entry would pin it for good and, through the LRU

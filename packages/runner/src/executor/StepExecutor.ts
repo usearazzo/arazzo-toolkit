@@ -7,6 +7,7 @@ import {
 } from '@speclynx/apidom-ns-arazzo-1';
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
+import type { DocumentLocation } from '../document/APIDocument.ts';
 import type DocumentRegistry from '../registry/DocumentRegistry.ts';
 import type {
   OpenAPIOperationExecuteOptions,
@@ -121,6 +122,10 @@ export interface CriterionEvaluationRecord {
    * size are in the attempt's `openapi-operation-request-settled` event.
    */
   readonly values: Readonly<Record<string, unknown>>;
+  /**
+   * Where the criterion is written.
+   */
+  readonly location: DocumentLocation;
   /**
    * Why the condition could not be evaluated — present only then, with `met`
    * `false`.
@@ -598,6 +603,7 @@ class StepExecutor {
     context: RuntimeExpressionContext,
   ): Promise<CriterionEvaluationRecord> {
     const condition = toValue(criterion.condition) as string;
+    const location = this.#document.locationOf(criterion);
     const values: Record<string, unknown> = {};
     const resolve = async (expression: string): Promise<unknown> => {
       const value = await this.#evaluate(context, expression);
@@ -607,8 +613,14 @@ class StepExecutor {
     };
     try {
       const { met, error } = await this.#criterionEvaluator.evaluate(criterion, resolve);
-      if (error === undefined) return { condition, met, values };
-      return { condition, met, values, diagnostic: { code: error.reason, message: error.message } };
+      if (error === undefined) return { condition, met, values, location };
+      return {
+        condition,
+        met,
+        values,
+        location,
+        diagnostic: { code: error.reason, message: error.message },
+      };
     } catch (error: unknown) {
       // a step that calls a workflow made no HTTP call, so a condition on one
       // fails like any unevaluable condition; the diagnostic keeps the
@@ -621,6 +633,7 @@ class StepExecutor {
           condition,
           met: false,
           values,
+          location,
           diagnostic: { code: error.reason, message: error.message },
         };
       }

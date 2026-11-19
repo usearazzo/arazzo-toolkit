@@ -1,0 +1,8 @@
+{
+  "collection": {
+    "get": {
+      "operationId": "listPets",
+      "responses": { "200": { "description": "The pets" } }
+    }
+  }
+}

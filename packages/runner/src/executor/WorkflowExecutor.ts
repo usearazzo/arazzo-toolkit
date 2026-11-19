@@ -1,7 +1,12 @@
 import { toValue } from '@speclynx/apidom-core';
 import { isPlainObject } from 'ramda-adjunct';
 import ShortUniqueId from 'short-unique-id';
-import { isArrayElement, isObjectElement, isStringElement } from '@speclynx/apidom-datamodel';
+import {
+  isArrayElement,
+  isObjectElement,
+  isStringElement,
+  type Element,
+} from '@speclynx/apidom-datamodel';
 import {
   isFailureActionElement,
   isParameterElement,
@@ -15,6 +20,7 @@ import {
 } from '@speclynx/apidom-ns-arazzo-1';
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
+import type { DocumentLocation } from '../document/APIDocument.ts';
 import type DocumentRegistry from '../registry/DocumentRegistry.ts';
 import type { WorkflowId } from '../document/ArazzoWorkflowIndex.ts';
 import type {
@@ -254,6 +260,10 @@ export interface RetryReferenceRecord {
  */
 export interface StepRunRecord {
   readonly stepId: string;
+  /**
+   * Where the step is written.
+   */
+  readonly location: DocumentLocation;
   readonly successful: boolean;
   readonly action: SelectedAction | undefined;
   /**
@@ -774,10 +784,21 @@ class WorkflowExecutor {
     throwIfAborted(scope.signal, { workflowId, callStack: nested });
 
     const frame: WorkflowFrame = { runId: scope.runId, workflowId, path: nested.path };
+    // extracted before `workflow-start`: a workflow its document does not
+    // define never starts, and the event can say where the one it runs is.
+    const extracted = this.#extractWorkflow(locator);
     // emitted before normalization, so its events nest inside this workflow's.
-    this.#events?.emit({ type: 'workflow-start', ...frame, via }, startedAt);
+    this.#events?.emit(
+      {
+        type: 'workflow-start',
+        ...frame,
+        via,
+        location: locator.document.locationOf(extracted),
+      },
+      startedAt,
+    );
 
-    const workflow = await this.#resolveWorkflow(locator, scope, frame);
+    const workflow = await this.#resolveWorkflow(locator, extracted, scope, frame);
     const state = new WorkflowExecutionState({ inputs });
     const invocation: WorkflowInvocation = {
       workflowId,
@@ -850,7 +871,10 @@ class WorkflowExecutor {
       // that invoked it, not to the step's own target.
       const retryReferences: RetryReferenceRecord[] = [];
       const stepFrame: StepFrame = { ...frame, stepId };
-      this.#events?.emit({ type: 'step-start', ...stepFrame }, stepStartedAt);
+      this.#events?.emit(
+        { type: 'step-start', ...stepFrame, location: invocation.document.locationOf(step) },
+        stepStartedAt,
+      );
       const attempt = this.#chargedAttempt(
         this.#observedAttempt(
           this.#stepAttempt(step, stepId, invocation, scope, subWorkflows),
@@ -876,6 +900,7 @@ class WorkflowExecutor {
             ...decided,
             action: retry,
             transition: { kind: 'retry' },
+            location: invocation.document.locationOf(retry),
           });
           if (delayMs > 0) {
             this.#events?.emit({ type: 'retry-wait', ...decided, delayMs });
@@ -892,11 +917,13 @@ class WorkflowExecutor {
         attempt: attempts,
         action,
         transition,
+        location: action === undefined ? undefined : invocation.document.locationOf(action),
       });
       state.setStepOutputs(outcome.stepId, outcome.outputs);
       const stepSettledAt = this.#now();
       trace.push({
         stepId: outcome.stepId,
+        location: invocation.document.locationOf(step),
         successful: outcome.successful,
         action,
         attempts,
@@ -1120,10 +1147,22 @@ class WorkflowExecutor {
       events.emit({ type: 'step-attempt', ...attemptFrame });
       const outcome = await runAttempt();
       for (const criterion of outcome.successCriteria) {
-        events.emit({ type: 'criterion-evaluated', ...attemptFrame, kind: 'success', criterion });
+        events.emit({
+          type: 'criterion-evaluated',
+          ...attemptFrame,
+          kind: 'success',
+          criterion,
+          location: criterion.location,
+        });
       }
       for (const criterion of outcome.actionCriteria) {
-        events.emit({ type: 'criterion-evaluated', ...attemptFrame, kind: 'action', criterion });
+        events.emit({
+          type: 'criterion-evaluated',
+          ...attemptFrame,
+          kind: 'action',
+          criterion,
+          location: criterion.location,
+        });
       }
       return outcome;
     };
@@ -1205,7 +1244,11 @@ class WorkflowExecutor {
           kind: 'workflow',
           id: reference,
         } as const;
-        this.#events?.emit({ type: 'retry-reference-start', ...referenceFrame });
+        this.#events?.emit({
+          type: 'retry-reference-start',
+          ...referenceFrame,
+          location: invocation.document.locationOf(action),
+        });
         const result = await this.#runReferencedWorkflow(
           reference,
           stepId,
@@ -1245,7 +1288,11 @@ class WorkflowExecutor {
         kind: 'step',
         id: refStepId,
       } as const;
-      this.#events?.emit({ type: 'retry-reference-start', ...referenceFrame });
+      this.#events?.emit({
+        type: 'retry-reference-start',
+        ...referenceFrame,
+        location: invocation.document.locationOf(action),
+      });
       // the referenced step's attempt is observed like any other, under its
       // own stepId and with a count of its own.
       const refOutcome = await this.#chargedAttempt(
@@ -1320,7 +1367,12 @@ class WorkflowExecutor {
         workflowId: dependency.locator.workflowId,
         documentURI: dependency.locator.document.uri,
       };
-      this.#events?.emit({ type: 'dependency-start', ...frame, dependency: target });
+      this.#events?.emit({
+        type: 'dependency-start',
+        ...frame,
+        dependency: target,
+        location: invocation.document.locationOf(dependency.entry),
+      });
       // a dependency already completed in this run is satisfied, not repeated: a
       // precondition holds once met, and a diamond (two dependents sharing one
       // dependency) must not duplicate its live side effects. Every dependent
@@ -1378,7 +1430,7 @@ class WorkflowExecutor {
   async #dependencyRefs(
     workflow: WorkflowElement,
     invocation: WorkflowInvocation,
-  ): Promise<{ locator: ArazzoWorkflowLocator; inputsKey: string }[]> {
+  ): Promise<{ locator: ArazzoWorkflowLocator; inputsKey: string; entry: Element }[]> {
     const { workflowId, document } = invocation;
     const dependsOn = workflow.dependsOn;
     if (!isArrayElement(dependsOn)) {
@@ -1388,22 +1440,23 @@ class WorkflowExecutor {
       });
     }
 
-    const references = [...dependsOn].map((entry, index) => {
+    const entries = [...dependsOn].map((entry, index) => {
       if (!isStringElement(entry)) {
         throw new ExecutionError(
           `workflow "${workflowId}" has a non-string entry at dependsOn[${index}]`,
           { workflowId, reason: ExecutionError.MalformedDependsOn },
         );
       }
-      return toValue(entry) as string;
+      return entry;
     });
 
-    const refs: { locator: ArazzoWorkflowLocator; inputsKey: string }[] = [];
-    for (const reference of references) {
+    const refs: { locator: ArazzoWorkflowLocator; inputsKey: string; entry: Element }[] = [];
+    for (const entry of entries) {
+      const reference = toValue(entry) as string;
       const locator = await this.#workflowLocatorNormalizer.normalize(reference, document, {
         workflowId,
       });
-      refs.push({ locator, inputsKey: reference });
+      refs.push({ locator, inputsKey: reference, entry });
     }
     return refs;
   }
@@ -1704,37 +1757,41 @@ class WorkflowExecutor {
   }
 
   /**
-   * Extracts and normalizes the workflow a locator names. A workflow its
-   * document does not define is the executor-level `workflow-not-found`
-   * authoring error, raised here rather than leaking the extractor's
-   * `ExtractionError`. Only the root {@link WorkflowExecutor.execute} id
-   * reaches this check unvalidated — every reference position goes through
-   * the locator normalizer, which already rejects a missing workflow with
-   * the referencing context attached — so the error's `workflowId` is the
-   * missing id itself.
+   * Extracts the workflow a locator names. A workflow its document does not
+   * define is the executor-level `workflow-not-found` authoring error, raised
+   * here rather than leaking the extractor's `ExtractionError`. Only the root
+   * {@link WorkflowExecutor.execute} id reaches this check unvalidated — every
+   * reference position goes through the locator normalizer, which already
+   * rejects a missing workflow with the referencing context attached — so the
+   * error's `workflowId` is the missing id itself.
    */
-  async #resolveWorkflow(
-    locator: ArazzoWorkflowLocator,
-    scope: RunScope,
-    frame: WorkflowFrame,
-  ): Promise<WorkflowElement> {
-    const { document, workflowId } = locator;
-    const qualifiedId = this.#qualifiedId(locator);
-    const cached = scope.workflows.get(qualifiedId);
-    if (cached !== undefined) return cached;
-
+  #extractWorkflow({ document, workflowId }: ArazzoWorkflowLocator): WorkflowElement {
     if (!document.workflowIndex.has(workflowId)) {
       throw new ExecutionError(
         `workflow "${workflowId}" not found in Arazzo document at "${document.uri}"`,
         { workflowId, reason: ExecutionError.WorkflowNotFound },
       );
     }
-    this.#events?.emit({ type: 'workflow-normalize-start', ...frame });
-    const workflow = await this.#normalizer.normalize(
-      this.#extractor.extract(document, workflowId),
-      document,
-    );
-    this.#events?.emit({ type: 'workflow-normalize-settled', ...frame });
+    return this.#extractor.extract(document, workflowId);
+  }
+
+  /**
+   * Normalizes an extracted workflow, once per run for each workflow.
+   */
+  async #resolveWorkflow(
+    locator: ArazzoWorkflowLocator,
+    extracted: WorkflowElement,
+    scope: RunScope,
+    frame: WorkflowFrame,
+  ): Promise<WorkflowElement> {
+    const qualifiedId = this.#qualifiedId(locator);
+    const cached = scope.workflows.get(qualifiedId);
+    if (cached !== undefined) return cached;
+
+    const location = locator.document.locationOf(extracted);
+    this.#events?.emit({ type: 'workflow-normalize-start', ...frame, location });
+    const workflow = await this.#normalizer.normalize(extracted, locator.document);
+    this.#events?.emit({ type: 'workflow-normalize-settled', ...frame, location });
     scope.workflows.set(qualifiedId, workflow);
     return workflow;
   }
