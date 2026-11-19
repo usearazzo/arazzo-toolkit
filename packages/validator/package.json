@@ -61,7 +61,7 @@
     "@speclynx/apidom-reference": "^7.1.0",
     "@usearazzo/parser": "1.0.1-alpha.34",
     "ramda": "^0.32.0",
-    "type-fest": "^5.10.0",
+    "type-fest": "^6.0.0",
     "vscode-languageserver-textdocument": "^1.0.16",
     "vscode-languageserver-types": "=3.18.5"
   },
