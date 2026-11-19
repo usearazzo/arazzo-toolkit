@@ -145,6 +145,7 @@ const result = await runner.execute('authenticateAndOrderPet', {
 | Give each `location` (on events, and on the result's steps and criteria) its range in the document, not only its JSON Pointer | `sourceMap` on `load` | [Observing a run](https://usearazzo.com/docs/runner/#observability) |
 | Mask credentials before logging or exporting events | `new Redactor().event(event)` | [Observing a run](https://usearazzo.com/docs/runner/#observability) |
 | Send the events to several consumers at once | `combineObservers(...observers)` | [Observing a run](https://usearazzo.com/docs/runner/#observability) |
+| Log a run through pino, winston, the console or any logger, masked | `loggingObserver(log)` from `@usearazzo/runner/logging` | [Observing a run](https://usearazzo.com/docs/runner/#observability) |
 | Compose the building blocks yourself | `DocumentRegistry`, the executors | [Runner API Reference](https://usearazzo.com/docs/runner/) |
 
 Retrieving documents and calling APIs are separate: credentials for one never reach the other.
