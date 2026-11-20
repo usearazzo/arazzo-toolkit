@@ -45,6 +45,7 @@ import type { OpenAPIOperationLocator } from './OpenAPIOperationLocatorNormalize
 import type { RequestContextStep } from './OpenAPIOperationExecutor.ts';
 import StepRetryRunner from './StepRetryRunner.ts';
 import WorkflowCallStack, { type WorkflowCallVia } from './WorkflowCallStack.ts';
+import { traced } from '../observability/instrument.ts';
 import StepTransitionInterpreter, {
   actionTargets,
   type StepTransition,
@@ -612,7 +613,12 @@ class WorkflowExecutor {
   readonly #retryRunner: StepRetryRunner;
   readonly #interpreter = new StepTransitionInterpreter();
   readonly #workflowLocatorNormalizer: ArazzoWorkflowLocatorNormalizer;
-  readonly #events: EventChannel<WorkflowExecutionEvent> | undefined;
+  readonly #channel: EventChannel<WorkflowExecutionEvent>;
+
+  // the channel while anyone observes, so an unobserved block builds no events
+  get #events(): EventChannel<WorkflowExecutionEvent> | undefined {
+    return this.#channel.observed;
+  }
 
   constructor(options: WorkflowExecutorOptions) {
     this.#document = options.document;
@@ -623,7 +629,7 @@ class WorkflowExecutor {
     this.#maxWorkflowDepth =
       options.maxWorkflowDepth ?? WorkflowExecutor.#DEFAULT_MAX_WORKFLOW_DEPTH;
     this.#now = options.now ?? WorkflowExecutor.#DEFAULT_NOW;
-    this.#events = EventChannel.open({ observer: options.observer, now: this.#now });
+    this.#channel = new EventChannel({ observer: options.observer, now: this.#now });
     this.#stepExecutor = options.stepExecutor;
     this.#retryRunner = new StepRetryRunner({ sleep: options.sleep });
   }
@@ -802,17 +808,7 @@ class WorkflowExecutor {
     // extracted before `workflow:start`: a workflow its document does not
     // define never starts, and the event can say where the one it runs is.
     const extracted = this.#extractWorkflow(locator);
-    // emitted before normalization, so its events nest inside this workflow's.
-    this.#events?.emit(
-      {
-        type: 'workflow:start',
-        ...frame,
-        via,
-        location: locator.document.locationOf(extracted),
-      },
-      startedAt,
-    );
-
+    const location = locator.document.locationOf(extracted);
     const invocation: WorkflowInvocation = {
       workflowId,
       document: locator.document,
@@ -822,33 +818,40 @@ class WorkflowExecutor {
       frame,
     };
 
-    // a started workflow always settles, a throwing one included, so an
-    // observer holding it open (a span, a stream consumer) can close it.
-    let result: WorkflowExecutionResult;
-    try {
-      result = await this.#runInvocation(locator, extracted, invocation, scope, startedAt);
-    } catch (error: unknown) {
-      this.#events?.emit({
-        type: 'workflow:settled',
-        ...frame,
-        status: 'failed',
-        settledStatus: 'failed',
-        outputs: {},
-        error,
-      });
-      throw error;
-    }
-    this.#events?.emit(
-      {
-        type: 'workflow:settled',
-        ...frame,
-        status: result.status,
-        settledStatus: result.settledStatus,
-        outputs: result.outputs,
-      },
-      startedAt + result.durationMs,
-    );
-    return result;
+    // traced from its `workflow:start` to its `workflow:settled`, so a span an
+    // instrumentation opens around it is active for all of its events.
+    return traced({ kind: 'workflow', ...frame, via, location }, async () => {
+      // emitted before normalization, so its events nest inside this workflow's.
+      this.#events?.emit({ type: 'workflow:start', ...frame, via, location }, startedAt);
+
+      // a started workflow always settles, a throwing one included, so an
+      // observer holding it open (a span, a stream consumer) can close it.
+      let result: WorkflowExecutionResult;
+      try {
+        result = await this.#runInvocation(locator, extracted, invocation, scope, startedAt);
+      } catch (error: unknown) {
+        this.#events?.emit({
+          type: 'workflow:settled',
+          ...frame,
+          status: 'failed',
+          settledStatus: 'failed',
+          outputs: {},
+          error,
+        });
+        throw error;
+      }
+      this.#events?.emit(
+        {
+          type: 'workflow:settled',
+          ...frame,
+          status: result.status,
+          settledStatus: result.settledStatus,
+          outputs: result.outputs,
+        },
+        startedAt + result.durationMs,
+      );
+      return result;
+    });
   }
 
   /**
@@ -919,13 +922,9 @@ class WorkflowExecutor {
     stepLoop: while (index < steps.length) {
       const step = steps[index];
       const stepId = toValue(step.stepId) as string;
-      const { outcome, action, transition } = await this.#runStep(
-        step,
-        stepId,
-        steps,
-        invocation,
-        scope,
-        trace,
+      const { outcome, action, transition } = await traced(
+        { kind: 'step', ...frame, stepId, location: invocation.document.locationOf(step) },
+        () => this.#runStep(step, stepId, steps, invocation, scope, trace),
       );
 
       switch (transition.kind) {

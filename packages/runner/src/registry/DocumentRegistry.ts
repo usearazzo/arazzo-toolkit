@@ -44,14 +44,19 @@ class DocumentRegistry {
   readonly #documents: Map<string, APIDocument> = new Map();
   readonly #loading: Map<string, Promise<APIDocument>> = new Map();
   readonly #providers: DocumentRegistryProvider[];
-  readonly #events: EventChannel<DocumentRegistryEvent> | undefined;
+  readonly #channel: EventChannel<DocumentRegistryEvent>;
+
+  // the channel while anyone observes, so an unobserved block builds no events
+  get #events(): EventChannel<DocumentRegistryEvent> | undefined {
+    return this.#channel.observed;
+  }
 
   constructor(options: DocumentRegistryOptions = {}) {
     this.#providers = options.providers ?? [
       new ArazzoDocumentRegistryProvider(),
       new OpenAPIDocumentRegistryProvider(),
     ];
-    this.#events = EventChannel.open({ observer: options.observer, now: options.now });
+    this.#channel = new EventChannel({ observer: options.observer, now: options.now });
   }
 
   /**

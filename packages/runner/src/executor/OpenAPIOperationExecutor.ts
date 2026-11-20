@@ -341,7 +341,12 @@ class OpenAPIOperationExecutor {
   readonly #operationNormalizer: OpenAPIOperationNormalizer;
   readonly #documentAssembler: OpenAPIDocumentAssembler;
   readonly #captureBodies: boolean;
-  readonly #events: EventChannel<OpenAPIOperationEvent> | undefined;
+  readonly #channel: EventChannel<OpenAPIOperationEvent>;
+
+  // the channel while anyone observes, so an unobserved block builds no events
+  get #events(): EventChannel<OpenAPIOperationEvent> | undefined {
+    return this.#channel.observed;
+  }
 
   constructor(options: OpenAPIOperationExecutorOptions = {}) {
     this.#httpClient = options.httpClient ?? httpClientFetch;
@@ -351,7 +356,7 @@ class OpenAPIOperationExecutor {
     this.#operationExtractor = options.operationExtractor ?? new OpenAPIOperationExtractor();
     this.#operationNormalizer = options.operationNormalizer ?? new OpenAPIOperationNormalizer();
     this.#documentAssembler = options.documentAssembler ?? new OpenAPIDocumentAssembler();
-    this.#events = EventChannel.open({ observer: options.observer, now: options.now });
+    this.#channel = new EventChannel({ observer: options.observer, now: options.now });
     this.#captureBodies = options.captureBodies ?? false;
   }
 
