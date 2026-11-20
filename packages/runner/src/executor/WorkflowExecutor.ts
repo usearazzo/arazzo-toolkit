@@ -821,23 +821,28 @@ class WorkflowExecutor {
     // traced from its `workflow:start` to its `workflow:settled`, so a span an
     // instrumentation opens around it is active for all of its events.
     return traced({ kind: 'workflow', ...frame, via, location }, async () => {
-      // emitted before normalization, so its events nest inside this workflow's.
-      this.#events?.emit({ type: 'workflow:start', ...frame, via, location }, startedAt);
-
-      // a started workflow always settles, a throwing one included, so an
-      // observer holding it open (a span, a stream consumer) can close it.
+      // a started workflow always settles, a throwing one included (an
+      // observer throwing on its start too), so an observer holding it open
+      // (a span, a stream consumer) can close it.
       let result: WorkflowExecutionResult;
       try {
+        // emitted before normalization, so its events nest inside this workflow's.
+        this.#events?.emit({ type: 'workflow:start', ...frame, via, location }, startedAt);
         result = await this.#runInvocation(locator, extracted, invocation, scope, startedAt);
       } catch (error: unknown) {
-        this.#events?.emit({
-          type: 'workflow:settled',
-          ...frame,
-          status: 'failed',
-          settledStatus: 'failed',
-          outputs: {},
-          error,
-        });
+        try {
+          this.#events?.emit({
+            type: 'workflow:settled',
+            ...frame,
+            status: 'failed',
+            settledStatus: 'failed',
+            outputs: {},
+            error,
+          });
+        } catch {
+          // the error that failed the run is the one to report, not an
+          // observer's on the way out
+        }
         throw error;
       }
       this.#events?.emit(
@@ -1012,13 +1017,13 @@ class WorkflowExecutor {
     // that invoked it, not to the step's own target.
     const retryReferences: RetryReferenceRecord[] = [];
     const stepFrame: StepFrame = { ...frame, stepId };
-    this.#events?.emit(
-      { type: 'step:start', ...stepFrame, location: invocation.document.locationOf(step) },
-      stepStartedAt,
-    );
     let attempted = 0;
     let settled: StepRun & { readonly settledAt: number };
     try {
+      this.#events?.emit(
+        { type: 'step:start', ...stepFrame, location: invocation.document.locationOf(step) },
+        stepStartedAt,
+      );
       const attempt = this.#chargedAttempt(
         this.#observedAttempt(
           this.#stepAttempt(step, stepId, invocation, scope, subWorkflows),
@@ -1085,13 +1090,17 @@ class WorkflowExecutor {
       });
       settled = { outcome, action, transition, attempts, settledAt: stepSettledAt };
     } catch (error: unknown) {
-      this.#events?.emit({
-        type: 'step:settled',
-        ...stepFrame,
-        successful: false,
-        attempts: attempted,
-        error,
-      });
+      try {
+        this.#events?.emit({
+          type: 'step:settled',
+          ...stepFrame,
+          successful: false,
+          attempts: attempted,
+          error,
+        });
+      } catch {
+        // as for a workflow: the step's own error is the one to report
+      }
       throw error;
     }
     this.#events?.emit(

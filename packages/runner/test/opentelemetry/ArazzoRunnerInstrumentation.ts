@@ -16,6 +16,7 @@ import { ArazzoRunnerInstrumentation } from '../../src/opentelemetry/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const entryPath = path.join(__dirname, '..', 'fixtures', 'workflow-control-flow.arazzo.yaml');
+const compositionPath = path.join(__dirname, '..', 'fixtures', 'workflow-composition.arazzo.yaml');
 
 const named = (spans: ReadableSpan[], name: string): ReadableSpan => {
   const span = spans.find((candidate) => candidate.name === name);
@@ -56,9 +57,10 @@ describe('ArazzoRunnerInstrumentation', function () {
     workflowId: string,
     status: number,
     httpClient?: HTTPClient,
+    document = entryPath,
   ): Promise<{ spans: ReadableSpan[]; active: (Span | undefined)[]; thrown?: unknown }> => {
     const active: (Span | undefined)[] = [];
-    const runner = await ArazzoRunner.load(entryPath, {
+    const runner = await ArazzoRunner.load(document, {
       httpClient:
         httpClient ??
         (async () => {
@@ -112,6 +114,40 @@ describe('ArazzoRunnerInstrumentation', function () {
         'attempt',
       );
       assert.strictEqual(step.attributes['arazzo.step.attempts'], 1);
+    } finally {
+      context.setGlobalContextManager(contextManager.enable());
+    }
+  });
+
+  specify('should nest a sub-workflow under the step that calls it', async function () {
+    const { spans } = await run('callsChild', 200, undefined, compositionPath);
+
+    const parent = named(spans, 'workflow callsChild');
+    const step = named(spans, 'step child');
+    const child = named(spans, 'workflow fetchPet');
+    assert.isTrue(isChild(step, parent));
+    assert.isTrue(isChild(child, step));
+    assert.isTrue(isChild(named(spans, 'step after'), parent));
+  });
+
+  specify('should keep concurrent runs apart when the context is lost', async function () {
+    context.disable();
+    try {
+      await Promise.all([run('linear', 200), run('linear', 200)]);
+
+      const spans = exporter.getFinishedSpans();
+      const workflows = spans.filter((span) => span.name === 'workflow linear');
+      assert.lengthOf(workflows, 2);
+      for (const workflow of workflows) {
+        const steps = spans.filter((span) => isChild(span, workflow));
+        assert.deepEqual(steps.map((span) => span.name).sort(), ['step findPets', 'step getPet']);
+        for (const step of steps) {
+          assert.strictEqual(
+            step.attributes['arazzo.run.id'],
+            workflow.attributes['arazzo.run.id'],
+          );
+        }
+      }
     } finally {
       context.setGlobalContextManager(contextManager.enable());
     }
