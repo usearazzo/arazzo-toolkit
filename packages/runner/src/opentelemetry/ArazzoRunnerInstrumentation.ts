@@ -191,7 +191,8 @@ class ArazzoRunnerInstrumentation {
     try {
       await context.with(trace.setSpan(parentContext, span), run);
     } finally {
-      open.pop();
+      // by identity: an operation settling out of order must not pop another's span
+      open.splice(open.lastIndexOf(span), 1);
       if (open.length === 0) this.#runs.delete(operation.runId);
       span.end();
     }

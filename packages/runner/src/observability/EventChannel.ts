@@ -91,8 +91,14 @@ class EventChannel<E extends ArazzoRunnerEvent> {
     const fields = Object.entries(event).filter(([, value]) => value !== undefined);
     const stamped = { ...Object.fromEntries(fields), timestamp: timestamp ?? this.#now() };
     const snapshot = EventChannel.#snapshot(stamped, new WeakMap()) as E;
-    this.#observer?.(snapshot);
-    notify(snapshot);
+    // process-wide observers see the event even when the block's own throws,
+    // so a buggy observer cannot leave a trace incomplete; its error still
+    // aborts what emitted the event
+    try {
+      this.#observer?.(snapshot);
+    } finally {
+      notify(snapshot);
+    }
   }
 }
 
