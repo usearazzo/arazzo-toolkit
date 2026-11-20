@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 import { assert } from 'chai';
 import { propagation, SpanKind, SpanStatusCode } from '@opentelemetry/api';
-import { W3CTraceContextPropagator } from '@opentelemetry/core';
+import { hrTimeToMilliseconds, W3CTraceContextPropagator } from '@opentelemetry/core';
 import {
   BasicTracerProvider,
   InMemorySpanExporter,
@@ -11,42 +11,57 @@ import {
   type ReadableSpan,
 } from '@opentelemetry/sdk-trace-base';
 
-import { ArazzoRunner, type HTTPClient } from '../../src/index.ts';
-import { openTelemetryObserver } from '../../src/opentelemetry/index.ts';
+import {
+  ArazzoRunner,
+  combineObservers,
+  type ArazzoRunnerEvent,
+  type HTTPClient,
+} from '../../src/index.ts';
+import { openTelemetryInstrumentation } from '../../src/opentelemetry/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const entryPath = path.join(__dirname, '..', 'fixtures', 'workflow-control-flow.arazzo.yaml');
 
-const trace = async (
-  workflowId: string,
-  status: number,
-): Promise<{ spans: ReadableSpan[]; headers: Record<string, string>[]; thrown?: unknown }> => {
-  const exporter = new InMemorySpanExporter();
-  const provider = new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] });
-  const otel = openTelemetryObserver({ tracer: provider.getTracer('test') });
-  const headers: Record<string, string>[] = [];
-  const httpClient: HTTPClient = async (request) => {
+const respond =
+  (status: number, headers: Record<string, string>[]): HTTPClient =>
+  async (request) => {
     headers.push({ ...request.headers });
     return new Response(JSON.stringify({ id: 7 }), {
       status,
       headers: { 'content-type': 'application/json' },
     });
   };
+
+const trace = async (
+  workflowId: string,
+  status: number,
+  httpClient?: HTTPClient,
+): Promise<{
+  spans: ReadableSpan[];
+  events: ArazzoRunnerEvent[];
+  headers: Record<string, string>[];
+  thrown?: unknown;
+}> => {
+  const exporter = new InMemorySpanExporter();
+  const provider = new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] });
+  const otel = openTelemetryInstrumentation({ tracer: provider.getTracer('test') });
+  const headers: Record<string, string>[] = [];
+  const events: ArazzoRunnerEvent[] = [];
+  let time = 0;
   const runner = await ArazzoRunner.load(entryPath, {
-    httpClient,
-    observer: otel.observer,
-    requestInterceptor: otel.requestInterceptor,
+    ...otel,
+    httpClient: httpClient ?? respond(status, headers),
+    now: () => (time += 5),
+    observer: combineObservers(otel.observer, (event) => events.push(event)),
   });
 
   let thrown: unknown;
   try {
     await runner.execute(workflowId, { inputs: { status: 'available' } });
-    otel.end();
   } catch (error) {
     thrown = error;
-    otel.end(error);
   }
-  return { spans: exporter.getFinishedSpans(), headers, thrown };
+  return { spans: exporter.getFinishedSpans(), events, headers, thrown };
 };
 
 const named = (spans: ReadableSpan[], name: string): ReadableSpan => {
@@ -58,7 +73,7 @@ const named = (spans: ReadableSpan[], name: string): ReadableSpan => {
 const isChild = (child: ReadableSpan, parent: ReadableSpan): boolean =>
   child.parentSpanContext?.spanId === parent.spanContext().spanId;
 
-describe('openTelemetryObserver', function () {
+describe('openTelemetryInstrumentation', function () {
   afterEach(function () {
     propagation.disable();
   });
@@ -102,33 +117,32 @@ describe('openTelemetryObserver', function () {
     assert.strictEqual(named(spans, 'workflow transferTarget').status.code, SpanStatusCode.ERROR);
   });
 
-  specify('should end the spans of a run that throws with its error', async function () {
-    const { spans, thrown } = await trace('noSuchWorkflow', 200);
+  specify('should end the spans of a run whose transport throws with its error', async function () {
+    const { spans, thrown } = await trace('linear', 200, async () => {
+      throw new TypeError('fetch failed');
+    });
 
     assert.isDefined(thrown);
-    // the root workflow id is rejected before it starts, so nothing is open
-    assert.isEmpty(spans);
+    const workflow = named(spans, 'workflow linear');
+    const step = named(spans, 'step findPets');
+    const request = spans.find((span) => span.kind === SpanKind.CLIENT)!;
+    for (const span of [request, step, workflow]) {
+      assert.strictEqual(span.status.code, SpanStatusCode.ERROR);
+      assert.strictEqual(span.status.message, (thrown as Error).message);
+      assert.strictEqual(span.events.at(-1)?.name, 'exception');
+    }
+  });
 
-    const exporter = new InMemorySpanExporter();
-    const provider = new BasicTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
-    });
-    const otel = openTelemetryObserver({ tracer: provider.getTracer('test') });
-    otel.observer({
-      type: 'workflow-start',
-      timestamp: 0,
-      runId: 'run-1',
-      workflowId: 'w',
-      path: ['w'],
-      via: 'root',
-      location: { uri: 'flow.arazzo.yaml', jsonPointer: '/workflows/0' },
-    });
-    otel.end(new Error('boom'));
+  specify('should time spans by the events', async function () {
+    const { spans, events } = await trace('linear', 200);
 
-    const [workflow] = exporter.getFinishedSpans();
-    assert.strictEqual(workflow.status.code, SpanStatusCode.ERROR);
-    assert.strictEqual(workflow.status.message, 'boom');
-    assert.strictEqual(workflow.events[0].name, 'exception');
+    const started = events.find((event) => event.type === 'workflow-start')!;
+    const settled = events.find((event) => event.type === 'workflow-settled')!;
+    const workflow = named(spans, 'workflow linear');
+    assert.strictEqual(
+      hrTimeToMilliseconds(workflow.endTime) - hrTimeToMilliseconds(workflow.startTime),
+      settled.timestamp - started.timestamp,
+    );
   });
 
   specify("should propagate the request span's context into the request", async function () {

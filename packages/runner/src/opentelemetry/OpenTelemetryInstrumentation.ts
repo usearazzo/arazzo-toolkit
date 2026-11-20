@@ -11,16 +11,17 @@ import {
 import { toValue } from '@speclynx/apidom-core';
 import {
   Redactor,
+  type ArazzoRunnerEvent,
   type ArazzoRunnerObserver,
   type DocumentLocation,
   type RequestInterceptor,
 } from '@usearazzo/runner';
 
 /**
- * Options for {@link openTelemetryObserver}.
+ * Options for {@link openTelemetryInstrumentation}.
  * @public
  */
-export interface OpenTelemetryObserverOptions {
+export interface OpenTelemetryInstrumentationOptions {
   /**
    * The tracer the spans are started with. `trace.getTracer('@usearazzo/runner')`
    * when omitted, so spans go to the tracer provider registered globally.
@@ -36,10 +37,11 @@ export interface OpenTelemetryObserverOptions {
 }
 
 /**
- * Traces runs as OpenTelemetry spans.
+ * The runner options that trace its runs. Spread it into the options, or
+ * pass its fields where you combine them with your own.
  * @public
  */
-export interface OpenTelemetryObserver {
+export interface OpenTelemetryInstrumentation {
   /**
    * Turns events into spans: one per workflow, one per step under it, and
    * one `CLIENT` span per request under its step. Attempts, criteria, selected
@@ -51,20 +53,9 @@ export interface OpenTelemetryObserver {
    * registered globally (a `traceparent` header with W3C trace context, which
    * the Node SDK registers by default), so the API's own spans join the run's
    * trace under the request's span. Without a registered propagator it adds
-   * nothing. Add it as the runner's `requestInterceptor`.
+   * nothing.
    */
   readonly requestInterceptor: RequestInterceptor;
-  /**
-   * Ends every span still open. Call it once `execute` settles: a run that
-   * throws leaves its workflows and steps without their settled events, so
-   * their spans would stay open and never be exported. With an `error`, those
-   * spans are marked as failed and record it.
-   *
-   * It ends the open spans of every run the adapter traces. With concurrent
-   * runs, call it once they have all settled, or give each its own runner and
-   * adapter.
-   */
-  end(error?: unknown): void;
 }
 
 /**
@@ -85,32 +76,36 @@ const NAME = '@usearazzo/runner';
  *
  * ```js
  * import { ArazzoRunner } from '@usearazzo/runner';
- * import { openTelemetryObserver } from '@usearazzo/runner/opentelemetry';
+ * import { openTelemetryInstrumentation } from '@usearazzo/runner/opentelemetry';
  *
- * const otel = openTelemetryObserver();
- * const runner = await ArazzoRunner.load(uri, {
- *   observer: otel.observer,
- *   requestInterceptor: otel.requestInterceptor,
- * });
- * try {
- *   await runner.execute('authenticateAndOrderPet', options);
- *   otel.end();
- * } catch (error) {
- *   otel.end(error);
- *   throw error;
- * }
+ * const runner = await ArazzoRunner.load(uri, { ...openTelemetryInstrumentation() });
+ * await runner.execute('authenticateAndOrderPet', options);
  * ```
+ *
+ * Every span ends with its settled event, a run that throws included: its
+ * workflows and steps, and a request whose transport threw, end marked as
+ * failed, recording the error. Spans are timed by the events' timestamps,
+ * the runner's `now`.
  *
  * A workflow called at the top of a run starts under the context active when
  * its first event arrives, so wrapping `execute` in a span of your own nests
  * the run under it. Spans are told apart by run through the events' `runId`:
  * an operation executor used on its own, without one, is traced as one run, so
  * give concurrent calls a `runId` each.
+ *
+ * HTTP auto-instrumentation (`@opentelemetry/instrumentation-undici`, which
+ * the Node auto-instrumentations enable, and which instruments the `fetch` the
+ * runner sends with by default) adds a `CLIENT` span of its own to each
+ * request, outside the run's trace, and replaces the `traceparent` this
+ * adapter propagates with its own. Turn it off for the runner's requests to
+ * keep one span per request in the run's trace: with
+ * `OTEL_NODE_DISABLED_INSTRUMENTATIONS=undici`, or
+ * `getNodeAutoInstrumentations({ '@opentelemetry/instrumentation-undici': { enabled: false } })`.
  * @public
  */
-const openTelemetryObserver = (
-  options: OpenTelemetryObserverOptions = {},
-): OpenTelemetryObserver => {
+const openTelemetryInstrumentation = (
+  options: OpenTelemetryInstrumentationOptions = {},
+): OpenTelemetryInstrumentation => {
   const tracer = options.tracer ?? trace.getTracer(NAME);
   const redactor = options.redactor ?? new Redactor();
   // keyed by runId: an executor used without one is traced as the run ''
@@ -127,46 +122,75 @@ const openTelemetryObserver = (
     return spans;
   };
 
-  // a run with nothing open is forgotten
-  const release = (runId: string | undefined, spans: OpenSpans): void => {
-    if (spans.stack.length === 0 && spans.request === undefined) runs.delete(keyOf(runId));
-  };
-
   // a span's parent is the innermost span open in its run, or the active context
-  const start = (spans: OpenSpans, name: string, kind: SpanKind, attributes: Attributes): Span => {
+  const start = (
+    spans: OpenSpans,
+    name: string,
+    kind: SpanKind,
+    attributes: Attributes,
+    startTime: number,
+  ): Span => {
     const parent = spans.stack.at(-1);
     const parentContext =
       parent === undefined ? context.active() : trace.setSpan(context.active(), parent);
-    return tracer.startSpan(name, { kind, attributes }, parentContext);
+    return tracer.startSpan(name, { kind, attributes, startTime }, parentContext);
   };
 
-  const push = (runId: string, name: string, attributes: Attributes): void => {
-    const spans = spansOf(runId);
-    spans.stack.push(start(spans, name, SpanKind.INTERNAL, attributes));
+  const fail = (span: Span, error: unknown): void => {
+    if (error === undefined) {
+      span.setStatus({ code: SpanStatusCode.ERROR });
+      return;
+    }
+    span.recordException(error instanceof Error ? error : String(error));
+    span.setStatus({
+      code: SpanStatusCode.ERROR,
+      ...(error instanceof Error ? { message: error.message } : {}),
+    });
   };
 
-  const settle = (runId: string, failed: boolean, attributes: Attributes): void => {
-    const spans = runs.get(keyOf(runId));
+  const push = (
+    event: { readonly runId: string; readonly timestamp: number },
+    name: string,
+    attributes: Attributes,
+  ): void => {
+    const spans = spansOf(event.runId);
+    spans.stack.push(start(spans, name, SpanKind.INTERNAL, attributes, event.timestamp));
+  };
+
+  // a request still open when its step settles threw in the transport
+  const settle = (
+    event: { readonly runId: string; readonly timestamp: number; readonly error?: unknown },
+    failed: boolean,
+    attributes: Attributes,
+  ): void => {
+    const key = keyOf(event.runId);
+    const spans = runs.get(key);
     const span = spans?.stack.pop();
     if (spans === undefined || span === undefined) return;
+    if (spans.request !== undefined) {
+      fail(spans.request, event.error);
+      spans.request.end(event.timestamp);
+      spans.request = undefined;
+    }
     span.setAttributes(attributes);
-    if (failed) span.setStatus({ code: SpanStatusCode.ERROR });
-    span.end();
-    release(runId, spans);
+    if (failed || event.error !== undefined) fail(span, event.error);
+    span.end(event.timestamp);
+    // a run with nothing open is forgotten
+    if (spans.stack.length === 0) runs.delete(key);
   };
 
   // an event of the innermost open span: the step's, for the events below. It
   // names its step, since a retry's stepId reference reports under the
   // referenced step while the retrying step's span is the one open
   const addEvent = (
-    event: { readonly runId: string; readonly stepId: string },
+    event: { readonly runId: string; readonly stepId: string; readonly timestamp: number },
     name: string,
     attributes: Attributes,
   ): void => {
     runs
       .get(keyOf(event.runId))
       ?.stack.at(-1)
-      ?.addEvent(name, { 'arazzo.step.id': event.stepId, ...attributes });
+      ?.addEvent(name, { 'arazzo.step.id': event.stepId, ...attributes }, event.timestamp);
   };
 
   const locationAttributes = ({ uri, jsonPointer }: DocumentLocation): Attributes => ({
@@ -176,10 +200,10 @@ const openTelemetryObserver = (
 
   // the URL is the one field a span takes that can carry a credential, so it
   // is the only one masked
-  const observer: ArazzoRunnerObserver = (event) => {
+  const observer: ArazzoRunnerObserver = (event: ArazzoRunnerEvent) => {
     switch (event.type) {
       case 'workflow-start':
-        push(event.runId, `workflow ${event.workflowId}`, {
+        push(event, `workflow ${event.workflowId}`, {
           'arazzo.run.id': event.runId,
           'arazzo.workflow.id': event.workflowId,
           'arazzo.workflow.via': event.via,
@@ -188,13 +212,13 @@ const openTelemetryObserver = (
         return;
       case 'workflow-settled':
         // a transferred workflow did not fail itself: its target reports its own outcome
-        settle(event.runId, event.status === 'failed', {
+        settle(event, event.status === 'failed', {
           'arazzo.workflow.status': event.status,
           'arazzo.workflow.settled_status': event.settledStatus,
         });
         return;
       case 'step-start':
-        push(event.runId, `step ${event.stepId}`, {
+        push(event, `step ${event.stepId}`, {
           'arazzo.run.id': event.runId,
           'arazzo.workflow.id': event.workflowId,
           'arazzo.step.id': event.stepId,
@@ -202,7 +226,7 @@ const openTelemetryObserver = (
         });
         return;
       case 'step-settled':
-        settle(event.runId, !event.successful, { 'arazzo.step.attempts': event.attempts });
+        settle(event, !event.successful, { 'arazzo.step.attempts': event.attempts });
         return;
       case 'step-attempt':
         addEvent(event, 'attempt', { 'arazzo.step.attempt': event.attempt });
@@ -246,11 +270,17 @@ const openTelemetryObserver = (
         // propagate this span's context
         const spans = spansOf(event.runId);
         const { documentURI, jsonPointer, operationId } = event.operation;
-        spans.request = start(spans, operationId ?? jsonPointer, SpanKind.CLIENT, {
-          'arazzo.operation.document_uri': documentURI,
-          'arazzo.operation.json_pointer': jsonPointer,
-          ...(operationId === undefined ? {} : { 'arazzo.operation.id': operationId }),
-        });
+        spans.request = start(
+          spans,
+          operationId ?? jsonPointer,
+          SpanKind.CLIENT,
+          {
+            'arazzo.operation.document_uri': documentURI,
+            'arazzo.operation.json_pointer': jsonPointer,
+            ...(operationId === undefined ? {} : { 'arazzo.operation.id': operationId }),
+          },
+          event.timestamp,
+        );
         return;
       }
       case 'openapi-operation-request-start': {
@@ -268,14 +298,15 @@ const openTelemetryObserver = (
         return;
       }
       case 'openapi-operation-request-settled': {
-        const spans = runs.get(keyOf(event.runId));
+        const key = keyOf(event.runId);
+        const spans = runs.get(key);
         const span = spans?.request;
         if (spans === undefined || span === undefined) return;
         span.setAttribute('http.response.status_code', event.response.status);
         if (event.response.status >= 400) span.setStatus({ code: SpanStatusCode.ERROR });
-        span.end();
+        span.end(event.timestamp);
         spans.request = undefined;
-        release(event.runId, spans);
+        if (spans.stack.length === 0) runs.delete(key);
         return;
       }
       default:
@@ -289,26 +320,7 @@ const openTelemetryObserver = (
     propagation.inject(trace.setSpan(context.active(), span), request.headers);
   };
 
-  const end = (error?: unknown): void => {
-    const exception = error instanceof Error ? error : String(error);
-    const status = {
-      code: SpanStatusCode.ERROR,
-      ...(error instanceof Error ? { message: error.message } : {}),
-    };
-    for (const { stack, request } of runs.values()) {
-      // innermost first: the request in flight, then the steps and workflows around it
-      for (const span of [...stack, ...(request === undefined ? [] : [request])].reverse()) {
-        if (error !== undefined) {
-          span.recordException(exception);
-          span.setStatus(status);
-        }
-        span.end();
-      }
-    }
-    runs.clear();
-  };
-
-  return { observer, requestInterceptor, end };
+  return { observer, requestInterceptor };
 };
 
-export default openTelemetryObserver;
+export default openTelemetryInstrumentation;
