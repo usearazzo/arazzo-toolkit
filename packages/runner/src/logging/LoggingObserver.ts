@@ -21,7 +21,11 @@ export interface LogRecord {
   /**
    * The event, masked, as structured fields: its `type`, `runId`, `stepId`,
    * `location` and the rest. The selected action of `action:selected` is
-   * given by its `name` and `type`, not as the document's element.
+   * given by its `name` and `type`, not as the document's element. The
+   * `error` of a settled event that threw is the native `Error`, for the
+   * logger to serialize as it is configured to: loggers serialize errors only
+   * under their own keys (pino's `err`, winston's top level), so give yours
+   * one for `error`, e.g. pino's `serializers: { error: pino.stdSerializers.err }`.
    */
   readonly fields: Readonly<Record<string, unknown>>;
 }
@@ -171,7 +175,8 @@ const fields = (event: ArazzoRunnerEvent): Readonly<Record<string, unknown>> => 
  *
  * Events carry no level, so this adapter gives them one: `info` for workflows
  * and steps starting and settling, `warn` for a failed step, `error` for a
- * failed workflow, and `debug` for attempts, criteria, actions, retries,
+ * failed workflow or a step or workflow that threw, and `debug` for
+ * attempts, criteria, actions, retries,
  * dependencies, document loads, normalization and requests. A workflow that
  * transferred to another is `info`: the workflow it transferred to reports its
  * own outcome. `levels` overrides it per event type.
@@ -181,7 +186,8 @@ const fields = (event: ArazzoRunnerEvent): Readonly<Record<string, unknown>> => 
  * import { ArazzoRunner } from '@usearazzo/runner';
  * import { loggingObserver } from '@usearazzo/runner/logging';
  *
- * const logger = pino();
+ * // the error of a step or workflow that threw, serialized as pino does `err`
+ * const logger = pino({ serializers: { error: pino.stdSerializers.err } });
  * const runner = await ArazzoRunner.load(uri, {
  *   observer: loggingObserver(({ level, message, fields }) => logger[level](fields, message)),
  * });
