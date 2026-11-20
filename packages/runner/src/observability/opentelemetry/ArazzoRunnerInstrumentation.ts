@@ -109,7 +109,8 @@ const fail = (span: Span, error: unknown): void => {
  * Each workflow invocation and each step is an `INTERNAL` span, the step's
  * under its workflow's, a sub-workflow's under its step's. Attempts, criteria,
  * selected actions, retry waits, retry references and the operations a step
- * calls are events of the step's span. A step runs in its span's context, so
+ * calls are events of the step's span, each named by the runner event it
+ * comes from (`step:attempt`, `criterion:evaluated`, `action:selected`, …). A step runs in its span's context, so
  * the HTTP instrumentation of the client it sends with (undici for Node's
  * `fetch`, `@opentelemetry/instrumentation-fetch` in the browser) nests its
  * request spans under the step and propagates the trace into the API.
@@ -230,10 +231,10 @@ class ArazzoRunnerInstrumentation {
         return;
       }
       case 'step:attempt':
-        this.#addEvent(event, 'attempt', { 'arazzo.step.attempt': event.attempt });
+        this.#addEvent(event, event.type, { 'arazzo.step.attempt': event.attempt });
         return;
       case 'criterion:evaluated':
-        this.#addEvent(event, 'criterion', {
+        this.#addEvent(event, event.type, {
           'arazzo.step.attempt': event.attempt,
           'arazzo.criterion.kind': event.kind,
           'arazzo.criterion.condition': event.criterion.condition,
@@ -241,7 +242,7 @@ class ArazzoRunnerInstrumentation {
         });
         return;
       case 'action:selected':
-        this.#addEvent(event, 'action', {
+        this.#addEvent(event, event.type, {
           'arazzo.step.attempt': event.attempt,
           'arazzo.action.transition': event.transition.kind,
           ...(event.action === undefined
@@ -250,7 +251,7 @@ class ArazzoRunnerInstrumentation {
         });
         return;
       case 'retry:wait':
-        this.#addEvent(event, 'retry:wait', {
+        this.#addEvent(event, event.type, {
           'arazzo.step.attempt': event.attempt,
           'arazzo.retry.delay_ms': event.delayMs,
         });
@@ -270,7 +271,7 @@ class ArazzoRunnerInstrumentation {
         // an operation executor used on its own runs for no step
         if (event.step === undefined) return;
         const { documentURI, jsonPointer, operationId } = event.operation;
-        this.#addEvent({ ...event.step, runId: event.runId }, 'operation', {
+        this.#addEvent({ ...event.step, runId: event.runId }, event.type, {
           'arazzo.operation.document_uri': documentURI,
           'arazzo.operation.json_pointer': jsonPointer,
           ...(operationId === undefined ? {} : { 'arazzo.operation.id': operationId }),
