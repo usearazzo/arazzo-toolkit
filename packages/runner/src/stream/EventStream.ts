@@ -8,7 +8,8 @@ export interface EventStreamOptions {
   /**
    * Masks each event before it is queued. A `new Redactor()` with the default
    * field patterns when omitted; there is no way to stream unmasked events
-   * through this adapter.
+   * through this adapter. A settled event's `error` is the exception: it is
+   * queued as `execute` rejects with it.
    */
   readonly redactor?: Redactor;
 }

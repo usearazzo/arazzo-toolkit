@@ -1,4 +1,5 @@
 import type { WorkflowCallVia } from '../executor/WorkflowCallStack.ts';
+import ExecutionError from '../errors/ExecutionError.ts';
 import type { DocumentLocation } from '../document/APIDocument.ts';
 import type { ArazzoRunnerEvent, ArazzoRunnerObserver } from './ArazzoRunnerEvent.ts';
 
@@ -85,8 +86,9 @@ const registry = (): Registry => {
  * Applies `hooks` to every runner in the process, until the returned
  * function removes them: the seam process-wide tooling, such as the
  * OpenTelemetry instrumentation, is built on. A run already in progress
- * picks hooks up at its next event or operation. Hooks apply in the order
- * they were added, the first wrap outermost.
+ * picks hooks up at its next event or operation, and drops removed ones the
+ * same way: a removed hook misses the settled events of what it saw start.
+ * Hooks apply in the order they were added, the first wrap outermost.
  * @public
  */
 const instrument = (hooks: InstrumentationHooks): (() => void) => {
@@ -152,7 +154,10 @@ export const traced = async <T>(
   // a wrap that settled without waiting for the work: the work still decides
   if (running !== undefined) await running.catch(() => undefined);
   if (outcome === undefined) {
-    throw new TypeError(`an instrumentation wrap settled without running the ${operation.kind}`);
+    throw new ExecutionError(
+      `an instrumentation wrap settled without running the ${operation.kind}`,
+      { workflowId: operation.workflowId, reason: ExecutionError.InstrumentationWrap },
+    );
   }
   if ('error' in outcome) throw outcome.error;
   return outcome.value;

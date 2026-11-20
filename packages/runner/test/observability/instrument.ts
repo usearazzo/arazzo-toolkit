@@ -5,6 +5,7 @@ import { assert } from 'chai';
 
 import {
   ArazzoRunner,
+  ExecutionError,
   instrument,
   type ArazzoRunnerEvent,
   type HTTPClient,
@@ -167,7 +168,8 @@ describe('instrument', function () {
       caught = error;
     }
 
-    assert.instanceOf(caught, TypeError);
+    assert.instanceOf(caught, ExecutionError);
+    assert.strictEqual((caught as ExecutionError).reason, ExecutionError.InstrumentationWrap);
     assert.match((caught as Error).message, /without running the workflow/);
   });
 
@@ -303,4 +305,49 @@ describe('instrument', function () {
       assert.match((caught as Error).message, /OpenAPI operation request failed/);
     },
   );
+
+  specify('should notify process-wide observers when the own observer throws', async function () {
+    const seen: string[] = [];
+    hook({ observer: (event) => seen.push(event.type) });
+    const runner = await ArazzoRunner.load(entryPath, {
+      httpClient: respond(200),
+      observer: (event) => {
+        if (event.type === 'step:attempt') throw new Error('sink closed');
+      },
+    });
+
+    let caught: unknown;
+    try {
+      await runner.execute('linear', { inputs: { status: 'available' } });
+    } catch (error) {
+      caught = error;
+    }
+
+    assert.strictEqual((caught as Error).message, 'sink closed');
+    assert.includeMembers(seen, ['step:attempt', 'step:settled', 'workflow:settled']);
+  });
+
+  specify('should report the next attempts of a step to hooks added during it', async function () {
+    const attempts: number[] = [];
+    let calls = 0;
+    const runner = await ArazzoRunner.load(entryPath, {
+      sleep: async () => {},
+      httpClient: (request) => {
+        calls += 1;
+        if (calls === 1) {
+          hook({
+            observer: (event) => {
+              if (event.type === 'step:attempt') attempts.push(event.attempt);
+            },
+          });
+        }
+        return respond(calls < 3 ? 503 : 200)(request);
+      },
+    });
+
+    await runner.execute('retryThenSucceed');
+
+    // added during the first attempt: the retries of the same step are reported
+    assert.deepEqual(attempts, [2, 3]);
+  });
 });

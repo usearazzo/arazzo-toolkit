@@ -341,12 +341,9 @@ class OpenAPIOperationExecutor {
   readonly #operationNormalizer: OpenAPIOperationNormalizer;
   readonly #documentAssembler: OpenAPIDocumentAssembler;
   readonly #captureBodies: boolean;
-  readonly #channel: EventChannel<OpenAPIOperationEvent>;
-
-  // the channel while anyone observes, so an unobserved block builds no events
-  get #events(): EventChannel<OpenAPIOperationEvent> | undefined {
-    return this.#channel.observed;
-  }
+  // emits through `this.#events.observed?.emit(...)`, so an unobserved block
+  // builds no events
+  readonly #events: EventChannel<OpenAPIOperationEvent>;
 
   constructor(options: OpenAPIOperationExecutorOptions = {}) {
     this.#httpClient = options.httpClient ?? httpClientFetch;
@@ -356,7 +353,7 @@ class OpenAPIOperationExecutor {
     this.#operationExtractor = options.operationExtractor ?? new OpenAPIOperationExtractor();
     this.#operationNormalizer = options.operationNormalizer ?? new OpenAPIOperationNormalizer();
     this.#documentAssembler = options.documentAssembler ?? new OpenAPIDocumentAssembler();
-    this.#channel = new EventChannel({ observer: options.observer, now: options.now });
+    this.#events = new EventChannel({ observer: options.observer, now: options.now });
     this.#captureBodies = options.captureBodies ?? false;
   }
 
@@ -412,7 +409,7 @@ class OpenAPIOperationExecutor {
       ...(runId === undefined ? {} : { runId }),
     };
 
-    this.#events?.emit({
+    this.#events.observed?.emit({
       type: 'openapi:operation:normalize:start',
       ...context,
       location: location(),
@@ -421,13 +418,13 @@ class OpenAPIOperationExecutor {
       operation,
       locator.document,
     );
-    this.#events?.emit({
+    this.#events.observed?.emit({
       type: 'openapi:operation:normalize:settled',
       ...context,
       location: location(),
     });
     const assembled = this.#documentAssembler.assemble(normalizedOperation, locator.document);
-    this.#events?.emit({
+    this.#events.observed?.emit({
       type: 'openapi:operation:assembled',
       ...context,
       location: location(),
@@ -511,7 +508,7 @@ class OpenAPIOperationExecutor {
       body: request.body,
     };
 
-    this.#events?.emit({
+    this.#events.observed?.emit({
       type: 'openapi:operation:request:start',
       ...context,
       location: location(),
@@ -534,7 +531,7 @@ class OpenAPIOperationExecutor {
     }
 
     const response = await this.#responseNormalizer.normalize(rawResponse, requestInfo);
-    this.#events?.emit({
+    this.#events.observed?.emit({
       type: 'openapi:operation:request:settled',
       ...context,
       location: location(),

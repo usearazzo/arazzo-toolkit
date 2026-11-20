@@ -44,7 +44,8 @@ export interface LoggingObserverOptions {
   /**
    * Masks each event before it is logged. A `new Redactor()` with the default
    * field patterns when omitted; there is no way to log unmasked events
-   * through this adapter.
+   * through this adapter. A settled event's `error` is the exception: it is
+   * logged as `execute` rejects with it.
    */
   readonly redactor?: Redactor;
   /**

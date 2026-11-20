@@ -511,7 +511,8 @@ describe('WorkflowExecutor events', function () {
           ],
         );
         assert.notProperty(settled[0], 'error');
-        assert.include(settled.at(-2), { successful: false, attempts: 1 });
+        // stopped at its boundary, before its first attempt ran
+        assert.include(settled.at(-2), { successful: false, attempts: 0 });
         assert.include(settled.at(-1), { status: 'failed', settledStatus: 'failed' });
       },
     );

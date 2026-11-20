@@ -23,6 +23,8 @@ class ExecutionError extends ArazzoRunnerError {
   static readonly GotoTargetMissing = 'goto-target-missing' as const;
   /** A `goto` action's `stepId` names no step in the workflow. */
   static readonly GotoTargetNotFound = 'goto-target-not-found' as const;
+  /** A process-wide instrumentation wrap (see `instrument`) settled without running its workflow or step. */
+  static readonly InstrumentationWrap = 'instrumentation-wrap' as const;
   /** An `operationId` or `operationPath` is not a valid operation reference. */
   static readonly InvalidOperationReference = 'invalid-operation-reference' as const;
   /** A `workflowId` is not a valid `$sourceDescriptions.{name}.{workflowId}` expression. */
