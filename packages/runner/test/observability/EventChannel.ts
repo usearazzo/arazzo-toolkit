@@ -16,17 +16,17 @@ describe('EventChannel', function () {
     return seen as Record<string, unknown>;
   };
 
-  specify('should be unobserved without an observer or instrumentation', function () {
+  specify('should have observers only with an observer or instrumentation', function () {
     const channel = new EventChannel({});
-    assert.isUndefined(channel.observed);
+    assert.isFalse(channel.hasObservers);
 
     const remove = instrument({ observer: () => {} });
     try {
-      assert.strictEqual(channel.observed, channel);
+      assert.isTrue(channel.hasObservers);
     } finally {
       remove();
     }
-    assert.isUndefined(channel.observed);
+    assert.isFalse(channel.hasObservers);
   });
 
   specify('should deliver a frozen deep copy stamped with the clock', function () {

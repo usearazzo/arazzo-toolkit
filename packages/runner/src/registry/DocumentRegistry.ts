@@ -44,8 +44,7 @@ class DocumentRegistry {
   readonly #documents: Map<string, APIDocument> = new Map();
   readonly #loading: Map<string, Promise<APIDocument>> = new Map();
   readonly #providers: DocumentRegistryProvider[];
-  // emits through `this.#events.observed?.emit(...)`, so an unobserved block
-  // builds no events
+  // emits only while `hasObservers`, so an unobserved block builds no events
   readonly #events: EventChannel<DocumentRegistryEvent>;
 
   constructor(options: DocumentRegistryOptions = {}) {
@@ -101,7 +100,9 @@ class DocumentRegistry {
    * caches it.
    */
   async #load(canonicalURI: string): Promise<APIDocument> {
-    this.#events.observed?.emit({ type: 'document:load:start', uri: canonicalURI });
+    if (this.#events.hasObservers) {
+      this.#events.emit({ type: 'document:load:start', uri: canonicalURI });
+    }
     for (const provider of this.#providers) {
       let document: APIDocument | undefined;
       try {
@@ -120,7 +121,9 @@ class DocumentRegistry {
       if (document !== undefined) {
         // outside the try, so an observer's own error is not a failed load, and
         // before caching, so a run it aborts leaves no half-registered document.
-        this.#events.observed?.emit({ type: 'document:load:settled', uri: canonicalURI });
+        if (this.#events.hasObservers) {
+          this.#events.emit({ type: 'document:load:settled', uri: canonicalURI });
+        }
         this.#set(canonicalURI, document);
         return document;
       }
