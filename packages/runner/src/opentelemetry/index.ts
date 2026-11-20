@@ -1,5 +1,2 @@
-export { default as openTelemetryInstrumentation } from './OpenTelemetryInstrumentation.ts';
-export type {
-  OpenTelemetryInstrumentation,
-  OpenTelemetryInstrumentationOptions,
-} from './OpenTelemetryInstrumentation.ts';
+export { default as openTelemetryTracing } from './OpenTelemetryTracing.ts';
+export type { OpenTelemetryTracing, OpenTelemetryTracingOptions } from './OpenTelemetryTracing.ts';

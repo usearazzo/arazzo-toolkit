@@ -18,10 +18,10 @@ import {
 } from '@usearazzo/runner';
 
 /**
- * Options for {@link openTelemetryInstrumentation}.
+ * Options for {@link openTelemetryTracing}.
  * @public
  */
-export interface OpenTelemetryInstrumentationOptions {
+export interface OpenTelemetryTracingOptions {
   /**
    * The tracer the spans are started with. `trace.getTracer('@usearazzo/runner')`
    * when omitted, so spans go to the tracer provider registered globally.
@@ -41,7 +41,7 @@ export interface OpenTelemetryInstrumentationOptions {
  * pass its fields where you combine them with your own.
  * @public
  */
-export interface OpenTelemetryInstrumentation {
+export interface OpenTelemetryTracing {
   /**
    * Turns events into spans: one per workflow, one per step under it, and
    * one `CLIENT` span per request under its step. Attempts, criteria, selected
@@ -76,9 +76,9 @@ const NAME = '@usearazzo/runner';
  *
  * ```js
  * import { ArazzoRunner } from '@usearazzo/runner';
- * import { openTelemetryInstrumentation } from '@usearazzo/runner/opentelemetry';
+ * import { openTelemetryTracing } from '@usearazzo/runner/opentelemetry';
  *
- * const runner = await ArazzoRunner.load(uri, { ...openTelemetryInstrumentation() });
+ * const runner = await ArazzoRunner.load(uri, { ...openTelemetryTracing() });
  * await runner.execute('authenticateAndOrderPet', options);
  * ```
  *
@@ -103,9 +103,7 @@ const NAME = '@usearazzo/runner';
  * `getNodeAutoInstrumentations({ '@opentelemetry/instrumentation-undici': { enabled: false } })`.
  * @public
  */
-const openTelemetryInstrumentation = (
-  options: OpenTelemetryInstrumentationOptions = {},
-): OpenTelemetryInstrumentation => {
+const openTelemetryTracing = (options: OpenTelemetryTracingOptions = {}): OpenTelemetryTracing => {
   const tracer = options.tracer ?? trace.getTracer(NAME);
   const redactor = options.redactor ?? new Redactor();
   // keyed by runId: an executor used without one is traced as the run ''
@@ -323,4 +321,4 @@ const openTelemetryInstrumentation = (
   return { observer, requestInterceptor };
 };
 
-export default openTelemetryInstrumentation;
+export default openTelemetryTracing;
