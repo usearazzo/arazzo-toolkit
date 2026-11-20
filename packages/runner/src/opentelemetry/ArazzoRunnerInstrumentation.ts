@@ -83,6 +83,29 @@ const fail = (span: Span, error: unknown): void => {
  * }).start();
  * ```
  *
+ * In the browser, with the fetch instrumentation for the request spans:
+ *
+ * ```js
+ * import { BatchSpanProcessor, WebTracerProvider } from '@opentelemetry/sdk-trace-web';
+ * import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+ * import { ZoneContextManager } from '@opentelemetry/context-zone';
+ * import { registerInstrumentations } from '@opentelemetry/instrumentation';
+ * import { FetchInstrumentation } from '@opentelemetry/instrumentation-fetch';
+ * import { ArazzoRunnerInstrumentation } from '@usearazzo/runner/opentelemetry';
+ *
+ * const provider = new WebTracerProvider({
+ *   spanProcessors: [new BatchSpanProcessor(new OTLPTraceExporter())],
+ * });
+ * provider.register({ contextManager: new ZoneContextManager() });
+ * registerInstrumentations({
+ *   // propagateTraceHeaderCorsUrls: the cross-origin APIs that get a traceparent
+ *   instrumentations: [
+ *     new FetchInstrumentation({ propagateTraceHeaderCorsUrls: [/api\.example\.com/] }),
+ *     new ArazzoRunnerInstrumentation(),
+ *   ],
+ * });
+ * ```
+ *
  * Each workflow invocation and each step is an `INTERNAL` span, the step's
  * under its workflow's, a sub-workflow's under its step's. Attempts, criteria,
  * selected actions, retry waits, retry references and the operations a step
