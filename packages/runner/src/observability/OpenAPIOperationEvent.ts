@@ -15,6 +15,12 @@ export interface OpenAPIOperationEventBase extends ArazzoRunnerEventBase, Reques
    * as a `$ref`, which is written in the document the reference names.
    */
   readonly location: DocumentLocation;
+  /**
+   * The `runId` of the {@link WorkflowExecutor.execute} call the operation
+   * runs for, from the execute options. Absent when the executor is used
+   * without one.
+   */
+  readonly runId?: string;
 }
 
 /**
