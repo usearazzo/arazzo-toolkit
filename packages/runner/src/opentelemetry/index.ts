@@ -1,2 +1,2 @@
-export { default as openTelemetryTracing } from './OpenTelemetryTracing.ts';
-export type { OpenTelemetryTracing, OpenTelemetryTracingOptions } from './OpenTelemetryTracing.ts';
+export { default as ArazzoRunnerInstrumentation } from './ArazzoRunnerInstrumentation.ts';
+export type { ArazzoRunnerInstrumentationConfig } from './ArazzoRunnerInstrumentation.ts';
