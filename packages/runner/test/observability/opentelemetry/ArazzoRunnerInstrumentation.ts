@@ -100,7 +100,7 @@ describe('ArazzoRunnerInstrumentation', function () {
     });
     assert.deepEqual(
       step.events.map((event) => event.name),
-      ['attempt', 'operation', 'criterion', 'action'],
+      ['step:attempt', 'openapi:operation:assembled', 'criterion:evaluated', 'action:selected'],
     );
     for (const event of step.events)
       assert.strictEqual(event.attributes?.['arazzo.step.id'], 'findPets');
@@ -117,7 +117,7 @@ describe('ArazzoRunnerInstrumentation', function () {
       assert.isTrue(isChild(step, workflow));
       assert.include(
         step.events.map((event) => event.name),
-        'attempt',
+        'step:attempt',
       );
       assert.strictEqual(step.attributes['arazzo.step.attempts'], 1);
     } finally {
