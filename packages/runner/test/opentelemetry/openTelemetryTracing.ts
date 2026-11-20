@@ -49,10 +49,10 @@ const trace = async (
   const events: ArazzoRunnerEvent[] = [];
   let time = 0;
   const runner = await ArazzoRunner.load(entryPath, {
-    ...otel,
     httpClient: httpClient ?? respond(status, headers),
     now: () => (time += 5),
     observer: combineObservers(otel.observer, (event) => events.push(event)),
+    requestInterceptor: otel.requestInterceptor,
   });
 
   let thrown: unknown;
