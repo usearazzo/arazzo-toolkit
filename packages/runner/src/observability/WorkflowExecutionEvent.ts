@@ -23,7 +23,7 @@ export interface WorkflowExecutionEventBase extends ArazzoRunnerEventBase {
   readonly runId: string;
   /**
    * The bare id of the workflow in progress when the event fired. For a
-   * `dependency-*` event, this is the dependent workflow, not the dependency.
+   * `dependency:*` event, this is the dependent workflow, not the dependency.
    */
   readonly workflowId: string;
   /**
@@ -82,7 +82,7 @@ export interface WorkflowSettledEvent extends WorkflowExecutionEventBase {
 }
 
 /**
- * The workflow a `dependency-*` event is about.
+ * The workflow a `dependency:*` event is about.
  * @public
  */
 export interface WorkflowExecutionDependency {
@@ -288,7 +288,7 @@ export interface WorkflowNormalizeSettledEvent extends WorkflowExecutionEventBas
 /**
  * An event the {@link WorkflowExecutor} emits, discriminated by `type`.
  *
- * The events other than `workflow-normalize-*` mark the boundaries the
+ * The events other than `workflow:normalize:*` mark the boundaries the
  * {@link WorkflowExecutionResult} trace records, plus the criterion and
  * action decisions behind each step, so folding a run's events rebuilds its
  * trace. A workflow's or step's start and settled events are stamped with the
