@@ -1,23 +1,32 @@
 import { assert } from 'chai';
 
 import EventChannel from '../../src/observability/EventChannel.ts';
-import type { ArazzoRunnerEvent } from '../../src/index.ts';
+import { instrument, type ArazzoRunnerEvent } from '../../src/index.ts';
 
 describe('EventChannel', function () {
   const capture = (event: Record<string, unknown>): Record<string, unknown> => {
     let seen: unknown;
-    const channel = EventChannel.open<ArazzoRunnerEvent>({
+    const channel = new EventChannel<ArazzoRunnerEvent>({
       observer: (delivered) => {
         seen = delivered;
       },
       now: () => 42,
     });
-    channel?.emit(event as never);
+    channel.emit(event as never);
     return seen as Record<string, unknown>;
   };
 
-  specify('should open no channel without an observer', function () {
-    assert.isUndefined(EventChannel.open({}));
+  specify('should be unobserved without an observer or instrumentation', function () {
+    const channel = new EventChannel({});
+    assert.isUndefined(channel.observed);
+
+    const remove = instrument({ observer: () => {} });
+    try {
+      assert.strictEqual(channel.observed, channel);
+    } finally {
+      remove();
+    }
+    assert.isUndefined(channel.observed);
   });
 
   specify('should deliver a frozen deep copy stamped with the clock', function () {
