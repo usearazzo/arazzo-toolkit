@@ -62,7 +62,7 @@
     "@speclynx/apidom-ns-openapi-3-1": "^7.1.0",
     "@speclynx/apidom-reference": "^7.1.0",
     "@usearazzo/parser": "1.0.1-alpha.34",
-    "type-fest": "^5.10.0"
+    "type-fest": "^6.0.1"
   },
   "devDependencies": {
     "@speclynx/apidom-core": "^7.1.0"
