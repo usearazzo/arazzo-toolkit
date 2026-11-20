@@ -34,17 +34,17 @@
       "require": "./src/index.cjs"
     },
     "./observability/logging": {
-      "types": "./types/observability/logging.d.ts",
+      "types": "./types/observability/logging/index.d.ts",
       "import": "./src/observability/logging/index.mjs",
       "require": "./src/observability/logging/index.cjs"
     },
     "./observability/stream": {
-      "types": "./types/observability/stream.d.ts",
+      "types": "./types/observability/stream/index.d.ts",
       "import": "./src/observability/stream/index.mjs",
       "require": "./src/observability/stream/index.cjs"
     },
     "./observability/opentelemetry": {
-      "types": "./types/observability/opentelemetry.d.ts",
+      "types": "./types/observability/opentelemetry/index.d.ts",
       "import": "./src/observability/opentelemetry/index.mjs",
       "require": "./src/observability/opentelemetry/index.cjs"
     }
@@ -53,13 +53,13 @@
   "typesVersions": {
     "*": {
       "observability/logging": [
-        "./types/observability/logging.d.ts"
+        "./types/observability/logging/index.d.ts"
       ],
       "observability/stream": [
-        "./types/observability/stream.d.ts"
+        "./types/observability/stream/index.d.ts"
       ],
       "observability/opentelemetry": [
-        "./types/observability/opentelemetry.d.ts"
+        "./types/observability/opentelemetry/index.d.ts"
       ]
     }
   },
@@ -73,7 +73,7 @@
     "lint:fix": "eslint ./ --fix",
     "clean": "rimraf --glob 'src/**/*.mjs' 'src/**/*.cjs' 'test/**/*.mjs' ./dist ./types",
     "typescript:check-types": "tsc --noEmit",
-    "typescript:declaration": "tsc -p tsconfig.declaration.json && api-extractor run -l -c ./config/api-extractor/api-extractor.json && api-extractor run -l -c ./config/api-extractor/logging.json && api-extractor run -l -c ./config/api-extractor/stream.json && api-extractor run -l -c ./config/api-extractor/opentelemetry.json",
+    "typescript:declaration": "tsc -p tsconfig.declaration.json && api-extractor run -l -c ./config/api-extractor/api-extractor.json",
     "test": "npm run build:es && cross-env BABEL_ENV=es babel test --out-dir test --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward' && cross-env NODE_ENV=test mocha",
     "test:e2e": "npm run build:es && cross-env BABEL_ENV=es babel test --out-dir test --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward' && cross-env NODE_ENV=test mocha --config .mocharc.e2e.json",
     "prepack": "copyfiles -u 2 ../../LICENSE . && copyfiles -u 2 ../../NOTICE .",
@@ -117,9 +117,9 @@
     "src/**/*.cjs",
     "dist/",
     "types/runner.d.ts",
-    "types/observability/logging.d.ts",
-    "types/observability/stream.d.ts",
-    "types/observability/opentelemetry.d.ts",
+    "types/observability/logging/",
+    "types/observability/stream/",
+    "types/observability/opentelemetry/",
     "LICENSE",
     "NOTICE",
     "README.md",
