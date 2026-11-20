@@ -37,8 +37,8 @@ export interface OpenTelemetryTracingOptions {
 }
 
 /**
- * The runner options that trace its runs. Spread it into the options, or
- * pass its fields where you combine them with your own.
+ * Traces runs: an observer and a request interceptor, to pass as the
+ * runner's `observer` and `requestInterceptor`.
  * @public
  */
 export interface OpenTelemetryTracing {
@@ -53,7 +53,8 @@ export interface OpenTelemetryTracing {
    * registered globally (a `traceparent` header with W3C trace context, which
    * the Node SDK registers by default), so the API's own spans join the run's
    * trace under the request's span. Without a registered propagator it adds
-   * nothing.
+   * nothing. The runner takes one interceptor: with one of your own, call
+   * this one from it.
    */
   readonly requestInterceptor: RequestInterceptor;
 }
@@ -78,7 +79,11 @@ const NAME = '@usearazzo/runner';
  * import { ArazzoRunner } from '@usearazzo/runner';
  * import { openTelemetryTracing } from '@usearazzo/runner/opentelemetry';
  *
- * const runner = await ArazzoRunner.load(uri, { ...openTelemetryTracing() });
+ * const tracing = openTelemetryTracing();
+ * const runner = await ArazzoRunner.load(uri, {
+ *   observer: tracing.observer,
+ *   requestInterceptor: tracing.requestInterceptor,
+ * });
  * await runner.execute('authenticateAndOrderPet', options);
  * ```
  *
