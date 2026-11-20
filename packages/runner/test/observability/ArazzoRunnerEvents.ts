@@ -38,19 +38,19 @@ describe('ArazzoRunner events', function () {
 
     const types = events.map((event) => event.type);
     // the entry document loads before the run starts.
-    assert.deepEqual(types.slice(0, 2), ['document-load-start', 'document-load-settled']);
-    assert.include(types, 'workflow-start');
+    assert.deepEqual(types.slice(0, 2), ['document:load:start', 'document:load:settled']);
+    assert.include(types, 'workflow:start');
     // the operation pipeline falls between an attempt and its criteria.
-    const attempt = types.indexOf('step-attempt');
+    const attempt = types.indexOf('step:attempt');
     assert.deepEqual(
       types
         .slice(attempt + 1)
-        .filter((type) => type.startsWith('openapi-operation-'))
+        .filter((type) => type.startsWith('openapi:operation:'))
         .slice(0, 3),
       [
-        'openapi-operation-normalize-start',
-        'openapi-operation-normalize-settled',
-        'openapi-operation-assembled',
+        'openapi:operation:normalize:start',
+        'openapi:operation:normalize:settled',
+        'openapi:operation:assembled',
       ],
     );
   });
@@ -82,9 +82,9 @@ describe('ArazzoRunner events', function () {
 
     await runner.execute('linear', { inputs: { status: 'available' } });
 
-    const start = events.find((event) => event.type === 'workflow-start');
+    const start = events.find((event) => event.type === 'workflow:start');
     const operations = events.filter((event): event is OpenAPIOperationEvent =>
-      event.type.startsWith('openapi-operation-'),
+      event.type.startsWith('openapi:operation:'),
     );
     assert.isNotEmpty(operations);
     assert.isTrue(operations.every((event) => event.runId === start?.runId));
@@ -106,7 +106,7 @@ describe('ArazzoRunner events', function () {
     await runner.execute('linear', { inputs: { status: 'available' } });
 
     const normalized = events.find(
-      (event): event is OpenAPIOperationEvent => event.type === 'openapi-operation-normalize-start',
+      (event): event is OpenAPIOperationEvent => event.type === 'openapi:operation:normalize:start',
     );
     assert.isTrue(Object.isFrozen(normalized?.operation));
     assert.notStrictEqual(normalized?.operation, contexts[0].operation);
@@ -124,7 +124,7 @@ describe('ArazzoRunner events', function () {
 
     await runner.execute('linear', { inputs: { status: 'available' } });
 
-    assert.isFalse(events.some((event) => event.type.startsWith('document-')));
+    assert.isFalse(events.some((event) => event.type.startsWith('document:')));
   });
 
   context('building blocks on their own', function () {
@@ -141,8 +141,8 @@ describe('ArazzoRunner events', function () {
       assert.deepEqual(
         events.map((event) => [event.type, event.timestamp]),
         [
-          ['document-load-start', 42],
-          ['document-load-settled', 42],
+          ['document:load:start', 42],
+          ['document:load:settled', 42],
         ],
       );
       assert.isTrue(events.every((event) => event.uri === events[0].uri));
@@ -155,7 +155,7 @@ describe('ArazzoRunner events', function () {
       const registry = new DocumentRegistry({
         observer: (event) => {
           events.push(event);
-          if (event.type === 'document-load-settled' && failNext) {
+          if (event.type === 'document:load:settled' && failNext) {
             failNext = false;
             throw thrown;
           }
@@ -175,10 +175,10 @@ describe('ArazzoRunner events', function () {
       assert.deepEqual(
         events.map((event) => event.type),
         [
-          'document-load-start',
-          'document-load-settled',
-          'document-load-start',
-          'document-load-settled',
+          'document:load:start',
+          'document:load:settled',
+          'document:load:start',
+          'document:load:settled',
         ],
       );
     });
@@ -201,11 +201,11 @@ describe('ArazzoRunner events', function () {
       assert.deepEqual(
         events.map((event) => event.type),
         [
-          'openapi-operation-normalize-start',
-          'openapi-operation-normalize-settled',
-          'openapi-operation-assembled',
-          'openapi-operation-request-start',
-          'openapi-operation-request-settled',
+          'openapi:operation:normalize:start',
+          'openapi:operation:normalize:settled',
+          'openapi:operation:assembled',
+          'openapi:operation:request:start',
+          'openapi:operation:request:settled',
         ],
       );
       assert.isTrue(events.every((event) => !('runId' in event) && !('step' in event)));

@@ -299,7 +299,7 @@ export interface OpenAPIOperationExecutorOptions {
    */
   readonly now?: () => number;
   /**
-   * Whether the `openapi-operation-request-*` events carry the request and
+   * Whether the `openapi:operation:request:*` events carry the request and
    * response bodies. Off by default.
    */
   readonly captureBodies?: boolean;
@@ -335,7 +335,8 @@ class OpenAPIOperationExecutor {
   readonly #operationNormalizer: OpenAPIOperationNormalizer;
   readonly #documentAssembler: OpenAPIDocumentAssembler;
   readonly #captureBodies: boolean;
-  readonly #events: EventChannel<OpenAPIOperationEvent> | undefined;
+  // emits only while `hasObservers`, so an unobserved block builds no events
+  readonly #events: EventChannel<OpenAPIOperationEvent>;
 
   constructor(options: OpenAPIOperationExecutorOptions = {}) {
     this.#httpClient = options.httpClient ?? httpClientFetch;
@@ -345,7 +346,7 @@ class OpenAPIOperationExecutor {
     this.#operationExtractor = options.operationExtractor ?? new OpenAPIOperationExtractor();
     this.#operationNormalizer = options.operationNormalizer ?? new OpenAPIOperationNormalizer();
     this.#documentAssembler = options.documentAssembler ?? new OpenAPIDocumentAssembler();
-    this.#events = EventChannel.open({ observer: options.observer, now: options.now });
+    this.#events = new EventChannel({ observer: options.observer, now: options.now });
     this.#captureBodies = options.captureBodies ?? false;
   }
 
@@ -400,29 +401,35 @@ class OpenAPIOperationExecutor {
       ...(step === undefined ? {} : { step: { ...step } }),
     };
 
-    this.#events?.emit({
-      type: 'openapi-operation-normalize-start',
-      ...context,
-      runId,
-      location: location(),
-    });
+    if (this.#events.hasObservers) {
+      this.#events.emit({
+        type: 'openapi:operation:normalize:start',
+        ...context,
+        runId,
+        location: location(),
+      });
+    }
     const normalizedOperation = await this.#operationNormalizer.normalize(
       operation,
       locator.document,
     );
-    this.#events?.emit({
-      type: 'openapi-operation-normalize-settled',
-      ...context,
-      runId,
-      location: location(),
-    });
+    if (this.#events.hasObservers) {
+      this.#events.emit({
+        type: 'openapi:operation:normalize:settled',
+        ...context,
+        runId,
+        location: location(),
+      });
+    }
     const assembled = this.#documentAssembler.assemble(normalizedOperation, locator.document);
-    this.#events?.emit({
-      type: 'openapi-operation-assembled',
-      ...context,
-      runId,
-      location: location(),
-    });
+    if (this.#events.hasObservers) {
+      this.#events.emit({
+        type: 'openapi:operation:assembled',
+        ...context,
+        runId,
+        location: location(),
+      });
+    }
 
     const rest = omit(
       [
@@ -496,18 +503,20 @@ class OpenAPIOperationExecutor {
       body: request.body,
     };
 
-    this.#events?.emit({
-      type: 'openapi-operation-request-start',
-      ...context,
-      runId,
-      location: location(),
-      request: {
-        method: request.method,
-        url: request.url,
-        headers: request.headers,
-        ...(this.#captureBodies ? { body: request.body } : {}),
-      },
-    });
+    if (this.#events.hasObservers) {
+      this.#events.emit({
+        type: 'openapi:operation:request:start',
+        ...context,
+        runId,
+        location: location(),
+        request: {
+          method: request.method,
+          url: request.url,
+          headers: request.headers,
+          ...(this.#captureBodies ? { body: request.body } : {}),
+        },
+      });
+    }
 
     let rawResponse: Response;
     try {
@@ -520,18 +529,20 @@ class OpenAPIOperationExecutor {
     }
 
     const response = await this.#responseNormalizer.normalize(rawResponse, requestInfo);
-    this.#events?.emit({
-      type: 'openapi-operation-request-settled',
-      ...context,
-      runId,
-      location: location(),
-      response: {
-        status: response.status,
-        headers: response.headers,
-        size: response.size,
-        ...(this.#captureBodies ? { body: response.body } : {}),
-      },
-    });
+    if (this.#events.hasObservers) {
+      this.#events.emit({
+        type: 'openapi:operation:request:settled',
+        ...context,
+        runId,
+        location: location(),
+        response: {
+          status: response.status,
+          headers: response.headers,
+          size: response.size,
+          ...(this.#captureBodies ? { body: response.body } : {}),
+        },
+      });
+    }
     return response;
   }
 

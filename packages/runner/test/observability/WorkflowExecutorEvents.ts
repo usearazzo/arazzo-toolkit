@@ -72,10 +72,10 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
 
   for (const event of events) {
     switch (event.type) {
-      case 'workflow-start':
+      case 'workflow:start':
         stack.push({ start: event, steps: [], dependencies: [] });
         break;
-      case 'workflow-settled': {
+      case 'workflow:settled': {
         const frame = stack.pop() as WorkflowFrame;
         const result: WorkflowExecutionResult = {
           workflowId: event.workflowId,
@@ -108,7 +108,7 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
         }
         break;
       }
-      case 'dependency-settled': {
+      case 'dependency:settled': {
         const frame = top();
         const key = `${event.dependency.documentURI}#${event.dependency.workflowId}`;
         const result = event.memoized
@@ -121,7 +121,7 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
         frame.dependencyRun = undefined;
         break;
       }
-      case 'step-start':
+      case 'step:start':
         top().step = {
           stepId: event.stepId,
           location: event.location,
@@ -133,7 +133,7 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
           retryReferences: [],
         };
         break;
-      case 'step-attempt': {
+      case 'step:attempt': {
         const frame = top();
         // a referenced step's attempt belongs to the reference, which the
         // trace records without criteria.
@@ -143,7 +143,7 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
         step.actionCriteria = [];
         break;
       }
-      case 'criterion-evaluated': {
+      case 'criterion:evaluated': {
         const frame = top();
         if (frame.reference !== undefined) break;
         const step = frame.step as StepBuilder;
@@ -151,13 +151,13 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
         else step.actionCriteria.push(event.criterion);
         break;
       }
-      case 'action-selected':
+      case 'action:selected':
         (top().step as StepBuilder).action = event.action;
         break;
-      case 'retry-reference-start':
+      case 'retry:reference:start':
         top().reference = { kind: event.kind, id: event.id };
         break;
-      case 'retry-reference-settled': {
+      case 'retry:reference:settled': {
         const frame = top();
         const reference = frame.reference as ReferenceBuilder;
         (frame.step as StepBuilder).retryReferences.push({
@@ -169,7 +169,7 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
         frame.reference = undefined;
         break;
       }
-      case 'step-settled': {
+      case 'step:settled': {
         const frame = top();
         const step = frame.step as StepBuilder;
         frame.steps.push({
@@ -192,7 +192,7 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
     }
   }
 
-  assert.lengthOf(stack, 0, 'every workflow-start has its workflow-settled');
+  assert.lengthOf(stack, 0, 'every workflow:start has its workflow:settled');
   return root as WorkflowExecutionResult;
 };
 
@@ -379,9 +379,9 @@ describe('WorkflowExecutor events', function () {
       const { result, events } = await record(controlFlow, 'retryThenSucceed', [503, 503, 200]);
 
       const decisions = events
-        .filter((event) => event.type === 'step-attempt' || event.type === 'action-selected')
+        .filter((event) => event.type === 'step:attempt' || event.type === 'action:selected')
         .map((event) =>
-          event.type === 'step-attempt'
+          event.type === 'step:attempt'
             ? `attempt ${event.attempt}`
             : `${event.attempt}: ${event.action === undefined ? 'default' : toValue(event.action.type)} -> ${event.transition.kind}`,
         );
@@ -404,7 +404,7 @@ describe('WorkflowExecutor events', function () {
       ): Promise<unknown[]> => {
         const { events } = await record(document, workflowId, statuses);
         return events.flatMap((event) =>
-          event.type === 'action-selected' && event.workflowId === workflowId
+          event.type === 'action:selected' && event.workflowId === workflowId
             ? [event.transition]
             : [],
         );
@@ -424,7 +424,7 @@ describe('WorkflowExecutor events', function () {
       const { events } = await record(composition, 'depDiamondTop', [200]);
 
       const settled = events.flatMap((event) =>
-        event.type === 'dependency-settled'
+        event.type === 'dependency:settled'
           ? [`${event.dependency.reference} ${event.memoized}`]
           : [],
       );
@@ -458,29 +458,77 @@ describe('WorkflowExecutor events', function () {
       const { events } = await record(crossDocument, 'crossDocumentStep', [200]);
 
       const foreign = events.find(
-        (event) => event.type === 'workflow-start' && event.via === 'step',
+        (event) => event.type === 'workflow:start' && event.via === 'step',
       );
       assert.lengthOf(foreign?.path ?? [], 2);
       assert.strictEqual(foreign?.path[0], 'crossDocumentStep');
       assert.match(foreign?.path[1] ?? '', /cross-document-child\.arazzo\.yaml#childFetch$/);
     });
 
-    specify('should leave a cancelled run without settled events', async function () {
+    specify(
+      'should settle the open step and workflow of a cancelled run with the error',
+      async function () {
+        const events: WorkflowExecutionEvent[] = [];
+        const controller = new AbortController();
+        const executor = new WorkflowExecutor({
+          document: controlFlow,
+          registry,
+          stepExecutor: new StepExecutor({
+            document: controlFlow,
+            registry,
+            operationExecutor: new OpenAPIOperationExecutor({
+              httpClient: async () => {
+                controller.abort();
+                return new Response(JSON.stringify({ id: 7, name: 'Rex' }), {
+                  status: 200,
+                  headers: { 'content-type': 'application/json' },
+                });
+              },
+            }),
+          }),
+          observer: (event) => events.push(event),
+        });
+
+        let caught: unknown;
+        try {
+          await executor.execute('linear', { inputs, signal: controller.signal });
+        } catch (error) {
+          caught = error;
+        }
+
+        assert.instanceOf(caught, ExecutionError);
+        // the step in flight settles as it would, the next stops at its
+        // boundary, and both it and the workflow settle with the abort.
+        const settled = events.filter(
+          (event) => event.type === 'step:settled' || event.type === 'workflow:settled',
+        );
+        assert.deepEqual(
+          settled.map((event) => [event.type, 'error' in event ? event.error : undefined]),
+          [
+            ['step:settled', undefined],
+            ['step:settled', caught],
+            ['workflow:settled', caught],
+          ],
+        );
+        assert.notProperty(settled[0], 'error');
+        // stopped at its boundary, before its first attempt ran
+        assert.include(settled.at(-2), { successful: false, attempts: 0 });
+        assert.include(settled.at(-1), { status: 'failed', settledStatus: 'failed' });
+      },
+    );
+
+    specify('should settle every workflow and step a throwing transport leaves', async function () {
+      const thrown = new TypeError('fetch failed');
       const events: WorkflowExecutionEvent[] = [];
-      const controller = new AbortController();
       const executor = new WorkflowExecutor({
-        document: controlFlow,
+        document: composition,
         registry,
         stepExecutor: new StepExecutor({
-          document: controlFlow,
+          document: composition,
           registry,
           operationExecutor: new OpenAPIOperationExecutor({
             httpClient: async () => {
-              controller.abort();
-              return new Response(JSON.stringify({ id: 7, name: 'Rex' }), {
-                status: 200,
-                headers: { 'content-type': 'application/json' },
-              });
+              throw thrown;
             },
           }),
         }),
@@ -489,27 +537,38 @@ describe('WorkflowExecutor events', function () {
 
       let caught: unknown;
       try {
-        await executor.execute('linear', { inputs, signal: controller.signal });
+        await executor.execute('callsChild', { inputs });
       } catch (error) {
         caught = error;
       }
 
-      assert.instanceOf(caught, ExecutionError);
-      // the step in flight still settles, the run stops at the next boundary,
-      // and the rejection of execute is the only closing signal.
-      assert.deepEqual(events.map((event) => event.type).slice(-3), [
-        'action-selected',
-        'step-settled',
-        'step-start',
-      ]);
-      assert.isFalse(events.some((event) => event.type === 'workflow-settled'));
+      // the transport's error, as the operation executor wraps it.
+      assert.strictEqual((caught as Error).cause, thrown);
+      // the child's step, the child, the parent's step and the parent, innermost first.
+      const settled = events.filter(
+        (event) => event.type === 'step:settled' || event.type === 'workflow:settled',
+      );
+      assert.deepEqual(
+        settled.map((event) => [event.type, event.path.length]),
+        [
+          ['step:settled', 2],
+          ['workflow:settled', 2],
+          ['step:settled', 1],
+          ['workflow:settled', 1],
+        ],
+      );
+      assert.isTrue(settled.every((event) => event.error === caught));
+      const starts = events.filter(
+        (event) => event.type === 'step:start' || event.type === 'workflow:start',
+      );
+      assert.lengthOf(starts, settled.length);
     });
 
     specify('should tag every event with the path of the workflows in progress', async function () {
       const { events } = await record(composition, 'callsChild', [200]);
 
       const child = events.find(
-        (event) => event.type === 'workflow-start' && event.workflowId === 'fetchPet',
+        (event) => event.type === 'workflow:start' && event.workflowId === 'fetchPet',
       );
       assert.deepEqual(child?.path, ['callsChild', 'fetchPet']);
       assert.isTrue(events.every((event) => event.path[0] === 'callsChild'));
@@ -518,14 +577,14 @@ describe('WorkflowExecutor events', function () {
     specify('should emit workflow normalization once per workflow', async function () {
       const { events } = await record(composition, 'callsChildTwice', [200]);
 
-      const debug = events.filter((event) => event.type.startsWith('workflow-normalize-'));
+      const debug = events.filter((event) => event.type.startsWith('workflow:normalize:'));
       assert.deepEqual(
         debug.map((event) => `${event.type} ${event.workflowId}`),
         [
-          'workflow-normalize-start callsChildTwice',
-          'workflow-normalize-settled callsChildTwice',
-          'workflow-normalize-start fetchPet',
-          'workflow-normalize-settled fetchPet',
+          'workflow:normalize:start callsChildTwice',
+          'workflow:normalize:settled callsChildTwice',
+          'workflow:normalize:start fetchPet',
+          'workflow:normalize:settled fetchPet',
         ],
       );
     });
@@ -539,7 +598,7 @@ describe('WorkflowExecutor events', function () {
       ): Extract<WorkflowExecutionEvent, { type: T }> =>
         events.find((event) => event.type === type) as Extract<WorkflowExecutionEvent, { type: T }>;
 
-      const settled = find('workflow-settled');
+      const settled = find('workflow:settled');
       assert.isTrue(Object.isFrozen(settled));
       assert.isTrue(Object.isFrozen(settled.outputs));
       assert.isTrue(Object.isFrozen(settled.path));
@@ -547,15 +606,15 @@ describe('WorkflowExecutor events', function () {
       assert.deepEqual(settled.outputs, result.outputs);
       assert.isFalse(Object.isFrozen(result.outputs));
 
-      const criterion = find('criterion-evaluated').criterion;
+      const criterion = find('criterion:evaluated').criterion;
       assert.isTrue(Object.isFrozen(criterion));
       assert.notStrictEqual(criterion, result.steps[0].successCriteria[0]);
-      assert.isTrue(Object.isFrozen(find('action-selected').transition));
+      assert.isTrue(Object.isFrozen(find('action:selected').transition));
     });
 
     specify('should abort the run when an observer changes an event', async function () {
       const { executor } = makeExecutor(controlFlow, [200], (event) => {
-        if (event.type === 'workflow-settled') {
+        if (event.type === 'workflow:settled') {
           (event.outputs as Record<string, unknown>).name = 'Tampered';
         }
       });
@@ -593,7 +652,7 @@ describe('WorkflowExecutor events', function () {
     specify('should abort the run with the error an observer throws', async function () {
       const thrown = new Error('observer bug');
       const { executor, calls } = makeExecutor(controlFlow, [200], (event) => {
-        if (event.type === 'step-start') throw thrown;
+        if (event.type === 'step:start') throw thrown;
       });
 
       let caught: unknown;

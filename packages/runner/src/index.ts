@@ -170,6 +170,15 @@ export type {
   ArazzoRunnerEventBase,
   ArazzoRunnerObserver,
 } from './observability/ArazzoRunnerEvent.ts';
+export { default as combineObservers } from './observability/combineObservers.ts';
+export { default as instrument } from './observability/instrument.ts';
+export type {
+  InstrumentationHooks,
+  InstrumentationWrap,
+  InstrumentedOperation,
+  InstrumentedStep,
+  InstrumentedWorkflow,
+} from './observability/instrument.ts';
 export type {
   WorkflowExecutionEvent,
   WorkflowExecutionEventBase,
