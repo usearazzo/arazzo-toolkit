@@ -1,5 +1,5 @@
-export { default as openTelemetryObserver } from './OpenTelemetryObserver.ts';
+export { default as openTelemetryInstrumentation } from './OpenTelemetryInstrumentation.ts';
 export type {
-  OpenTelemetryObserver,
-  OpenTelemetryObserverOptions,
-} from './OpenTelemetryObserver.ts';
+  OpenTelemetryInstrumentation,
+  OpenTelemetryInstrumentationOptions,
+} from './OpenTelemetryInstrumentation.ts';
