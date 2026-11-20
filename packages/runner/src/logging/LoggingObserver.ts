@@ -56,8 +56,8 @@ export interface LoggingObserverOptions {
 
 /**
  * The default level: `info` for the boundaries of workflows and steps, `warn`
- * for a failed step, `error` for a failed workflow, and `debug` for the
- * decisions and machinery under them.
+ * for a failed step, `error` for a failed workflow or a step that threw, and
+ * `debug` for the decisions and machinery under them.
  */
 const defaultLevel = (event: ArazzoRunnerEvent): LogLevel => {
   switch (event.type) {
@@ -68,6 +68,7 @@ const defaultLevel = (event: ArazzoRunnerEvent): LogLevel => {
       // a transferred workflow did not fail itself: its target reports its own outcome
       return event.status === 'failed' ? 'error' : 'info';
     case 'step-settled':
+      if (event.error !== undefined) return 'error';
       return event.successful ? 'info' : 'warn';
     default:
       return 'debug';
@@ -76,12 +77,18 @@ const defaultLevel = (event: ArazzoRunnerEvent): LogLevel => {
 
 const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
+// what a settled event threw, after its message
+const thrown = (event: { readonly error?: unknown }): string => {
+  if (event.error === undefined) return '';
+  return `: ${event.error instanceof Error ? event.error.message : String(event.error)}`;
+};
+
 const message = (event: ArazzoRunnerEvent): string => {
   switch (event.type) {
     case 'workflow-start':
       return `workflow ${event.workflowId} started${event.via === 'root' ? '' : ` (${event.via})`}`;
     case 'workflow-settled':
-      return `workflow ${event.workflowId} ${event.status}`;
+      return `workflow ${event.workflowId} ${event.status}${thrown(event)}`;
     case 'workflow-normalize-start':
       return `workflow ${event.workflowId} normalizing`;
     case 'workflow-normalize-settled':
@@ -121,7 +128,7 @@ const message = (event: ArazzoRunnerEvent): string => {
       return `step ${event.stepId} ${event.successful ? 'succeeded' : 'failed'} after ${plural(
         event.attempts,
         'attempt',
-      )}`;
+      )}${thrown(event)}`;
     case 'document-load-start':
       return `loading document ${event.uri}`;
     case 'document-load-settled':
