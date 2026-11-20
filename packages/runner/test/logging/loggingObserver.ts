@@ -21,16 +21,17 @@ const run = async (
   workflowId: string,
   status: number,
   options: Parameters<typeof loggingObserver>[1] = {},
+  httpClient: HTTPClient = respond(status),
 ): Promise<LogRecord[]> => {
   const records: LogRecord[] = [];
   const runner = await ArazzoRunner.load(entryPath, {
-    httpClient: respond(status),
+    httpClient,
     requestInterceptor: (request) => {
       request.headers.Authorization = 'Bearer secret';
     },
     observer: loggingObserver((record) => records.push(record), options),
   });
-  await runner.execute(workflowId, { inputs: { status: 'available' } });
+  await runner.execute(workflowId, { inputs: { status: 'available' } }).catch(() => undefined);
   return records;
 };
 
@@ -59,6 +60,20 @@ describe('loggingObserver', function () {
     const [workflow] = byType(records, 'workflow-settled');
     assert.strictEqual(workflow.level, 'error');
     assert.strictEqual(workflow.message, 'workflow linear failed');
+  });
+
+  specify('should log a step and workflow that threw at error, with the error', async function () {
+    const records = await run('linear', 200, {}, async () => {
+      throw new TypeError('fetch failed');
+    });
+
+    const [step] = byType(records, 'step-settled');
+    const [workflow] = byType(records, 'workflow-settled');
+    for (const record of [step, workflow]) {
+      assert.strictEqual(record.level, 'error');
+      assert.match(record.message, /: OpenAPI operation request failed/);
+      assert.instanceOf(record.fields.error, Error);
+    }
   });
 
   specify('should leave the failure of a transfer target to the target', async function () {
