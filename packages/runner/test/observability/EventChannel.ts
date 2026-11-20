@@ -23,7 +23,7 @@ describe('EventChannel', function () {
   specify('should deliver a frozen deep copy stamped with the clock', function () {
     const outputs = { pet: { id: 7 } };
 
-    const event = capture({ type: 'workflow-settled', outputs });
+    const event = capture({ type: 'workflow:settled', outputs });
 
     assert.strictEqual(event.timestamp, 42);
     assert.notStrictEqual(event.outputs, outputs);
@@ -35,7 +35,7 @@ describe('EventChannel', function () {
   specify('should copy an own __proto__ key as data', function () {
     const outputs = JSON.parse('{"a":1,"__proto__":{"polluted":true}}');
 
-    const event = capture({ type: 'workflow-settled', outputs });
+    const event = capture({ type: 'workflow:settled', outputs });
 
     const copy = event.outputs as Record<string, unknown>;
     assert.deepEqual(Object.keys(copy), ['a', '__proto__']);
@@ -45,7 +45,7 @@ describe('EventChannel', function () {
 
   specify("should omit the event's own undefined fields but keep them in data", function () {
     const event = capture({
-      type: 'workflow-settled',
+      type: 'workflow:settled',
       runId: undefined,
       outputs: { x: undefined },
     });

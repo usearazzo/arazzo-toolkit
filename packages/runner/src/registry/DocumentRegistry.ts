@@ -99,7 +99,7 @@ class DocumentRegistry {
    * caches it.
    */
   async #load(canonicalURI: string): Promise<APIDocument> {
-    this.#events?.emit({ type: 'document-load-start', uri: canonicalURI });
+    this.#events?.emit({ type: 'document:load:start', uri: canonicalURI });
     for (const provider of this.#providers) {
       let document: APIDocument | undefined;
       try {
@@ -118,7 +118,7 @@ class DocumentRegistry {
       if (document !== undefined) {
         // outside the try, so an observer's own error is not a failed load, and
         // before caching, so a run it aborts leaves no half-registered document.
-        this.#events?.emit({ type: 'document-load-settled', uri: canonicalURI });
+        this.#events?.emit({ type: 'document:load:settled', uri: canonicalURI });
         this.#set(canonicalURI, document);
         return document;
       }

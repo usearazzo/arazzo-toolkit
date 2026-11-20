@@ -51,7 +51,7 @@ describe('combineObservers', function () {
       httpClient,
       observer: combineObservers(
         (event) => {
-          if (event.type === 'step-start') throw new Error('observer failed');
+          if (event.type === 'step:start') throw new Error('observer failed');
         },
         (event) => later.push(event.type),
       ),
@@ -66,12 +66,12 @@ describe('combineObservers', function () {
 
     assert.instanceOf(caught, Error);
     assert.strictEqual((caught as Error).message, 'observer failed');
-    assert.notInclude(later, 'step-start');
+    assert.notInclude(later, 'step:start');
   });
 
   specify('should accept no observers', function () {
     assert.doesNotThrow(() =>
-      combineObservers()({ type: 'document-load-start', timestamp: 0, uri: 'x' }),
+      combineObservers()({ type: 'document:load:start', timestamp: 0, uri: 'x' }),
     );
   });
 });

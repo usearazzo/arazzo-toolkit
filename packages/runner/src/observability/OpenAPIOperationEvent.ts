@@ -23,7 +23,7 @@ export interface OpenAPIOperationEventBase extends ArazzoRunnerEventBase, Reques
  * @public
  */
 export interface OpenAPIOperationNormalizeStartEvent extends OpenAPIOperationEventBase {
-  readonly type: 'openapi-operation-normalize-start';
+  readonly type: 'openapi:operation:normalize:start';
 }
 
 /**
@@ -31,7 +31,7 @@ export interface OpenAPIOperationNormalizeStartEvent extends OpenAPIOperationEve
  * @public
  */
 export interface OpenAPIOperationNormalizeSettledEvent extends OpenAPIOperationEventBase {
-  readonly type: 'openapi-operation-normalize-settled';
+  readonly type: 'openapi:operation:normalize:settled';
 }
 
 /**
@@ -40,7 +40,7 @@ export interface OpenAPIOperationNormalizeSettledEvent extends OpenAPIOperationE
  * @public
  */
 export interface OpenAPIOperationAssembledEvent extends OpenAPIOperationEventBase {
-  readonly type: 'openapi-operation-assembled';
+  readonly type: 'openapi:operation:assembled';
 }
 
 /**
@@ -51,7 +51,7 @@ export interface OpenAPIOperationAssembledEvent extends OpenAPIOperationEventBas
  * @public
  */
 export interface OpenAPIOperationRequestStartEvent extends OpenAPIOperationEventBase {
-  readonly type: 'openapi-operation-request-start';
+  readonly type: 'openapi:operation:request:start';
   readonly request: {
     readonly method: string;
     readonly url: string;
@@ -72,7 +72,7 @@ export interface OpenAPIOperationRequestStartEvent extends OpenAPIOperationEvent
  * @public
  */
 export interface OpenAPIOperationRequestSettledEvent extends OpenAPIOperationEventBase {
-  readonly type: 'openapi-operation-request-settled';
+  readonly type: 'openapi:operation:request:settled';
   readonly response: {
     readonly status: number;
     readonly headers: Readonly<Record<string, string>>;

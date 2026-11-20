@@ -45,9 +45,9 @@ describe('eventStream', function () {
     const collected = await reading;
 
     const types = collected.map((event) => event.type);
-    assert.strictEqual(types[0], 'document-load-start');
-    assert.strictEqual(types.at(-1), 'workflow-settled');
-    assert.include(types, 'openapi-operation-request-start');
+    assert.strictEqual(types[0], 'document:load:start');
+    assert.strictEqual(types.at(-1), 'workflow:settled');
+    assert.include(types, 'openapi:operation:request:start');
     assert.notInclude(JSON.stringify(collected), 'Bearer secret');
   });
 
@@ -69,8 +69,8 @@ describe('eventStream', function () {
 
   specify('should deliver the events queued before error, then reject', async function () {
     const events = eventStream();
-    events.observer({ type: 'document-load-start', timestamp: 0, uri: 'a' });
-    events.observer({ type: 'document-load-settled', timestamp: 1, uri: 'a' });
+    events.observer({ type: 'document:load:start', timestamp: 0, uri: 'a' });
+    events.observer({ type: 'document:load:settled', timestamp: 1, uri: 'a' });
     events.error(new Error('run failed'));
 
     const read: string[] = [];
@@ -81,7 +81,7 @@ describe('eventStream', function () {
       caught = error;
     }
 
-    assert.deepEqual(read, ['document-load-start', 'document-load-settled']);
+    assert.deepEqual(read, ['document:load:start', 'document:load:settled']);
     assert.strictEqual((caught as Error).message, 'run failed');
   });
 
@@ -96,7 +96,7 @@ describe('eventStream', function () {
     const result = await runner.execute('linear', { inputs: { status: 'available' } });
 
     assert.strictEqual(result.status, 'completed');
-    assert.strictEqual((await reading)?.type, 'document-load-start');
+    assert.strictEqual((await reading)?.type, 'document:load:start');
     assert.doesNotThrow(() => events.close());
   });
 
@@ -107,7 +107,7 @@ describe('eventStream', function () {
     const reading = collect(events.stream);
     await runner.execute('linear', { inputs: { status: 'available' } });
     events.close();
-    events.observer({ type: 'document-load-start', timestamp: 0, uri: 'after-close' });
+    events.observer({ type: 'document:load:start', timestamp: 0, uri: 'after-close' });
 
     const collected = await reading;
     assert.include(JSON.stringify(collected), 'Bearer secret');

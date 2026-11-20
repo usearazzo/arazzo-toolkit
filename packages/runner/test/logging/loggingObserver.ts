@@ -42,11 +42,11 @@ describe('loggingObserver', function () {
   specify('should log workflow and step boundaries at info, the rest at debug', async function () {
     const records = await run('linear', 200);
 
-    for (const type of ['workflow-start', 'step-start', 'step-settled', 'workflow-settled']) {
+    for (const type of ['workflow:start', 'step:start', 'step:settled', 'workflow:settled']) {
       assert.isNotEmpty(byType(records, type), type);
       for (const record of byType(records, type)) assert.strictEqual(record.level, 'info', type);
     }
-    for (const type of ['step-attempt', 'criterion-evaluated', 'openapi-operation-request-start']) {
+    for (const type of ['step:attempt', 'criterion:evaluated', 'openapi:operation:request:start']) {
       for (const record of byType(records, type)) assert.strictEqual(record.level, 'debug', type);
     }
   });
@@ -54,10 +54,10 @@ describe('loggingObserver', function () {
   specify('should log a failed step at warn and a failed workflow at error', async function () {
     const records = await run('linear', 500);
 
-    const [step] = byType(records, 'step-settled');
+    const [step] = byType(records, 'step:settled');
     assert.strictEqual(step.level, 'warn');
     assert.match(step.message, /^step \S+ failed after 1 attempt$/);
-    const [workflow] = byType(records, 'workflow-settled');
+    const [workflow] = byType(records, 'workflow:settled');
     assert.strictEqual(workflow.level, 'error');
     assert.strictEqual(workflow.message, 'workflow linear failed');
   });
@@ -67,8 +67,8 @@ describe('loggingObserver', function () {
       throw new TypeError('fetch failed');
     });
 
-    const [step] = byType(records, 'step-settled');
-    const [workflow] = byType(records, 'workflow-settled');
+    const [step] = byType(records, 'step:settled');
+    const [workflow] = byType(records, 'workflow:settled');
     for (const record of [step, workflow]) {
       assert.strictEqual(record.level, 'error');
       assert.match(record.message, /: OpenAPI operation request failed/);
@@ -79,7 +79,7 @@ describe('loggingObserver', function () {
   specify('should leave the failure of a transfer target to the target', async function () {
     const records = await run('transfersToTarget', 500);
 
-    const settled = byType(records, 'workflow-settled');
+    const settled = byType(records, 'workflow:settled');
     const source = settled.find((record) => record.fields.workflowId === 'transfersToTarget');
     const target = settled.find((record) => record.fields.workflowId === 'transferTarget');
     assert.deepEqual(
@@ -92,7 +92,7 @@ describe('loggingObserver', function () {
   specify('should mask credentials in messages and fields', async function () {
     const records = await run('linear', 200);
 
-    const [request] = byType(records, 'openapi-operation-request-start');
+    const [request] = byType(records, 'openapi:operation:request:start');
     const { headers } = request.fields.request as { headers: Record<string, string> };
     assert.strictEqual(headers.Authorization, 'REDACTED');
     assert.notInclude(JSON.stringify(records), 'Bearer secret');
@@ -101,21 +101,21 @@ describe('loggingObserver', function () {
   specify('should give a selected action by name and type, not as an element', async function () {
     const records = await run('inheritsFailureActions', 500);
 
-    const [action] = byType(records, 'action-selected');
+    const [action] = byType(records, 'action:selected');
     assert.deepEqual(action.fields.action, { name: 'stopOnFailure', type: 'end' });
     assert.strictEqual(action.message, 'step only selected action stopOnFailure (end)');
   });
 
   specify('should take a level per event type and a redactor of its own', async function () {
     const records = await run('linear', 200, {
-      levels: { 'criterion-evaluated': 'info' },
+      levels: { 'criterion:evaluated': 'info' },
       redactor: new Redactor({ fields: [] }),
     });
 
-    for (const record of byType(records, 'criterion-evaluated')) {
+    for (const record of byType(records, 'criterion:evaluated')) {
       assert.strictEqual(record.level, 'info');
     }
-    const [request] = byType(records, 'openapi-operation-request-start');
+    const [request] = byType(records, 'openapi:operation:request:start');
     const { headers } = request.fields.request as { headers: Record<string, string> };
     assert.strictEqual(headers.Authorization, 'Bearer secret');
   });
