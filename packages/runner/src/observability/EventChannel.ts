@@ -25,10 +25,9 @@ export interface EventChannelOptions<E extends ArazzoRunnerEvent> {
  * block's clock, snapshots it, and hands it over synchronously, without
  * awaiting anything.
  *
- * A block emits through `this.#events?.emit(...)`, where `#events` is
- * {@link EventChannel.observed}: with nobody observing, optional chaining
- * skips evaluating the event too, so an unobserved run builds no events at
- * all.
+ * A block emits only while {@link EventChannel.hasObservers}:
+ * `if (this.#events.hasObservers) this.#events.emit({...})`, so an unobserved
+ * run builds no events at all, like `diagnostics_channel`'s `hasSubscribers`.
  * @internal
  */
 class EventChannel<E extends ArazzoRunnerEvent> {
@@ -71,12 +70,12 @@ class EventChannel<E extends ArazzoRunnerEvent> {
   }
 
   /**
-   * This channel while anyone observes it, its own observer or a
-   * process-wide one, else `undefined`. Read per event, so hooks registered
-   * mid-run apply from the next event on.
+   * Whether anyone observes the channel: its own observer or a process-wide
+   * one. Read per event, so hooks registered mid-run apply from the next
+   * event on.
    */
-  get observed(): EventChannel<E> | undefined {
-    return this.#observer !== undefined || isInstrumented() ? this : undefined;
+  get hasObservers(): boolean {
+    return this.#observer !== undefined || isInstrumented();
   }
 
   /**
