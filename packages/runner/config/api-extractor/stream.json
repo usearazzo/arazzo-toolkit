@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
   "extends": "../../../../api-extractor.json",
-  "mainEntryPointFilePath": "<projectFolder>/types/stream/index.d.ts",
+  "mainEntryPointFilePath": "<projectFolder>/types/observability/stream/index.d.ts",
   "compiler": {
     // The subpath imports the main entry as `@usearazzo/runner`, and its rollup must keep that
     // import rather than inline a second copy of `Redactor` and the event types (a class with
@@ -10,7 +10,7 @@
     // `preserveSymlinks` resolves it through node_modules, which keeps it external.
     "overrideTsconfig": {
       "extends": "../../tsconfig.json",
-      "include": ["types/stream/**/*.d.ts"],
+      "include": ["types/observability/stream/**/*.d.ts"],
       "compilerOptions": {
         "module": "commonjs",
         "moduleResolution": "node10",
@@ -22,6 +22,6 @@
   },
   "dtsRollup": {
     "enabled": true,
-    "untrimmedFilePath": "<projectFolder>/types/stream.d.ts"
+    "untrimmedFilePath": "<projectFolder>/types/observability/stream.d.ts"
   }
 }

@@ -184,7 +184,7 @@ const fields = (event: ArazzoRunnerEvent): Readonly<Record<string, unknown>> => 
  * ```js
  * import pino from 'pino';
  * import { ArazzoRunner } from '@usearazzo/runner';
- * import { loggingObserver } from '@usearazzo/runner/logging';
+ * import { loggingObserver } from '@usearazzo/runner/observability/logging';
  *
  * // the error of a step or workflow that threw, serialized as pino does `err`
  * const logger = pino({ serializers: { error: pino.stdSerializers.err } });

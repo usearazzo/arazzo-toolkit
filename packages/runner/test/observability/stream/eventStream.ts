@@ -8,11 +8,11 @@ import {
   Redactor,
   type ArazzoRunnerEvent,
   type HTTPClient,
-} from '../../src/index.ts';
-import { eventStream, type EventStream } from '../../src/stream/index.ts';
+} from '../../../src/index.ts';
+import { eventStream, type EventStream } from '../../../src/observability/stream/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const entryPath = path.join(__dirname, '..', 'fixtures', 'workflow-control-flow.arazzo.yaml');
+const entryPath = path.join(__dirname, '..', '..', 'fixtures', 'workflow-control-flow.arazzo.yaml');
 
 const httpClient: HTTPClient = async () =>
   new Response(JSON.stringify({ id: 7, name: 'Rex' }), {

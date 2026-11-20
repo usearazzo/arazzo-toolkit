@@ -11,12 +11,18 @@ import {
   type ReadableSpan,
 } from '@opentelemetry/sdk-trace-base';
 
-import { ArazzoRunner, type HTTPClient } from '../../src/index.ts';
-import { ArazzoRunnerInstrumentation } from '../../src/opentelemetry/index.ts';
+import { ArazzoRunner, type HTTPClient } from '../../../src/index.ts';
+import { ArazzoRunnerInstrumentation } from '../../../src/observability/opentelemetry/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const entryPath = path.join(__dirname, '..', 'fixtures', 'workflow-control-flow.arazzo.yaml');
-const compositionPath = path.join(__dirname, '..', 'fixtures', 'workflow-composition.arazzo.yaml');
+const entryPath = path.join(__dirname, '..', '..', 'fixtures', 'workflow-control-flow.arazzo.yaml');
+const compositionPath = path.join(
+  __dirname,
+  '..',
+  '..',
+  'fixtures',
+  'workflow-composition.arazzo.yaml',
+);
 
 const named = (spans: ReadableSpan[], name: string): ReadableSpan => {
   const span = spans.find((candidate) => candidate.name === name);
