@@ -73,12 +73,6 @@ export interface RequestContext {
     readonly sourceDescription?: OpenAPIOperationSourceDescription;
   };
   readonly step?: RequestContextStep;
-  /**
-   * The `runId` of the {@link WorkflowExecutor.execute} call the request is
-   * issued for, so an interceptor can tell concurrent runs apart. Absent when
-   * the executor is used without one.
-   */
-  readonly runId?: string;
 }
 
 /**
@@ -219,7 +213,7 @@ export interface OpenAPIOperationExecuteOptions {
   readonly signal?: AbortSignal;
   /**
    * Identifies the run this call belongs to, stamped on the executor's events
-   * (see {@link RequestContext.runId}). Consumed by the executor,
+   * (see {@link OpenAPIOperationEventBase.runId}). Consumed by the executor,
    * never sent. The workflow executor sets it for every step.
    */
   readonly runId?: string;
@@ -405,13 +399,13 @@ class OpenAPIOperationExecutor {
       // a copy, so an interceptor editing it cannot rewrite the caller's object
       // (the step executor reuses it to attribute errors)
       ...(step === undefined ? {} : { step: { ...step } }),
-      ...(runId === undefined ? {} : { runId }),
     };
 
     if (this.#events.hasObservers) {
       this.#events.emit({
         type: 'openapi:operation:normalize:start',
         ...context,
+        runId,
         location: location(),
       });
     }
@@ -423,6 +417,7 @@ class OpenAPIOperationExecutor {
       this.#events.emit({
         type: 'openapi:operation:normalize:settled',
         ...context,
+        runId,
         location: location(),
       });
     }
@@ -431,6 +426,7 @@ class OpenAPIOperationExecutor {
       this.#events.emit({
         type: 'openapi:operation:assembled',
         ...context,
+        runId,
         location: location(),
       });
     }
@@ -495,13 +491,7 @@ class OpenAPIOperationExecutor {
     }
 
     this.#deliverHeadersAndCookies(request, undeclared);
-    // the interceptors share a copy: what they do to it must not reach the
-    // events built from the context after them
-    const interceptorContext =
-      this.#requestInterceptor === undefined && requestInterceptor === undefined
-        ? context
-        : structuredClone(context);
-    request = await this.#finalizeRequest(request, requestInterceptor, interceptorContext);
+    request = await this.#finalizeRequest(request, requestInterceptor, context);
 
     // capture the request as sent, so `$url` / `$method` / `$request.*` can be
     // evaluated after execution; headers are copied so a transport-side
@@ -517,6 +507,7 @@ class OpenAPIOperationExecutor {
       this.#events.emit({
         type: 'openapi:operation:request:start',
         ...context,
+        runId,
         location: location(),
         request: {
           method: request.method,
@@ -542,6 +533,7 @@ class OpenAPIOperationExecutor {
       this.#events.emit({
         type: 'openapi:operation:request:settled',
         ...context,
+        runId,
         location: location(),
         response: {
           status: response.status,
