@@ -20,7 +20,7 @@ export interface LogRecord {
   readonly message: string;
   /**
    * The event, masked, as structured fields: its `type`, `runId`, `stepId`,
-   * `location` and the rest. The selected action of `action-selected` is
+   * `location` and the rest. The selected action of `action:selected` is
    * given by its `name` and `type`, not as the document's element.
    */
   readonly fields: Readonly<Record<string, unknown>>;
@@ -49,7 +49,7 @@ export interface LoggingObserverOptions {
   readonly redactor?: Redactor;
   /**
    * The level for an event type, replacing the default for every event of
-   * that type: `{ 'criterion-evaluated': 'info' }`.
+   * that type: `{ 'criterion:evaluated': 'info' }`.
    */
   readonly levels?: Readonly<Partial<Record<ArazzoRunnerEvent['type'], LogLevel>>>;
 }
@@ -61,13 +61,13 @@ export interface LoggingObserverOptions {
  */
 const defaultLevel = (event: ArazzoRunnerEvent): LogLevel => {
   switch (event.type) {
-    case 'workflow-start':
-    case 'step-start':
+    case 'workflow:start':
+    case 'step:start':
       return 'info';
-    case 'workflow-settled':
+    case 'workflow:settled':
       // a transferred workflow did not fail itself: its target reports its own outcome
       return event.status === 'failed' ? 'error' : 'info';
-    case 'step-settled':
+    case 'step:settled':
       if (event.error !== undefined) return 'error';
       return event.successful ? 'info' : 'warn';
     default:
@@ -85,63 +85,63 @@ const thrown = (event: { readonly error?: unknown }): string => {
 
 const message = (event: ArazzoRunnerEvent): string => {
   switch (event.type) {
-    case 'workflow-start':
+    case 'workflow:start':
       return `workflow ${event.workflowId} started${event.via === 'root' ? '' : ` (${event.via})`}`;
-    case 'workflow-settled':
+    case 'workflow:settled':
       return `workflow ${event.workflowId} ${event.status}${thrown(event)}`;
-    case 'workflow-normalize-start':
+    case 'workflow:normalize:start':
       return `workflow ${event.workflowId} normalizing`;
-    case 'workflow-normalize-settled':
+    case 'workflow:normalize:settled':
       return `workflow ${event.workflowId} normalized`;
-    case 'dependency-start':
+    case 'dependency:start':
       return `dependency ${event.dependency.workflowId} of ${event.workflowId} started`;
-    case 'dependency-settled':
+    case 'dependency:settled':
       return `dependency ${event.dependency.workflowId} of ${event.workflowId} ${
         event.memoized ? 'already ' : ''
       }${event.settledStatus}`;
-    case 'step-start':
+    case 'step:start':
       return `step ${event.stepId} started`;
-    case 'step-attempt':
+    case 'step:attempt':
       return `step ${event.stepId} attempt ${event.attempt}`;
-    case 'criterion-evaluated': {
+    case 'criterion:evaluated': {
       const { condition, met, diagnostic } = event.criterion;
       const outcome = met ? 'met' : 'not met';
       return `step ${event.stepId} criterion ${condition} ${outcome}${
         diagnostic === undefined ? '' : `: ${diagnostic.message}`
       }`;
     }
-    case 'action-selected':
+    case 'action:selected':
       return event.action === undefined
         ? `step ${event.stepId} matched no action (${event.transition.kind})`
         : `step ${event.stepId} selected action ${String(toValue(event.action.name))} (${
             event.transition.kind
           })`;
-    case 'retry-wait':
+    case 'retry:wait':
       return `step ${event.stepId} waits ${event.delayMs} ms before attempt ${event.attempt + 1}`;
-    case 'retry-reference-start':
+    case 'retry:reference:start':
       return `step ${event.stepId} retry reference ${event.kind} ${event.id} started`;
-    case 'retry-reference-settled':
+    case 'retry:reference:settled':
       return `step ${event.stepId} retry reference ${event.kind} ${event.id} ${
         event.successful ? 'succeeded' : 'failed'
       }`;
-    case 'step-settled':
+    case 'step:settled':
       return `step ${event.stepId} ${event.successful ? 'succeeded' : 'failed'} after ${plural(
         event.attempts,
         'attempt',
       )}${thrown(event)}`;
-    case 'document-load-start':
+    case 'document:load:start':
       return `loading document ${event.uri}`;
-    case 'document-load-settled':
+    case 'document:load:settled':
       return `loaded document ${event.uri}`;
-    case 'openapi-operation-normalize-start':
+    case 'openapi:operation:normalize:start':
       return `operation ${operationName(event)} normalizing`;
-    case 'openapi-operation-normalize-settled':
+    case 'openapi:operation:normalize:settled':
       return `operation ${operationName(event)} normalized`;
-    case 'openapi-operation-assembled':
+    case 'openapi:operation:assembled':
       return `operation ${operationName(event)} assembled`;
-    case 'openapi-operation-request-start':
+    case 'openapi:operation:request:start':
       return `${event.request.method} ${event.request.url}`;
-    case 'openapi-operation-request-settled':
+    case 'openapi:operation:request:settled':
       return `operation ${operationName(event)} responded ${event.response.status} (${plural(
         event.response.size,
         'byte',
@@ -159,7 +159,7 @@ const operationName = (event: {
  * tree.
  */
 const fields = (event: ArazzoRunnerEvent): Readonly<Record<string, unknown>> => {
-  if (event.type !== 'action-selected' || event.action === undefined) return { ...event };
+  if (event.type !== 'action:selected' || event.action === undefined) return { ...event };
   const { action, ...rest } = event;
   return { ...rest, action: { name: toValue(action.name), type: toValue(action.type) } };
 };

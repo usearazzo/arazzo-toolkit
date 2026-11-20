@@ -408,7 +408,7 @@ class OpenAPIOperationExecutor {
     };
 
     this.#events?.emit({
-      type: 'openapi-operation-normalize-start',
+      type: 'openapi:operation:normalize:start',
       ...context,
       location: location(),
     });
@@ -417,13 +417,13 @@ class OpenAPIOperationExecutor {
       locator.document,
     );
     this.#events?.emit({
-      type: 'openapi-operation-normalize-settled',
+      type: 'openapi:operation:normalize:settled',
       ...context,
       location: location(),
     });
     const assembled = this.#documentAssembler.assemble(normalizedOperation, locator.document);
     this.#events?.emit({
-      type: 'openapi-operation-assembled',
+      type: 'openapi:operation:assembled',
       ...context,
       location: location(),
     });
@@ -507,7 +507,7 @@ class OpenAPIOperationExecutor {
     };
 
     this.#events?.emit({
-      type: 'openapi-operation-request-start',
+      type: 'openapi:operation:request:start',
       ...context,
       location: location(),
       request: {
@@ -530,7 +530,7 @@ class OpenAPIOperationExecutor {
 
     const response = await this.#responseNormalizer.normalize(rawResponse, requestInfo);
     this.#events?.emit({
-      type: 'openapi-operation-request-settled',
+      type: 'openapi:operation:request:settled',
       ...context,
       location: location(),
       response: {

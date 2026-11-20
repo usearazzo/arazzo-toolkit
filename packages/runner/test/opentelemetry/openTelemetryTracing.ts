@@ -136,8 +136,8 @@ describe('openTelemetryTracing', function () {
   specify('should time spans by the events', async function () {
     const { spans, events } = await trace('linear', 200);
 
-    const started = events.find((event) => event.type === 'workflow-start')!;
-    const settled = events.find((event) => event.type === 'workflow-settled')!;
+    const started = events.find((event) => event.type === 'workflow:start')!;
+    const settled = events.find((event) => event.type === 'workflow:settled')!;
     const workflow = named(spans, 'workflow linear');
     assert.strictEqual(
       hrTimeToMilliseconds(workflow.endTime) - hrTimeToMilliseconds(workflow.startTime),

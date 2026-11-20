@@ -45,12 +45,12 @@ export interface WorkflowExecutionStepEventBase extends WorkflowExecutionEventBa
 
 /**
  * A workflow invocation began: it entered the call stack, before it is
- * normalized and its definition checked. Its `workflow-settled` always
+ * normalized and its definition checked. Its `workflow:settled` always
  * follows, carrying the `error` when the invocation throws.
  * @public
  */
 export interface WorkflowStartEvent extends WorkflowExecutionEventBase {
-  readonly type: 'workflow-start';
+  readonly type: 'workflow:start';
   /** Where the workflow is written. */
   readonly location: DocumentLocation;
   /**
@@ -69,7 +69,7 @@ export interface WorkflowStartEvent extends WorkflowExecutionEventBase {
  * @public
  */
 export interface WorkflowSettledEvent extends WorkflowExecutionEventBase {
-  readonly type: 'workflow-settled';
+  readonly type: 'workflow:settled';
   readonly status: WorkflowExecutionResult['status'];
   readonly settledStatus: WorkflowExecutionResult['settledStatus'];
   readonly outputs: WorkflowExecutionResult['outputs'];
@@ -107,7 +107,7 @@ export interface WorkflowExecutionDependency {
  * @public
  */
 export interface DependencyStartEvent extends WorkflowExecutionEventBase {
-  readonly type: 'dependency-start';
+  readonly type: 'dependency:start';
   /**
    * Where the `dependsOn` entry is written.
    */
@@ -120,7 +120,7 @@ export interface DependencyStartEvent extends WorkflowExecutionEventBase {
  * @public
  */
 export interface DependencySettledEvent extends WorkflowExecutionEventBase {
-  readonly type: 'dependency-settled';
+  readonly type: 'dependency:settled';
   readonly dependency: WorkflowExecutionDependency;
   /**
    * Whether the prerequisite had already completed earlier in this run and was
@@ -132,11 +132,11 @@ export interface DependencySettledEvent extends WorkflowExecutionEventBase {
 }
 
 /**
- * A step began. Its attempts follow it, and its `step-settled` always does.
+ * A step began. Its attempts follow it, and its `step:settled` always does.
  * @public
  */
 export interface StepStartEvent extends WorkflowExecutionStepEventBase {
-  readonly type: 'step-start';
+  readonly type: 'step:start';
   /**
    * Where the step is written.
    */
@@ -148,7 +148,7 @@ export interface StepStartEvent extends WorkflowExecutionStepEventBase {
  * @public
  */
 export interface StepAttemptEvent extends WorkflowExecutionStepEventBase {
-  readonly type: 'step-attempt';
+  readonly type: 'step:attempt';
   /**
    * The attempt number, starting at 1. Each `retry` increments it. The
    * attempt a `retry` reference makes at another step is that reference's
@@ -163,7 +163,7 @@ export interface StepAttemptEvent extends WorkflowExecutionStepEventBase {
  * @public
  */
 export interface CriterionEvaluatedEvent extends WorkflowExecutionStepEventBase {
-  readonly type: 'criterion-evaluated';
+  readonly type: 'criterion:evaluated';
   /**
    * Where the criterion is written.
    */
@@ -184,7 +184,7 @@ export interface CriterionEvaluatedEvent extends WorkflowExecutionStepEventBase 
  * @public
  */
 export interface ActionSelectedEvent extends WorkflowExecutionStepEventBase {
-  readonly type: 'action-selected';
+  readonly type: 'action:selected';
   /**
    * Where the selected action is written; absent when no action was
    * selected.
@@ -212,7 +212,7 @@ export interface ActionSelectedEvent extends WorkflowExecutionStepEventBase {
  * @public
  */
 export interface RetryWaitEvent extends WorkflowExecutionStepEventBase {
-  readonly type: 'retry-wait';
+  readonly type: 'retry:wait';
   readonly attempt: number;
   readonly delayMs: number;
 }
@@ -222,7 +222,7 @@ export interface RetryWaitEvent extends WorkflowExecutionStepEventBase {
  * @public
  */
 export interface RetryReferenceStartEvent extends WorkflowExecutionStepEventBase {
-  readonly type: 'retry-reference-start';
+  readonly type: 'retry:reference:start';
   /**
    * Where the `retry` action that names the reference is written.
    */
@@ -237,7 +237,7 @@ export interface RetryReferenceStartEvent extends WorkflowExecutionStepEventBase
  * @public
  */
 export interface RetryReferenceSettledEvent extends WorkflowExecutionStepEventBase {
-  readonly type: 'retry-reference-settled';
+  readonly type: 'retry:reference:settled';
   readonly attempt: number;
   readonly kind: RetryReferenceRecord['kind'];
   readonly id: RetryReferenceRecord['id'];
@@ -250,7 +250,7 @@ export interface RetryReferenceSettledEvent extends WorkflowExecutionStepEventBa
  * @public
  */
 export interface StepSettledEvent extends WorkflowExecutionStepEventBase {
-  readonly type: 'step-settled';
+  readonly type: 'step:settled';
   readonly successful: boolean;
   /** The attempts made, the one that threw included. */
   readonly attempts: number;
@@ -266,7 +266,7 @@ export interface StepSettledEvent extends WorkflowExecutionStepEventBase {
  * @public
  */
 export interface WorkflowNormalizeStartEvent extends WorkflowExecutionEventBase {
-  readonly type: 'workflow-normalize-start';
+  readonly type: 'workflow:normalize:start';
   /**
    * Where the workflow is written.
    */
@@ -278,7 +278,7 @@ export interface WorkflowNormalizeStartEvent extends WorkflowExecutionEventBase 
  * @public
  */
 export interface WorkflowNormalizeSettledEvent extends WorkflowExecutionEventBase {
-  readonly type: 'workflow-normalize-settled';
+  readonly type: 'workflow:normalize:settled';
   /**
    * Where the workflow is written.
    */

@@ -205,7 +205,7 @@ const openTelemetryTracing = (options: OpenTelemetryTracingOptions = {}): OpenTe
   // is the only one masked
   const observer: ArazzoRunnerObserver = (event: ArazzoRunnerEvent) => {
     switch (event.type) {
-      case 'workflow-start':
+      case 'workflow:start':
         push(event, `workflow ${event.workflowId}`, {
           'arazzo.run.id': event.runId,
           'arazzo.workflow.id': event.workflowId,
@@ -213,14 +213,14 @@ const openTelemetryTracing = (options: OpenTelemetryTracingOptions = {}): OpenTe
           ...locationAttributes(event.location),
         });
         return;
-      case 'workflow-settled':
+      case 'workflow:settled':
         // a transferred workflow did not fail itself: its target reports its own outcome
         settle(event, event.status === 'failed', {
           'arazzo.workflow.status': event.status,
           'arazzo.workflow.settled_status': event.settledStatus,
         });
         return;
-      case 'step-start':
+      case 'step:start':
         push(event, `step ${event.stepId}`, {
           'arazzo.run.id': event.runId,
           'arazzo.workflow.id': event.workflowId,
@@ -228,13 +228,13 @@ const openTelemetryTracing = (options: OpenTelemetryTracingOptions = {}): OpenTe
           ...locationAttributes(event.location),
         });
         return;
-      case 'step-settled':
+      case 'step:settled':
         settle(event, !event.successful, { 'arazzo.step.attempts': event.attempts });
         return;
-      case 'step-attempt':
+      case 'step:attempt':
         addEvent(event, 'attempt', { 'arazzo.step.attempt': event.attempt });
         return;
-      case 'criterion-evaluated':
+      case 'criterion:evaluated':
         addEvent(event, 'criterion', {
           'arazzo.step.attempt': event.attempt,
           'arazzo.criterion.kind': event.kind,
@@ -242,7 +242,7 @@ const openTelemetryTracing = (options: OpenTelemetryTracingOptions = {}): OpenTe
           'arazzo.criterion.met': event.criterion.met,
         });
         return;
-      case 'action-selected':
+      case 'action:selected':
         addEvent(event, 'action', {
           'arazzo.step.attempt': event.attempt,
           'arazzo.action.transition': event.transition.kind,
@@ -251,24 +251,24 @@ const openTelemetryTracing = (options: OpenTelemetryTracingOptions = {}): OpenTe
             : { 'arazzo.action.name': String(toValue(event.action.name)) }),
         });
         return;
-      case 'retry-wait':
-        addEvent(event, 'retry-wait', {
+      case 'retry:wait':
+        addEvent(event, 'retry:wait', {
           'arazzo.step.attempt': event.attempt,
           'arazzo.retry.delay_ms': event.delayMs,
         });
         return;
-      case 'retry-reference-start':
-      case 'retry-reference-settled':
+      case 'retry:reference:start':
+      case 'retry:reference:settled':
         addEvent(event, event.type, {
           'arazzo.step.attempt': event.attempt,
           'arazzo.retry.reference.kind': event.kind,
           'arazzo.retry.reference.id': event.id,
-          ...(event.type === 'retry-reference-settled'
+          ...(event.type === 'retry:reference:settled'
             ? { 'arazzo.retry.reference.successful': event.successful }
             : {}),
         });
         return;
-      case 'openapi-operation-assembled': {
+      case 'openapi:operation:assembled': {
         // started before the request is built, so the request interceptor can
         // propagate this span's context
         const spans = spansOf(event.runId);
@@ -286,7 +286,7 @@ const openTelemetryTracing = (options: OpenTelemetryTracingOptions = {}): OpenTe
         );
         return;
       }
-      case 'openapi-operation-request-start': {
+      case 'openapi:operation:request:start': {
         const span = runs.get(keyOf(event.runId))?.request;
         if (span === undefined) return;
         span.updateName(event.request.method);
@@ -300,7 +300,7 @@ const openTelemetryTracing = (options: OpenTelemetryTracingOptions = {}): OpenTe
         });
         return;
       }
-      case 'openapi-operation-request-settled': {
+      case 'openapi:operation:request:settled': {
         const key = keyOf(event.runId);
         const spans = runs.get(key);
         const span = spans?.request;

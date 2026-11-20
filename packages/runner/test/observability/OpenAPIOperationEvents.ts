@@ -56,12 +56,12 @@ describe('OpenAPIOperationExecutor events', function () {
   const startOf = (events: OpenAPIOperationEvent[]): OpenAPIOperationRequestStartEvent =>
     events.find(
       (event): event is OpenAPIOperationRequestStartEvent =>
-        event.type === 'openapi-operation-request-start',
+        event.type === 'openapi:operation:request:start',
     ) as OpenAPIOperationRequestStartEvent;
   const settledOf = (events: OpenAPIOperationEvent[]): OpenAPIOperationRequestSettledEvent =>
     events.find(
       (event): event is OpenAPIOperationRequestSettledEvent =>
-        event.type === 'openapi-operation-request-settled',
+        event.type === 'openapi:operation:request:settled',
     ) as OpenAPIOperationRequestSettledEvent;
 
   const getPet = { jsonPointer: '/paths/~1pet~1{petId}/get' };
@@ -159,6 +159,6 @@ describe('OpenAPIOperationExecutor events', function () {
     }
 
     assert.instanceOf(caught, ClientError);
-    assert.strictEqual(events.at(-1)?.type, 'openapi-operation-request-start');
+    assert.strictEqual(events.at(-1)?.type, 'openapi:operation:request:start');
   });
 });
