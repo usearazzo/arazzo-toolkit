@@ -17,7 +17,7 @@ import {
   type ArazzoRunnerEvent,
   type HTTPClient,
 } from '../../src/index.ts';
-import { openTelemetryInstrumentation } from '../../src/opentelemetry/index.ts';
+import { openTelemetryTracing } from '../../src/opentelemetry/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const entryPath = path.join(__dirname, '..', 'fixtures', 'workflow-control-flow.arazzo.yaml');
@@ -44,7 +44,7 @@ const trace = async (
 }> => {
   const exporter = new InMemorySpanExporter();
   const provider = new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] });
-  const otel = openTelemetryInstrumentation({ tracer: provider.getTracer('test') });
+  const otel = openTelemetryTracing({ tracer: provider.getTracer('test') });
   const headers: Record<string, string>[] = [];
   const events: ArazzoRunnerEvent[] = [];
   let time = 0;
@@ -73,7 +73,7 @@ const named = (spans: ReadableSpan[], name: string): ReadableSpan => {
 const isChild = (child: ReadableSpan, parent: ReadableSpan): boolean =>
   child.parentSpanContext?.spanId === parent.spanContext().spanId;
 
-describe('openTelemetryInstrumentation', function () {
+describe('openTelemetryTracing', function () {
   afterEach(function () {
     propagation.disable();
   });
