@@ -45,8 +45,8 @@ export interface WorkflowExecutionStepEventBase extends WorkflowExecutionEventBa
 
 /**
  * A workflow invocation began: it entered the call stack, before it is
- * normalized and its definition checked. A definition that fails those checks
- * throws, leaving the event without its `workflow-settled`.
+ * normalized and its definition checked. Its `workflow-settled` always
+ * follows, carrying the `error` when the invocation throws.
  * @public
  */
 export interface WorkflowStartEvent extends WorkflowExecutionEventBase {
@@ -63,8 +63,9 @@ export interface WorkflowStartEvent extends WorkflowExecutionEventBase {
 }
 
 /**
- * A workflow invocation produced its result. The fields repeat the
- * {@link WorkflowExecutionResult} fields of the same name.
+ * A workflow invocation produced its result, or threw. The fields repeat
+ * the {@link WorkflowExecutionResult} fields of the same name; an invocation
+ * that threw settles as `failed`, with no outputs, and carries the `error`.
  * @public
  */
 export interface WorkflowSettledEvent extends WorkflowExecutionEventBase {
@@ -72,6 +73,12 @@ export interface WorkflowSettledEvent extends WorkflowExecutionEventBase {
   readonly status: WorkflowExecutionResult['status'];
   readonly settledStatus: WorkflowExecutionResult['settledStatus'];
   readonly outputs: WorkflowExecutionResult['outputs'];
+  /**
+   * What the invocation threw, as `execute` rejects with it: an
+   * {@link ArazzoRunnerError} for an error in the document, an abort, or the
+   * transport's own error. Only when it threw.
+   */
+  readonly error?: unknown;
 }
 
 /**
@@ -125,7 +132,7 @@ export interface DependencySettledEvent extends WorkflowExecutionEventBase {
 }
 
 /**
- * A step began. Its attempts follow it.
+ * A step began. Its attempts follow it, and its `step-settled` always does.
  * @public
  */
 export interface StepStartEvent extends WorkflowExecutionStepEventBase {
@@ -238,13 +245,17 @@ export interface RetryReferenceSettledEvent extends WorkflowExecutionStepEventBa
 }
 
 /**
- * A step settled: its retries are done and its terminal action is selected.
+ * A step settled: its retries are done and its terminal action is selected,
+ * or it threw. A step that threw is not `successful` and carries the `error`.
  * @public
  */
 export interface StepSettledEvent extends WorkflowExecutionStepEventBase {
   readonly type: 'step-settled';
   readonly successful: boolean;
+  /** The attempts made, the one that threw included. */
   readonly attempts: number;
+  /** What the step threw, as for {@link WorkflowSettledEvent.error}. */
+  readonly error?: unknown;
 }
 
 /**

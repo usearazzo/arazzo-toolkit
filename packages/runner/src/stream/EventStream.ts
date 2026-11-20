@@ -56,8 +56,10 @@ interface Failure {
 const isFailure = (chunk: ArazzoRunnerEvent | Failure): chunk is Failure => 'failure' in chunk;
 
 /**
- * Turns a run's events into a stream. The run cannot end it itself (one
- * that throws leaves its workflows unsettled), so the caller ends it:
+ * Turns a run's events into a stream. The caller ends it: a runner can run
+ * many times into one stream, and an `execute` that fails before its
+ * workflow starts (an unknown workflow, a document that does not load)
+ * emits no workflow event to end it on:
  *
  * ```js
  * import { ArazzoRunner } from '@usearazzo/runner';

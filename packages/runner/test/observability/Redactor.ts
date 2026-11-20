@@ -272,6 +272,20 @@ describe('Redactor', function () {
       assert.instanceOf(outputs.at, Date);
     });
 
+    specify('should carry the error a settled event reports as it is', function () {
+      const error = new Error('step "login" failed');
+      const event: WorkflowSettledEvent = {
+        type: 'workflow-settled',
+        ...frame,
+        status: 'failed',
+        settledStatus: 'failed',
+        outputs: {},
+        error,
+      };
+
+      assert.strictEqual(new Redactor().event(event).error, error);
+    });
+
     specify('should mask criterion values by the name each expression reads', function () {
       const event: CriterionEvaluatedEvent = {
         type: 'criterion-evaluated',

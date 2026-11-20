@@ -465,22 +465,68 @@ describe('WorkflowExecutor events', function () {
       assert.match(foreign?.path[1] ?? '', /cross-document-child\.arazzo\.yaml#childFetch$/);
     });
 
-    specify('should leave a cancelled run without settled events', async function () {
+    specify(
+      'should settle the open step and workflow of a cancelled run with the error',
+      async function () {
+        const events: WorkflowExecutionEvent[] = [];
+        const controller = new AbortController();
+        const executor = new WorkflowExecutor({
+          document: controlFlow,
+          registry,
+          stepExecutor: new StepExecutor({
+            document: controlFlow,
+            registry,
+            operationExecutor: new OpenAPIOperationExecutor({
+              httpClient: async () => {
+                controller.abort();
+                return new Response(JSON.stringify({ id: 7, name: 'Rex' }), {
+                  status: 200,
+                  headers: { 'content-type': 'application/json' },
+                });
+              },
+            }),
+          }),
+          observer: (event) => events.push(event),
+        });
+
+        let caught: unknown;
+        try {
+          await executor.execute('linear', { inputs, signal: controller.signal });
+        } catch (error) {
+          caught = error;
+        }
+
+        assert.instanceOf(caught, ExecutionError);
+        // the step in flight settles as it would, the next stops at its
+        // boundary, and both it and the workflow settle with the abort.
+        const settled = events.filter(
+          (event) => event.type === 'step-settled' || event.type === 'workflow-settled',
+        );
+        assert.deepEqual(
+          settled.map((event) => [event.type, 'error' in event ? event.error : undefined]),
+          [
+            ['step-settled', undefined],
+            ['step-settled', caught],
+            ['workflow-settled', caught],
+          ],
+        );
+        assert.include(settled.at(-2), { successful: false, attempts: 1 });
+        assert.include(settled.at(-1), { status: 'failed', settledStatus: 'failed' });
+      },
+    );
+
+    specify('should settle every workflow and step a throwing transport leaves', async function () {
+      const thrown = new TypeError('fetch failed');
       const events: WorkflowExecutionEvent[] = [];
-      const controller = new AbortController();
       const executor = new WorkflowExecutor({
-        document: controlFlow,
+        document: composition,
         registry,
         stepExecutor: new StepExecutor({
-          document: controlFlow,
+          document: composition,
           registry,
           operationExecutor: new OpenAPIOperationExecutor({
             httpClient: async () => {
-              controller.abort();
-              return new Response(JSON.stringify({ id: 7, name: 'Rex' }), {
-                status: 200,
-                headers: { 'content-type': 'application/json' },
-              });
+              throw thrown;
             },
           }),
         }),
@@ -489,20 +535,31 @@ describe('WorkflowExecutor events', function () {
 
       let caught: unknown;
       try {
-        await executor.execute('linear', { inputs, signal: controller.signal });
+        await executor.execute('callsChild', { inputs });
       } catch (error) {
         caught = error;
       }
 
-      assert.instanceOf(caught, ExecutionError);
-      // the step in flight still settles, the run stops at the next boundary,
-      // and the rejection of execute is the only closing signal.
-      assert.deepEqual(events.map((event) => event.type).slice(-3), [
-        'action-selected',
-        'step-settled',
-        'step-start',
-      ]);
-      assert.isFalse(events.some((event) => event.type === 'workflow-settled'));
+      // the transport's error, as the operation executor wraps it.
+      assert.strictEqual((caught as Error).cause, thrown);
+      // the child's step, the child, the parent's step and the parent, innermost first.
+      const settled = events.filter(
+        (event) => event.type === 'step-settled' || event.type === 'workflow-settled',
+      );
+      assert.deepEqual(
+        settled.map((event) => [event.type, event.path.length]),
+        [
+          ['step-settled', 2],
+          ['workflow-settled', 2],
+          ['step-settled', 1],
+          ['workflow-settled', 1],
+        ],
+      );
+      assert.isTrue(settled.every((event) => event.error === caught));
+      const starts = events.filter(
+        (event) => event.type === 'step-start' || event.type === 'workflow-start',
+      );
+      assert.lengthOf(starts, settled.length);
     });
 
     specify('should tag every event with the path of the workflows in progress', async function () {
