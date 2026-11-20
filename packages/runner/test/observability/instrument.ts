@@ -193,4 +193,114 @@ describe('instrument', function () {
 
     assert.strictEqual(requests, 2 * unwrapped);
   });
+
+  specify('should wait for the work of a wrap that does not await it', async function () {
+    hook({
+      wrap: async (_operation, run) => {
+        void run();
+      },
+    });
+    const runner = await ArazzoRunner.load(entryPath, { httpClient: respond(200) });
+
+    const result = await runner.execute('linear', { inputs: { status: 'available' } });
+
+    assert.strictEqual(result.status, 'completed');
+  });
+
+  specify('should still notify the next observer when one removes its hook', async function () {
+    const seen: string[] = [];
+    const remove = instrument({
+      observer: () => {
+        remove();
+      },
+    });
+    hook({ observer: (event) => seen.push(event.type) });
+    const runner = await ArazzoRunner.load(entryPath, { httpClient: respond(200) });
+
+    await runner.execute('linear', { inputs: { status: 'available' } });
+
+    assert.strictEqual(seen[0], 'document:load:start');
+  });
+
+  specify('should pick up hooks added during a run', async function () {
+    const seen: string[] = [];
+    const wrapped: string[] = [];
+    let added = false;
+    const httpClient = respond(200);
+    const runner = await ArazzoRunner.load(entryPath, {
+      httpClient: (request) => {
+        if (!added) {
+          added = true;
+          hook({
+            observer: (event) => seen.push(event.type),
+            wrap: async (operation, run) => {
+              wrapped.push(nameOf(operation));
+              await run();
+            },
+          });
+        }
+        return httpClient(request);
+      },
+    });
+
+    await runner.execute('linear', { inputs: { status: 'available' } });
+
+    // added during the first step: its settled event is seen, and the next step wrapped
+    assert.include(seen, 'step:settled');
+    assert.deepEqual(wrapped, ['step getPet']);
+  });
+
+  specify('should settle a workflow whose start an observer throws on', async function () {
+    const thrown = new Error('observer bug');
+    const settled: ArazzoRunnerEvent[] = [];
+    hook({
+      observer: (event) => {
+        if (event.type === 'workflow:start') throw thrown;
+      },
+    });
+    hook({
+      observer: (event) => {
+        if (event.type === 'workflow:settled') settled.push(event);
+      },
+    });
+    const runner = await ArazzoRunner.load(entryPath, { httpClient: respond(200) });
+
+    let caught: unknown;
+    try {
+      await runner.execute('linear', { inputs: { status: 'available' } });
+    } catch (error) {
+      caught = error;
+    }
+
+    assert.strictEqual(caught, thrown);
+    assert.lengthOf(settled, 1);
+    assert.strictEqual(settled[0].type === 'workflow:settled' && settled[0].error, thrown);
+  });
+
+  specify(
+    'should reject with the run error when an observer throws settling it',
+    async function () {
+      hook({
+        observer: (event) => {
+          if (event.type === 'step:settled' || event.type === 'workflow:settled') {
+            if ('error' in event) throw new Error('observer bug');
+          }
+        },
+      });
+      const runner = await ArazzoRunner.load(entryPath, {
+        httpClient: async () => {
+          throw new TypeError('fetch failed');
+        },
+      });
+
+      let caught: unknown;
+      try {
+        await runner.execute('linear', { inputs: { status: 'available' } });
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.match((caught as Error).message, /OpenAPI operation request failed/);
+    },
+  );
 });

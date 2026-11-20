@@ -510,6 +510,7 @@ describe('WorkflowExecutor events', function () {
             ['workflow:settled', caught],
           ],
         );
+        assert.notProperty(settled[0], 'error');
         assert.include(settled.at(-2), { successful: false, attempts: 1 });
         assert.include(settled.at(-1), { status: 'failed', settledStatus: 'failed' });
       },

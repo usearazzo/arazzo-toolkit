@@ -39,9 +39,10 @@ export type InstrumentedOperation = InstrumentedWorkflow | InstrumentedStep;
 /**
  * Runs around each workflow invocation and each step, so what `run` does
  * happens inside it: in the active context of a span it opened, for one. It
- * must call `run` once and settle once `run` settles. What it resolves or
- * rejects with does not change the run: the run's own outcome stands, and the
- * operation's settled event says what it was.
+ * must call `run`, and should settle once `run` settles; a second call runs
+ * nothing again. What it resolves or rejects with does not change the run:
+ * the run's own outcome stands, once the run settled, and the operation's
+ * settled event says what it was.
  * @public
  */
 export type InstrumentationWrap = (
@@ -108,14 +109,15 @@ export const isInstrumented = (): boolean => registry().hooks.some((hooks) => ho
  * @internal
  */
 export const notify = (event: ArazzoRunnerEvent): void => {
-  for (const { observer } of registry().hooks) observer?.(event);
+  // a copy: an observer that removes hooks must not skip the next one
+  for (const { observer } of [...registry().hooks]) observer?.(event);
 };
 
 /**
  * Runs `work` inside every registered wrap, returning what `work` resolves
- * to or rejecting with what it rejects with, whatever a wrap settles with. A
- * wrap that throws before running `work` aborts it; one that throws after is
- * ignored.
+ * to or rejecting with what it rejects with, whatever a wrap settles with,
+ * and only once `work` settled. A wrap that throws before running `work`
+ * aborts it; one that throws after is ignored.
  * @internal
  */
 export const traced = async <T>(
@@ -145,8 +147,10 @@ export const traced = async <T>(
   try {
     await run();
   } catch (error: unknown) {
-    if (outcome === undefined) throw error;
+    if (running === undefined) throw error;
   }
+  // a wrap that settled without waiting for the work: the work still decides
+  if (running !== undefined) await running.catch(() => undefined);
   if (outcome === undefined) {
     throw new TypeError(`an instrumentation wrap settled without running the ${operation.kind}`);
   }
