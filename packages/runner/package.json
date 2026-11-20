@@ -33,33 +33,33 @@
       "import": "./src/index.mjs",
       "require": "./src/index.cjs"
     },
-    "./logging": {
-      "types": "./types/logging.d.ts",
-      "import": "./src/logging/index.mjs",
-      "require": "./src/logging/index.cjs"
+    "./observability/logging": {
+      "types": "./types/observability/logging.d.ts",
+      "import": "./src/observability/logging/index.mjs",
+      "require": "./src/observability/logging/index.cjs"
     },
-    "./stream": {
-      "types": "./types/stream.d.ts",
-      "import": "./src/stream/index.mjs",
-      "require": "./src/stream/index.cjs"
+    "./observability/stream": {
+      "types": "./types/observability/stream.d.ts",
+      "import": "./src/observability/stream/index.mjs",
+      "require": "./src/observability/stream/index.cjs"
     },
-    "./opentelemetry": {
-      "types": "./types/opentelemetry.d.ts",
-      "import": "./src/opentelemetry/index.mjs",
-      "require": "./src/opentelemetry/index.cjs"
+    "./observability/opentelemetry": {
+      "types": "./types/observability/opentelemetry.d.ts",
+      "import": "./src/observability/opentelemetry/index.mjs",
+      "require": "./src/observability/opentelemetry/index.cjs"
     }
   },
   "types": "./types/runner.d.ts",
   "typesVersions": {
     "*": {
-      "logging": [
-        "./types/logging.d.ts"
+      "observability/logging": [
+        "./types/observability/logging.d.ts"
       ],
-      "stream": [
-        "./types/stream.d.ts"
+      "observability/stream": [
+        "./types/observability/stream.d.ts"
       ],
-      "opentelemetry": [
-        "./types/opentelemetry.d.ts"
+      "observability/opentelemetry": [
+        "./types/observability/opentelemetry.d.ts"
       ]
     }
   },
@@ -117,9 +117,9 @@
     "src/**/*.cjs",
     "dist/",
     "types/runner.d.ts",
-    "types/logging.d.ts",
-    "types/stream.d.ts",
-    "types/opentelemetry.d.ts",
+    "types/observability/logging.d.ts",
+    "types/observability/stream.d.ts",
+    "types/observability/opentelemetry.d.ts",
     "LICENSE",
     "NOTICE",
     "README.md",

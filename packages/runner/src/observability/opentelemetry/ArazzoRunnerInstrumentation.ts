@@ -17,7 +17,7 @@ import {
   type InstrumentedOperation,
 } from '@usearazzo/runner';
 
-import pkg from '../../package.json' with { type: 'json' };
+import pkg from '../../../package.json' with { type: 'json' };
 
 /**
  * Configuration of {@link ArazzoRunnerInstrumentation}, OpenTelemetry's
@@ -76,7 +76,7 @@ const fail = (span: Span, error: unknown): void => {
  * ```js
  * import { NodeSDK } from '@opentelemetry/sdk-node';
  * import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
- * import { ArazzoRunnerInstrumentation } from '@usearazzo/runner/opentelemetry';
+ * import { ArazzoRunnerInstrumentation } from '@usearazzo/runner/observability/opentelemetry';
  *
  * new NodeSDK({
  *   instrumentations: [getNodeAutoInstrumentations(), new ArazzoRunnerInstrumentation()],
@@ -91,7 +91,7 @@ const fail = (span: Span, error: unknown): void => {
  * import { ZoneContextManager } from '@opentelemetry/context-zone';
  * import { registerInstrumentations } from '@opentelemetry/instrumentation';
  * import { FetchInstrumentation } from '@opentelemetry/instrumentation-fetch';
- * import { ArazzoRunnerInstrumentation } from '@usearazzo/runner/opentelemetry';
+ * import { ArazzoRunnerInstrumentation } from '@usearazzo/runner/observability/opentelemetry';
  *
  * const provider = new WebTracerProvider({
  *   spanProcessors: [new BatchSpanProcessor(new OTLPTraceExporter())],

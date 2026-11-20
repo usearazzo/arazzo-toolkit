@@ -64,7 +64,7 @@ const isFailure = (chunk: ArazzoRunnerEvent | Failure): chunk is Failure => 'fai
  *
  * ```js
  * import { ArazzoRunner } from '@usearazzo/runner';
- * import { eventStream } from '@usearazzo/runner/stream';
+ * import { eventStream } from '@usearazzo/runner/observability/stream';
  *
  * const events = eventStream();
  * const runner = await ArazzoRunner.load(uri, { observer: events.observer });

@@ -3,11 +3,11 @@ import { fileURLToPath } from 'node:url';
 
 import { assert } from 'chai';
 
-import { ArazzoRunner, Redactor, type HTTPClient } from '../../src/index.ts';
-import { loggingObserver, type LogRecord } from '../../src/logging/index.ts';
+import { ArazzoRunner, Redactor, type HTTPClient } from '../../../src/index.ts';
+import { loggingObserver, type LogRecord } from '../../../src/observability/logging/index.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const entryPath = path.join(__dirname, '..', 'fixtures', 'workflow-control-flow.arazzo.yaml');
+const entryPath = path.join(__dirname, '..', '..', 'fixtures', 'workflow-control-flow.arazzo.yaml');
 
 const respond =
   (status: number): HTTPClient =>
