@@ -305,7 +305,7 @@ export interface OpenAPIOperationExecutorOptions {
    */
   readonly now?: () => number;
   /**
-   * Whether the `openapi-operation-request-*` events carry the request and
+   * Whether the `openapi:operation:request:*` events carry the request and
    * response bodies. Off by default.
    */
   readonly captureBodies?: boolean;

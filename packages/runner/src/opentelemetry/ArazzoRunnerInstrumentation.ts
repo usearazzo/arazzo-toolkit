@@ -119,8 +119,9 @@ const fail = (span: Span, error: unknown): void => {
  * context survives an `await`: zone.js loses it across a native one, so
  * transpile `async`/`await` as OpenTelemetry's web instrumentation asks.
  *
- * Spans carry the identifiers and outcomes of the run, never its data: no
- * inputs, outputs, criterion values or requests.
+ * Spans carry the identifiers and outcomes of the run, not its data: no
+ * inputs, outputs, criterion values or requests. A step or workflow that
+ * throws records the error, whose message can quote what the run saw.
  * @public
  */
 class ArazzoRunnerInstrumentation {
