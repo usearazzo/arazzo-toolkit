@@ -74,7 +74,7 @@ interface Registry {
 
 // on globalThis, so the ESM and CommonJS builds of the runner, or two copies
 // of it, share one registry
-const KEY = Symbol.for('@usearazzo/runner/instrumentation');
+const KEY = Symbol.for('@usearazzo/runner/observability/instrument');
 
 const registry = (): Registry => {
   const scope = globalThis as { [KEY]?: Registry };
