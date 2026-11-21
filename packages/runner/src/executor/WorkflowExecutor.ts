@@ -816,49 +816,52 @@ class WorkflowExecutor {
 
     // traced from its `workflow:start` to its `workflow:settled`, so a span an
     // instrumentation opens around it is active for all of its events.
-    return traced({ kind: 'workflow', ...frame, via, location }, async () => {
-      // a started workflow always settles, a throwing one included (an
-      // observer throwing on its start too), so an observer holding it open
-      // (a span, a stream consumer) can close it.
-      let result: WorkflowExecutionResult;
-      try {
-        // emitted before normalization, so its events nest inside this workflow's.
-        if (this.#events.hasObservers) {
-          this.#events.emit({ type: 'workflow:start', ...frame, via, location }, startedAt);
-        }
-        result = await this.#runInvocation(locator, extracted, invocation, scope, startedAt);
-      } catch (error: unknown) {
+    return traced(
+      () => ({ kind: 'workflow', ...frame, via, location }),
+      async () => {
+        // a started workflow always settles, a throwing one included (an
+        // observer throwing on its start too), so an observer holding it open
+        // (a span, a stream consumer) can close it.
+        let result: WorkflowExecutionResult;
         try {
+          // emitted before normalization, so its events nest inside this workflow's.
           if (this.#events.hasObservers) {
-            this.#events.emit({
+            this.#events.emit({ type: 'workflow:start', ...frame, via, location }, startedAt);
+          }
+          result = await this.#runInvocation(locator, extracted, invocation, scope, startedAt);
+        } catch (error: unknown) {
+          try {
+            if (this.#events.hasObservers) {
+              this.#events.emit({
+                type: 'workflow:settled',
+                ...frame,
+                status: 'failed',
+                settledStatus: 'failed',
+                outputs: {},
+                error,
+              });
+            }
+          } catch {
+            // the error that failed the run is the one to report, not an
+            // observer's on the way out
+          }
+          throw error;
+        }
+        if (this.#events.hasObservers) {
+          this.#events.emit(
+            {
               type: 'workflow:settled',
               ...frame,
-              status: 'failed',
-              settledStatus: 'failed',
-              outputs: {},
-              error,
-            });
-          }
-        } catch {
-          // the error that failed the run is the one to report, not an
-          // observer's on the way out
+              status: result.status,
+              settledStatus: result.settledStatus,
+              outputs: result.outputs,
+            },
+            startedAt + result.durationMs,
+          );
         }
-        throw error;
-      }
-      if (this.#events.hasObservers) {
-        this.#events.emit(
-          {
-            type: 'workflow:settled',
-            ...frame,
-            status: result.status,
-            settledStatus: result.settledStatus,
-            outputs: result.outputs,
-          },
-          startedAt + result.durationMs,
-        );
-      }
-      return result;
-    });
+        return result;
+      },
+    );
   }
 
   /**
@@ -930,7 +933,7 @@ class WorkflowExecutor {
       const step = steps[index];
       const stepId = toValue(step.stepId) as string;
       const { outcome, action, transition } = await traced(
-        { kind: 'step', ...frame, stepId, location: invocation.document.locationOf(step) },
+        () => ({ kind: 'step', ...frame, stepId, location: invocation.document.locationOf(step) }),
         () => this.#runStep(step, stepId, steps, invocation, scope, trace),
       );
 
@@ -1020,10 +1023,13 @@ class WorkflowExecutor {
     const retryReferences: RetryReferenceRecord[] = [];
     const stepFrame: StepFrame = { ...frame, stepId };
     let attempted = 0;
+    // counted once the attempt passed its boundary checks, before its
+    // step:attempt, so an attempt announced is an attempt counted
     const countAttempt =
-      (runAttempt: () => Promise<StepAttemptOutcome>) => (): Promise<StepAttemptOutcome> => {
+      (runAttempt: (attempt: number) => Promise<StepAttemptOutcome>) =>
+      (attempt: number): Promise<StepAttemptOutcome> => {
         attempted += 1;
-        return runAttempt();
+        return runAttempt(attempt);
       };
     let settled: StepRun & { readonly settledAt: number };
     try {
@@ -1034,10 +1040,11 @@ class WorkflowExecutor {
         );
       }
       const attempt = this.#chargedAttempt(
-        this.#observedAttempt(
-          // counted as it runs: a step stopped at its boundary ran no attempt
-          countAttempt(this.#stepAttempt(step, stepId, invocation, scope, subWorkflows)),
-          stepFrame,
+        countAttempt(
+          this.#observedAttempt(
+            this.#stepAttempt(step, stepId, invocation, scope, subWorkflows),
+            stepFrame,
+          ),
         ),
         invocation,
         scope,
@@ -1063,10 +1070,8 @@ class WorkflowExecutor {
               location: invocation.document.locationOf(retry),
             });
           }
-          if (delayMs > 0) {
-            if (this.#events.hasObservers) {
-              this.#events.emit({ type: 'retry:wait', ...decided, delayMs });
-            }
+          if (delayMs > 0 && this.#events.hasObservers) {
+            this.#events.emit({ type: 'retry:wait', ...decided, delayMs });
           }
         },
       });

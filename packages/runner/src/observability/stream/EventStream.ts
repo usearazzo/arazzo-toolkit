@@ -114,8 +114,22 @@ const eventStream = (options: EventStreamOptions = {}): EventStream => {
       controller.enqueue({ failure: reason });
       controller.close();
     },
-    // a consumer that breaks out early cancels the stream, ending the queuing
-    [Symbol.asyncIterator]: () => stream[Symbol.asyncIterator](),
+    // over a reader, as not every browser makes a ReadableStream async
+    // iterable (Safari); a consumer that breaks out early cancels the stream,
+    // ending the queuing
+    [Symbol.asyncIterator]: (): AsyncIterator<ArazzoRunnerEvent> => {
+      const reader = stream.getReader();
+      return {
+        next: async () => {
+          const { done, value } = await reader.read();
+          return done ? { done: true, value: undefined } : { done: false, value };
+        },
+        return: async () => {
+          await reader.cancel();
+          return { done: true, value: undefined };
+        },
+      };
+    },
   };
 };
 

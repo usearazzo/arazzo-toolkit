@@ -113,4 +113,22 @@ describe('eventStream', function () {
     assert.include(JSON.stringify(collected), 'Bearer secret');
     assert.notInclude(JSON.stringify(collected), 'after-close');
   });
+
+  specify('should iterate where a ReadableStream is not async iterable', async function () {
+    const proto = ReadableStream.prototype as unknown as Record<symbol, unknown>;
+    const iterator = Object.getOwnPropertyDescriptor(proto, Symbol.asyncIterator);
+    delete proto[Symbol.asyncIterator];
+    try {
+      const events = eventStream();
+      events.observer({ type: 'document:load:start', timestamp: 0, uri: 'a' });
+      events.close();
+
+      assert.deepEqual(
+        (await collect(events)).map((event) => event.type),
+        ['document:load:start'],
+      );
+    } finally {
+      if (iterator !== undefined) Object.defineProperty(proto, Symbol.asyncIterator, iterator);
+    }
+  });
 });

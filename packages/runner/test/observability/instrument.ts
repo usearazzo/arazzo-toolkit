@@ -350,4 +350,137 @@ describe('instrument', function () {
     // added during the first attempt: the retries of the same step are reported
     assert.deepEqual(attempts, [2, 3]);
   });
+
+  specify('should abort the work of a wrap that throws before running it', async function () {
+    let requests = 0;
+    const thrown = new Error('wrap bug');
+    hook({
+      wrap: async () => {
+        throw thrown;
+      },
+    });
+    const runner = await ArazzoRunner.load(entryPath, {
+      httpClient: (request) => {
+        requests += 1;
+        return respond(200)(request);
+      },
+    });
+
+    let caught: unknown;
+    try {
+      await runner.execute('linear', { inputs: { status: 'available' } });
+    } catch (error) {
+      caught = error;
+    }
+
+    assert.strictEqual(caught, thrown);
+    assert.strictEqual(requests, 0);
+  });
+
+  specify('should leave no rejection unhandled when a wrap does not await', async function () {
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', record);
+    hook({
+      // settles well after the work rejected
+      wrap: async (_operation, run) => {
+        void run();
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      },
+    });
+    const runner = await ArazzoRunner.load(entryPath, {
+      httpClient: async () => {
+        throw new TypeError('fetch failed');
+      },
+    });
+
+    let caught: unknown;
+    try {
+      await runner.execute('linear', { inputs: { status: 'available' } });
+    } catch (error) {
+      caught = error;
+    } finally {
+      await new Promise((resolve) => setImmediate(resolve));
+      process.off('unhandledRejection', record);
+    }
+
+    assert.match((caught as Error).message, /OpenAPI operation request failed/);
+    assert.isEmpty(unhandled);
+  });
+
+  specify('should not run the work of a wrap that calls run after giving up', async function () {
+    let requests = 0;
+    let late: Promise<unknown> | undefined;
+    hook({
+      wrap: async (operation, run) => {
+        if (operation.kind === 'step') {
+          late = new Promise((resolve) => setTimeout(() => resolve(run().catch((e) => e)), 10));
+          return;
+        }
+        await run();
+      },
+    });
+    const runner = await ArazzoRunner.load(entryPath, {
+      httpClient: (request) => {
+        requests += 1;
+        return respond(200)(request);
+      },
+    });
+
+    let caught: unknown;
+    try {
+      await runner.execute('linear', { inputs: { status: 'available' } });
+    } catch (error) {
+      caught = error;
+    }
+    const lateResult = await late;
+
+    assert.strictEqual((caught as ExecutionError).reason, ExecutionError.InstrumentationWrap);
+    assert.strictEqual((caught as ExecutionError).stepId, 'findPets');
+    assert.instanceOf(lateResult, ExecutionError);
+    assert.strictEqual(requests, 0);
+  });
+
+  specify("should reject with the own observer's error when a hook throws too", async function () {
+    const own = new Error('own observer');
+    hook({
+      observer: (event) => {
+        if (event.type === 'step:start') throw new Error('hook observer');
+      },
+    });
+    const runner = await ArazzoRunner.load(entryPath, {
+      httpClient: respond(200),
+      observer: (event) => {
+        if (event.type === 'step:start') throw own;
+      },
+    });
+
+    let caught: unknown;
+    try {
+      await runner.execute('linear', { inputs: { status: 'available' } });
+    } catch (error) {
+      caught = error;
+    }
+
+    assert.strictEqual(caught, own);
+  });
+
+  specify('should count an attempt an observer throws on', async function () {
+    const settled: ArazzoRunnerEvent[] = [];
+    hook({
+      observer: (event) => {
+        if (event.type === 'step:settled') settled.push(event);
+      },
+    });
+    const runner = await ArazzoRunner.load(entryPath, {
+      httpClient: respond(200),
+      observer: (event) => {
+        if (event.type === 'step:attempt') throw new Error('observer bug');
+      },
+    });
+
+    await runner.execute('linear', { inputs: { status: 'available' } }).catch(() => undefined);
+
+    assert.include(settled[0], { successful: false, attempts: 1 });
+  });
 });

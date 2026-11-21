@@ -30,6 +30,16 @@ const named = (spans: ReadableSpan[], name: string): ReadableSpan => {
   return span!;
 };
 
+// answers `statuses` in turn, repeating the last
+const answering = (...statuses: number[]): HTTPClient => {
+  let calls = 0;
+  return async () =>
+    new Response(JSON.stringify({ id: 7 }), {
+      status: statuses[Math.min(calls++, statuses.length - 1)],
+      headers: { 'content-type': 'application/json' },
+    });
+};
+
 const isChild = (child: ReadableSpan, parent: ReadableSpan): boolean =>
   child.parentSpanContext?.spanId === parent.spanContext().spanId;
 
@@ -67,6 +77,7 @@ describe('ArazzoRunnerInstrumentation', function () {
   ): Promise<{ spans: ReadableSpan[]; active: (Span | undefined)[]; thrown?: unknown }> => {
     const active: (Span | undefined)[] = [];
     const runner = await ArazzoRunner.load(document, {
+      sleep: async () => {},
       httpClient:
         httpClient ??
         (async () => {
@@ -134,6 +145,69 @@ describe('ArazzoRunnerInstrumentation', function () {
     assert.isTrue(isChild(step, parent));
     assert.isTrue(isChild(child, step));
     assert.isTrue(isChild(named(spans, 'step after'), parent));
+  });
+
+  specify('should record a retried step as its attempts and decisions', async function () {
+    const { spans } = await run('retryThenSucceed', 200, answering(503, 200));
+
+    const step = named(spans, 'step flaky');
+    assert.strictEqual(step.status.code, SpanStatusCode.UNSET);
+    assert.strictEqual(step.attributes['arazzo.step.attempts'], 2);
+    const events = step.events.map((event) => [event.name, event.attributes]);
+    assert.deepInclude(events, [
+      'action:selected',
+      {
+        'arazzo.step.id': 'flaky',
+        'arazzo.step.attempt': 1,
+        'arazzo.action.transition': 'retry',
+        'arazzo.action.name': 'tryAgain',
+      },
+    ]);
+    assert.deepInclude(events, [
+      'retry:wait',
+      { 'arazzo.step.id': 'flaky', 'arazzo.step.attempt': 1, 'arazzo.retry.delay_ms': 2000 },
+    ]);
+    assert.deepInclude(events, [
+      'criterion:evaluated',
+      {
+        'arazzo.step.id': 'flaky',
+        'arazzo.step.attempt': 2,
+        'arazzo.criterion.kind': 'success',
+        'arazzo.criterion.condition': '$statusCode == 200',
+        'arazzo.criterion.met': true,
+      },
+    ]);
+  });
+
+  specify('should nest a retry reference under the step that fires it', async function () {
+    const { spans } = await run('retryWithWorkflowReference', 200, answering(503, 200));
+
+    const step = named(spans, 'step call');
+    assert.isTrue(isChild(named(spans, 'workflow repairFlow'), step));
+    const references = step.events.filter((event) => event.name.startsWith('retry:reference:'));
+    assert.deepEqual(
+      references.map((event) => [event.name, event.attributes?.['arazzo.retry.reference.id']]),
+      [
+        ['retry:reference:start', 'repairFlow'],
+        ['retry:reference:settled', 'repairFlow'],
+      ],
+    );
+  });
+
+  specify('should nest dependencies and transfer targets under their workflow', async function () {
+    const { spans } = await run('dependent', 200, undefined, compositionPath);
+    const dependent = named(spans, 'workflow dependent');
+    assert.isTrue(isChild(named(spans, 'workflow setupA'), dependent));
+    assert.isTrue(isChild(named(spans, 'workflow setupB'), dependent));
+
+    exporter.reset();
+    const transfer = await run('transfersToTarget', 200);
+    assert.isTrue(
+      isChild(
+        named(transfer.spans, 'workflow transferTarget'),
+        named(transfer.spans, 'workflow transfersToTarget'),
+      ),
+    );
   });
 
   specify('should keep concurrent runs apart when the context is lost', async function () {

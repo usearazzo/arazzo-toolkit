@@ -123,24 +123,43 @@ export const notify = (event: ArazzoRunnerEvent): void => {
  * @internal
  */
 export const traced = async <T>(
-  operation: InstrumentedOperation,
+  describe: () => InstrumentedOperation,
   work: () => Promise<T>,
 ): Promise<T> => {
   const wraps = registry().hooks.flatMap(({ wrap }) => (wrap === undefined ? [] : [wrap]));
+  // described only when a wrap is registered: an uninstrumented run builds nothing
   if (wraps.length === 0) return work();
+  const operation = describe();
 
   let outcome: { readonly value: T } | { readonly error: unknown } | undefined;
   let running: Promise<void> | undefined;
+  let abandoned = false;
+  const unrun = (): ExecutionError =>
+    new ExecutionError(`an instrumentation wrap settled without running the ${operation.kind}`, {
+      workflowId: operation.workflowId,
+      ...(operation.kind === 'step' ? { stepId: operation.stepId } : {}),
+      reason: ExecutionError.InstrumentationWrap,
+    });
   // once, however many times a wrap calls it
-  const innermost = (): Promise<void> =>
-    (running ??= (async () => {
-      try {
-        outcome = { value: await work() };
-      } catch (error: unknown) {
-        outcome = { error };
-        throw error;
-      }
-    })());
+  const innermost = (): Promise<void> => {
+    // a wrap calling it after the run gave up on it: running the work then
+    // would act for a run that already rejected
+    if (abandoned) return Promise.reject(unrun());
+    if (running === undefined) {
+      running = (async () => {
+        try {
+          outcome = { value: await work() };
+        } catch (error: unknown) {
+          outcome = { error };
+          throw error;
+        }
+      })();
+      // handled here too: a wrap that settles later than the work must not
+      // leave its rejection unhandled, which would end the process
+      running.catch(() => undefined);
+    }
+    return running;
+  };
   const run = wraps.reduceRight<() => Promise<void>>(
     (next, wrap) => () => wrap(operation, next),
     innermost,
@@ -149,15 +168,16 @@ export const traced = async <T>(
   try {
     await run();
   } catch (error: unknown) {
-    if (running === undefined) throw error;
+    if (running === undefined) {
+      abandoned = true;
+      throw error;
+    }
   }
   // a wrap that settled without waiting for the work: the work still decides
   if (running !== undefined) await running.catch(() => undefined);
   if (outcome === undefined) {
-    throw new ExecutionError(
-      `an instrumentation wrap settled without running the ${operation.kind}`,
-      { workflowId: operation.workflowId, reason: ExecutionError.InstrumentationWrap },
-    );
+    abandoned = true;
+    throw unrun();
   }
   if ('error' in outcome) throw outcome.error;
   return outcome.value;

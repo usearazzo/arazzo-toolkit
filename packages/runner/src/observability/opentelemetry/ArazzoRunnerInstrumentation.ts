@@ -107,7 +107,9 @@ const fail = (span: Span, error: unknown): void => {
  * ```
  *
  * Each workflow invocation and each step is an `INTERNAL` span, the step's
- * under its workflow's, a sub-workflow's under its step's. Attempts, criteria,
+ * under its workflow's, a sub-workflow's and a retry reference's under the
+ * step that calls them, and a `dependsOn` workflow's or a transfer target's
+ * under the workflow that runs them. Attempts, criteria,
  * selected actions, retry waits, retry references and the operations a step
  * calls are events of the step's span, each named by the runner event it
  * comes from (`step:attempt`, `criterion:evaluated`, `action:selected`, …). A step runs in its span's context, so
@@ -176,9 +178,7 @@ class ArazzoRunnerInstrumentation {
   // holds with a context manager that loses context across a native await
   // (zone.js in the browser); the run's root takes the active context
   readonly #wrap: InstrumentationWrap = async (operation, run) => {
-    const open = this.#runs.get(operation.runId) ?? [];
-    this.#runs.set(operation.runId, open);
-    const parent = open.at(-1);
+    const parent = this.#runs.get(operation.runId)?.at(-1);
     const parentContext =
       parent === undefined ? context.active() : trace.setSpan(context.active(), parent);
     const { name, attributes } = spanOf(operation);
@@ -188,6 +188,9 @@ class ArazzoRunnerInstrumentation {
       parentContext,
     );
     this.#operations.set(span, operation);
+    // registered once the span exists, so a failure to start one leaves nothing behind
+    const open = this.#runs.get(operation.runId) ?? [];
+    this.#runs.set(operation.runId, open);
     open.push(span);
     try {
       await context.with(trace.setSpan(parentContext, span), run);
