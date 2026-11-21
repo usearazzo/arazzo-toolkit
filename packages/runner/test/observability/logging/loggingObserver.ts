@@ -26,6 +26,7 @@ const run = async (
   const records: LogRecord[] = [];
   const runner = await ArazzoRunner.load(entryPath, {
     httpClient,
+    sleep: async () => {},
     requestInterceptor: (request) => {
       request.headers.Authorization = 'Bearer secret';
     },
@@ -118,5 +119,34 @@ describe('loggingObserver', function () {
     const [request] = byType(records, 'openapi:operation:request:start');
     const { headers } = request.fields.request as { headers: Record<string, string> };
     assert.strictEqual(headers.Authorization, 'Bearer secret');
+  });
+
+  specify('should log the decisions of a retried step and a goto', async function () {
+    let calls = 0;
+    const retried = await run('retryThenSucceed', 200, {}, async (request) => {
+      calls += 1;
+      return respond(calls === 1 ? 503 : 200)(request);
+    });
+
+    const [retry] = byType(retried, 'action:selected');
+    assert.strictEqual(retry.message, 'step flaky selected action tryAgain (retry)');
+    assert.deepInclude(retry.fields, {
+      attempt: 1,
+      action: { name: 'tryAgain', type: 'retry' },
+      transition: { kind: 'retry' },
+    });
+    const [wait] = byType(retried, 'retry:wait');
+    assert.strictEqual(wait.level, 'debug');
+    assert.strictEqual(wait.message, 'step flaky waits 2000 ms before attempt 2');
+    assert.strictEqual(wait.fields.delayMs, 2000);
+    const [settled] = byType(retried, 'step:settled');
+    assert.strictEqual(settled.message, 'step flaky succeeded after 2 attempts');
+
+    const jumped = await run('gotoStep', 200);
+    const goto = byType(jumped, 'action:selected').find(
+      (record) => record.fields.stepId === 'first',
+    );
+    assert.strictEqual(goto?.message, 'step first selected action skipSecond (goto)');
+    assert.deepInclude(goto?.fields, { transition: { kind: 'goto', stepId: 'third' } });
   });
 });

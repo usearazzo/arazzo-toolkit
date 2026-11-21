@@ -131,4 +131,29 @@ describe('eventStream', function () {
       if (iterator !== undefined) Object.defineProperty(proto, Symbol.asyncIterator, iterator);
     }
   });
+
+  specify('should keep its first ending when closed or failed again', async function () {
+    const closed = eventStream();
+    closed.observer({ type: 'document:load:start', timestamp: 0, uri: 'a' });
+    closed.close();
+    closed.close();
+    closed.error(new Error('too late'));
+    closed.observer({ type: 'document:load:settled', timestamp: 1, uri: 'a' });
+    assert.deepEqual(
+      (await collect(closed)).map((event) => event.type),
+      ['document:load:start'],
+    );
+
+    const failed = eventStream();
+    failed.error(new Error('first'));
+    failed.error(new Error('second'));
+    failed.close();
+    let caught: unknown;
+    try {
+      await collect(failed);
+    } catch (error) {
+      caught = error;
+    }
+    assert.strictEqual((caught as Error).message, 'first');
+  });
 });
