@@ -17,7 +17,7 @@ import {
   type InstrumentedOperation,
 } from '@usearazzo/runner';
 
-import pkg from '../../../package.json' with { type: 'json' };
+import version from '../../version.ts';
 
 /**
  * Configuration of {@link ArazzoRunnerInstrumentation}, OpenTelemetry's
@@ -129,7 +129,7 @@ const fail = (span: Span, error: unknown): void => {
  */
 class ArazzoRunnerInstrumentation {
   readonly instrumentationName = NAME;
-  readonly instrumentationVersion: string = pkg.version;
+  readonly instrumentationVersion: string = version;
 
   #config: ArazzoRunnerInstrumentationConfig;
   #tracer: Tracer;
