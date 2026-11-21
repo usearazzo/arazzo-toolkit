@@ -251,6 +251,17 @@ describe('ArazzoRunnerInstrumentation', function () {
     assert.strictEqual(named(spans, 'step findPets').status.code, SpanStatusCode.ERROR);
   });
 
+  specify('should not mark a step failure its workflow handles as an error', async function () {
+    const { spans } = await run('retryExhaustedThenEnd', 503);
+
+    const workflow = named(spans, 'workflow retryExhaustedThenEnd');
+    const [step] = spans.filter((span) => span.name.startsWith('step '));
+    assert.strictEqual(workflow.attributes['arazzo.workflow.status'], 'ended');
+    assert.strictEqual(step.attributes['arazzo.step.successful'], false);
+    assert.strictEqual(step.status.code, SpanStatusCode.UNSET);
+    assert.strictEqual(workflow.status.code, SpanStatusCode.UNSET);
+  });
+
   specify('should mark only the failed target of a transfer as an error', async function () {
     const { spans } = await run('transfersToTarget', 500);
 

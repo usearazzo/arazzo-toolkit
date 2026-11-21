@@ -15,6 +15,7 @@ import {
   type DocumentLocation,
   type InstrumentationWrap,
   type InstrumentedOperation,
+  type InstrumentedStep,
 } from '@usearazzo/runner';
 
 import version from '../../version.ts';
@@ -137,6 +138,9 @@ class ArazzoRunnerInstrumentation {
   // the operation each span traces: an event's active span is acted on only
   // when it is this instrumentation's own
   readonly #operations = new WeakMap<Span, InstrumentedOperation>();
+  // the transition each step span's step last selected, which tells a failure
+  // the workflow handles from one that ends it
+  readonly #transitions = new WeakMap<Span, string>();
   // the spans each run has open, outermost first: a run's operations are
   // sequential, so the innermost is the parent of the next
   readonly #runs = new Map<string, Span[]>();
@@ -230,8 +234,15 @@ class ArazzoRunnerInstrumentation {
       case 'step:settled': {
         const span = this.#active(event, 'step');
         if (span === undefined) return;
-        span.setAttribute('arazzo.step.attempts', event.attempts);
-        if (!event.successful || event.error !== undefined) fail(span, event.error);
+        span.setAttributes({
+          'arazzo.step.attempts': event.attempts,
+          'arazzo.step.successful': event.successful,
+        });
+        // an error only when it threw or its failure ends the workflow (break):
+        // a failure an onFailure action handles (goto, end) is the workflow's
+        // design, not an error
+        const unhandled = !event.successful && this.#transitions.get(span) === 'break';
+        if (unhandled || event.error !== undefined) fail(span, event.error);
         return;
       }
       case 'step:attempt':
@@ -245,7 +256,14 @@ class ArazzoRunnerInstrumentation {
           'arazzo.criterion.met': event.criterion.met,
         });
         return;
-      case 'action:selected':
+      case 'action:selected': {
+        const span = this.#active(event, 'step');
+        // the step's own decision, not that of a step a retry references
+        const step =
+          span === undefined ? undefined : (this.#operations.get(span) as InstrumentedStep);
+        if (span !== undefined && step?.stepId === event.stepId) {
+          this.#transitions.set(span, event.transition.kind);
+        }
         this.#addEvent(event, event.type, {
           'arazzo.step.attempt': event.attempt,
           'arazzo.action.transition': event.transition.kind,
@@ -254,6 +272,7 @@ class ArazzoRunnerInstrumentation {
             : { 'arazzo.action.name': String(toValue(event.action.name)) }),
         });
         return;
+      }
       case 'retry:wait':
         this.#addEvent(event, event.type, {
           'arazzo.step.attempt': event.attempt,
