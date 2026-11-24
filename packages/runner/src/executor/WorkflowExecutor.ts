@@ -139,7 +139,7 @@ export interface WorkflowExecutorOptions {
    * {@link WorkflowExecutionEvent}, and {@link ArazzoRunnerObserver} for how
    * events are delivered.
    */
-  readonly observer?: ArazzoRunnerObserver<WorkflowExecutionEvent>;
+  readonly observer?: ArazzoRunnerObserver<WorkflowExecutionEvent> | undefined;
 }
 
 /**
