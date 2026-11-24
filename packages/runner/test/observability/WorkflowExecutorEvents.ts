@@ -53,9 +53,9 @@ interface WorkflowFrame {
   readonly start: WorkflowStartEvent;
   readonly steps: StepRunRecord[];
   readonly dependencies: WorkflowExecutionResult[];
-  step?: StepBuilder | undefined;
-  reference?: ReferenceBuilder | undefined;
-  dependencyRun?: WorkflowExecutionResult | undefined;
+  step?: StepBuilder;
+  reference?: ReferenceBuilder;
+  dependencyRun?: WorkflowExecutionResult;
   transferredTo?: WorkflowExecutionResult;
 }
 
@@ -118,7 +118,7 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
         if (!event.memoized && event.settledStatus !== 'failed') {
           completedDependencies.set(key, result);
         }
-        frame.dependencyRun = undefined;
+        delete frame.dependencyRun;
         break;
       }
       case 'step:start':
@@ -166,7 +166,7 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
           successful: event.successful,
           ...(reference.subWorkflow === undefined ? {} : { subWorkflow: reference.subWorkflow }),
         });
-        frame.reference = undefined;
+        delete frame.reference;
         break;
       }
       case 'step:settled': {
@@ -184,7 +184,7 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
           ...(step.subWorkflows.length > 0 ? { subWorkflows: step.subWorkflows } : {}),
           ...(step.retryReferences.length > 0 ? { retryReferences: step.retryReferences } : {}),
         });
-        frame.step = undefined;
+        delete frame.step;
         break;
       }
       default:
