@@ -56,7 +56,7 @@ Each operation fails through its own typed error, `BundleError`, `DereferenceErr
 npm install @usearazzo/resolver
 ```
 
-Ships ESM and CommonJS builds with TypeScript declarations. Requires Node.js 20.10 or newer.
+Ships ESM and CommonJS builds with TypeScript declarations. Requires Node.js 22 or newer.
 
 ## Usage
 

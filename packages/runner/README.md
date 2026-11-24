@@ -71,7 +71,7 @@ Only three things throw: a document that can't be loaded or run as written, a re
 npm install @usearazzo/runner
 ```
 
-Ships ESM and CommonJS builds with TypeScript declarations. Requires Node.js 20.10 or newer.
+Ships ESM and CommonJS builds with TypeScript declarations. Requires Node.js 22 or newer.
 
 ## Usage
 

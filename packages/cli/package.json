@@ -26,7 +26,7 @@
     "usearazzo": "./bin/usearazzo.mjs"
   },
   "engines": {
-    "node": ">=20.10.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "build": "npm run clean && npm run build:es",

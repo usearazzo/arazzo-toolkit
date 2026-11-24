@@ -59,7 +59,7 @@ A relative path is read from the current working directory, just like with any N
 npm install @usearazzo/validator
 ```
 
-Ships ESM and CommonJS builds with TypeScript declarations. Requires Node.js 20.10 or newer.
+Ships ESM and CommonJS builds with TypeScript declarations. Requires Node.js 22 or newer.
 
 ## From the command line
 
