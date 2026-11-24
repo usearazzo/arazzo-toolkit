@@ -54,7 +54,7 @@ import type { SelectedAction } from '../action/ActionResolver.ts';
 import ExecutionError, { type ExecutionErrorReason } from '../errors/ExecutionError.ts';
 import ResolverError from '../errors/ResolverError.ts';
 import { throwIfAborted } from './abort.ts';
-import EventChannel from '../observability/EventChannel.ts';
+import EventChannel, { type UnstampedEvent } from '../observability/EventChannel.ts';
 import type { ArazzoRunnerObserver } from '../observability/ArazzoRunnerEvent.ts';
 import type {
   WorkflowExecutionDependency,
@@ -830,21 +830,14 @@ class WorkflowExecutor {
           }
           result = await this.#runInvocation(locator, extracted, invocation, scope, startedAt);
         } catch (error: unknown) {
-          try {
-            if (this.#events.hasObservers) {
-              this.#events.emit({
-                type: 'workflow:settled',
-                ...frame,
-                status: 'failed',
-                settledStatus: 'failed',
-                outputs: {},
-                error,
-              });
-            }
-          } catch {
-            // the error that failed the run is the one to report, not an
-            // observer's on the way out
-          }
+          this.#settleThrown({
+            type: 'workflow:settled',
+            ...frame,
+            status: 'failed',
+            settledStatus: 'failed',
+            outputs: {},
+            error,
+          });
           throw error;
         }
         if (this.#events.hasObservers) {
@@ -999,6 +992,20 @@ class WorkflowExecutor {
   }
 
   /**
+   * Emits the settled event of a workflow or step that threw. An observer
+   * throwing on it is ignored: the error that failed the operation is the one
+   * to report.
+   */
+  #settleThrown(event: UnstampedEvent<WorkflowExecutionEvent>): void {
+    if (!this.#events.hasObservers) return;
+    try {
+      this.#events.emit(event);
+    } catch {
+      // the operation's own error is rethrown by the caller
+    }
+  }
+
+  /**
    * Runs one step of a workflow invocation, from its `step:start` to its
    * `step:settled`, recording it in `trace` and its outputs in the state. A
    * step that throws still settles, so an observer holding it open can close
@@ -1022,13 +1029,13 @@ class WorkflowExecutor {
     // that invoked it, not to the step's own target.
     const retryReferences: RetryReferenceRecord[] = [];
     const stepFrame: StepFrame = { ...frame, stepId };
+    // the attempt reached, once past its boundary checks and before its
+    // step:attempt: an attempt announced is an attempt counted
     let attempted = 0;
-    // counted once the attempt passed its boundary checks, before its
-    // step:attempt, so an attempt announced is an attempt counted
     const countAttempt =
       (runAttempt: (attempt: number) => Promise<StepAttemptOutcome>) =>
       (attempt: number): Promise<StepAttemptOutcome> => {
-        attempted += 1;
+        attempted = attempt;
         return runAttempt(attempt);
       };
     let settled: StepRun & { readonly settledAt: number };
@@ -1105,19 +1112,13 @@ class WorkflowExecutor {
       });
       settled = { outcome, action, transition, attempts, settledAt: stepSettledAt };
     } catch (error: unknown) {
-      try {
-        if (this.#events.hasObservers) {
-          this.#events.emit({
-            type: 'step:settled',
-            ...stepFrame,
-            successful: false,
-            attempts: attempted,
-            error,
-          });
-        }
-      } catch {
-        // as for a workflow: the step's own error is the one to report
-      }
+      this.#settleThrown({
+        type: 'step:settled',
+        ...stepFrame,
+        successful: false,
+        attempts: attempted,
+        error,
+      });
       throw error;
     }
     if (this.#events.hasObservers) {
