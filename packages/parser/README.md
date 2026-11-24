@@ -59,7 +59,7 @@ A relative file system path resolves against the current working directory, so `
 npm install @usearazzo/parser
 ```
 
-Ships ESM and CommonJS builds with TypeScript declarations. Requires Node.js 22 or newer.
+Ships ESM and CommonJS builds with TypeScript declarations. Requires Node.js 20.10 or newer.
 
 ## Usage
 

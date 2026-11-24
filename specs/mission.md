@@ -37,7 +37,7 @@ The audience is two-tier, and the tiers are served by different packages. This s
 
 ## Target Audience
 
-- **JavaScript / TypeScript ecosystem** — every package ships ESM, CommonJS, and a UMD browser bundle with rolled-up type declarations; Node.js 22+ is the runtime floor and browsers are a first-class target.
+- **JavaScript / TypeScript ecosystem** — every package ships ESM, CommonJS, and a UMD browser bundle with rolled-up type declarations; Node.js 20.10+ is the runtime floor and browsers are a first-class target.
 - **OpenAPI-native teams** — the lingua franca is OpenAPI, JSON Schema, and Arazzo. Adjacent tools are Postman, Insomnia, OpenAPI editors and linters, and CI runners.
 - **The SpecLynx / ApiDOM ecosystem** — documents are ApiDOM trees end to end, so anything that already speaks ApiDOM (language services, editors) composes with the toolkit directly.
 

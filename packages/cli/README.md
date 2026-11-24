@@ -49,7 +49,7 @@ npm install --global @usearazzo/cli
 usearazzo --help
 ```
 
-Requires Node.js 22 or newer.
+Requires Node.js 20.10 or newer.
 
 ## Commands
 

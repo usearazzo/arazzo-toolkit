@@ -21,7 +21,7 @@
   "type": "module",
   "sideEffects": false,
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=20.10.0"
   },
   "unpkg": "./dist/arazzo-resolver.browser.min.js",
   "main": "./src/index.cjs",
