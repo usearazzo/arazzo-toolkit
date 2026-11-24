@@ -19,8 +19,8 @@ import { detect as detectArazzoJSON } from '@speclynx/apidom-parser-adapter-araz
 import { isArazzoSpecification1Element } from '@speclynx/apidom-ns-arazzo-1';
 import { detect as detectArazzoYAML } from '@speclynx/apidom-parser-adapter-arazzo-yaml-1';
 import { isPlainObject } from 'ramda-adjunct';
-import type { PartialDeep } from 'type-fest';
 
+import type { PartialOptions } from './options/PartialOptions.ts';
 import ParseError from './errors/ParseError.ts';
 import { mergeOptions } from './options/util.ts';
 import MemoryResolver from './resolve/resolvers/memory/index.ts';
@@ -29,7 +29,7 @@ import MemoryResolver from './resolve/resolvers/memory/index.ts';
  * Options for parsing Arazzo Documents.
  * @public
  */
-export type Options = PartialDeep<ApiDOMReferenceOptions, { recurseIntoArrays: false }>;
+export type Options = PartialOptions<ApiDOMReferenceOptions>;
 
 /**
  * Default reference options for parsing Arazzo Documents.

@@ -13,6 +13,7 @@ export {
   defaultOptions as defaultParseOpenAPIOptions,
 } from './parse-openapi.ts';
 export type { Options as ParseOpenAPIOptions } from './parse-openapi.ts';
+export type { PartialOptions } from './options/PartialOptions.ts';
 
 export {
   parse as parseRuntimeExpression,

@@ -12,7 +12,7 @@ import OpenAPI3_1BundleStrategy from '@speclynx/apidom-reference/bundle/strategi
 import { isSwaggerElement } from '@speclynx/apidom-ns-openapi-2';
 import { isOpenApi3_0Element } from '@speclynx/apidom-ns-openapi-3-0';
 import { isOpenApi3_1Element } from '@speclynx/apidom-ns-openapi-3-1';
-import type { PartialDeep } from 'type-fest';
+import type { PartialOptions } from '@usearazzo/parser';
 
 import { defaultOptions as dereferenceDefaultOptions } from '../dereference/openapi.ts';
 import BundleError from '../errors/BundleError.ts';
@@ -21,7 +21,7 @@ import BundleError from '../errors/BundleError.ts';
  * Options for bundling OpenAPI Documents.
  * @public
  */
-export type Options = PartialDeep<ApiDOMReferenceOptions, { recurseIntoArrays: false }>;
+export type Options = PartialOptions<ApiDOMReferenceOptions>;
 
 /**
  * Default reference options for bundling OpenAPI Documents.

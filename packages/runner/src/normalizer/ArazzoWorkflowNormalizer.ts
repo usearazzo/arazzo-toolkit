@@ -19,7 +19,7 @@ import {
   mergeOptions,
   type ApiDOMReferenceOptions,
 } from '@speclynx/apidom-reference/configuration/empty';
-import type { PartialDeep } from 'type-fest';
+import type { PartialOptions } from '@usearazzo/parser';
 
 import type ArazzoDocument from '../document/ArazzoDocument.ts';
 import ParameterIdentity from '../document/ParameterIdentity.ts';
@@ -30,10 +30,7 @@ import { providerOptionsOverride as arazzoProviderOptions } from '../registry/pr
  * Options for normalizing an Arazzo workflow.
  * @public
  */
-export type ArazzoWorkflowNormalizerOptions = PartialDeep<
-  ApiDOMReferenceOptions,
-  { recurseIntoArrays: false }
->;
+export type ArazzoWorkflowNormalizerOptions = PartialOptions<ApiDOMReferenceOptions>;
 
 /**
  * Default options for normalizing an Arazzo workflow.

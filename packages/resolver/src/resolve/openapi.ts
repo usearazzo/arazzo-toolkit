@@ -22,7 +22,7 @@ import {
   isOpenApi3_1Element,
   mediaTypes as openApi3_1MediaTypes,
 } from '@speclynx/apidom-ns-openapi-3-1';
-import type { PartialDeep } from 'type-fest';
+import type { PartialOptions } from '@usearazzo/parser';
 
 import { defaultOptions as dereferenceDefaultOptions } from '../dereference/openapi.ts';
 import ResolveError from '../errors/ResolveError.ts';
@@ -31,7 +31,7 @@ import ResolveError from '../errors/ResolveError.ts';
  * Options for resolving OpenAPI Documents.
  * @public
  */
-export type Options = PartialDeep<ApiDOMReferenceOptions, { recurseIntoArrays: false }>;
+export type Options = PartialOptions<ApiDOMReferenceOptions>;
 
 /**
  * Default reference options for resolving OpenAPI Documents.

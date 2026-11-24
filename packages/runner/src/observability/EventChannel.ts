@@ -1,5 +1,4 @@
 import { isPlainObject } from 'ramda-adjunct';
-import type { UndefinedOnPartial } from 'type-fest';
 
 import type { ArazzoRunnerEvent, ArazzoRunnerObserver } from './ArazzoRunnerEvent.ts';
 import { isInstrumented, notify } from './instrument.ts';
@@ -9,10 +8,11 @@ import { isInstrumented, notify } from './instrument.ts';
  * a union, so each member keeps its own discriminated shape.
  * @internal
  */
-// an optional field may be passed as undefined: emit omits it
-export type UnstampedEvent<E> = E extends unknown
-  ? UndefinedOnPartial<Omit<E, 'timestamp'>>
-  : never;
+export type UnstampedEvent<E> = E extends unknown ? Unstamped<Omit<E, 'timestamp'>> : never;
+
+// an optional field may also be passed as undefined, which emit omits; the
+// mapping is homomorphic, so readonly and ? are kept
+type Unstamped<T> = { [K in keyof T]: {} extends Pick<T, K> ? T[K] | undefined : T[K] };
 
 /**
  * Options for the EventChannel.

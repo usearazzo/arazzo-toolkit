@@ -15,7 +15,7 @@ import OpenAPI2ResolveStrategy from '@speclynx/apidom-reference/resolve/strategi
 import OpenAPI30ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/openapi-3-0';
 import OpenAPI31ResolveStrategy from '@speclynx/apidom-reference/resolve/strategies/openapi-3-1';
 import { isArazzoSpecification1Element, mediaTypes } from '@speclynx/apidom-ns-arazzo-1';
-import type { PartialDeep } from 'type-fest';
+import type { PartialOptions } from '@usearazzo/parser';
 
 import { defaultOptions as dereferenceDefaultOptions } from '../dereference/arazzo.ts';
 import ResolveError from '../errors/ResolveError.ts';
@@ -24,7 +24,7 @@ import ResolveError from '../errors/ResolveError.ts';
  * Options for resolving Arazzo Documents.
  * @public
  */
-export type Options = PartialDeep<ApiDOMReferenceOptions, { recurseIntoArrays: false }>;
+export type Options = PartialOptions<ApiDOMReferenceOptions>;
 
 /**
  * Default reference options for resolving Arazzo Documents.

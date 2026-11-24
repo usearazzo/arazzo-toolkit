@@ -1,4 +1,4 @@
-import type { PartialDeep } from 'type-fest';
+import type { PartialOptions } from '@usearazzo/parser';
 import type { ApiDOMReferenceOptions } from '@speclynx/apidom-reference/configuration/empty';
 import { ObjectElement, type RefElement } from '@speclynx/apidom-datamodel';
 import { toValue } from '@speclynx/apidom-core';
@@ -20,10 +20,7 @@ export const circularReplacer = (ref: RefElement) =>
  * Options for a document registry provider.
  * @public
  */
-export type DocumentRegistryProviderOptions = PartialDeep<
-  ApiDOMReferenceOptions,
-  { recurseIntoArrays: false }
->;
+export type DocumentRegistryProviderOptions = PartialOptions<ApiDOMReferenceOptions>;
 
 /**
  * Base class for document registry providers.
