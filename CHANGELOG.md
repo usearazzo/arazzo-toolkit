@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.35](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.34...v1.0.1-alpha.35) (2026-11-24)
+
+### Features
+
+- **runner:** add observability adapters and OTel instrumentation ([#366](https://github.com/usearazzo/arazzo-toolkit/issues/366)), closes [#85](https://github.com/usearazzo/arazzo-toolkit/issues/85)
+
+### BREAKING CHANGES
+
+- **runner:** event types use colon notation (workflow-start is now
+  workflow:start, openapi-operation-request-settled is
+  openapi:operation:request:settled, and so on), and the adapter subpaths
+  are @usearazzo/runner/observability/logging, /observability/stream and
+  /observability/opentelemetry.
+
 ## [1.0.1-alpha.34](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.33...v1.0.1-alpha.34) (2026-11-19)
 
 ### Features
