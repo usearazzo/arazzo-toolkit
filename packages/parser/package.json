@@ -70,7 +70,7 @@
     "@swaggerexpert/arazzo-criterion": "^1.2.0",
     "@swaggerexpert/arazzo-runtime-expression": "^3.4.0",
     "ramda-adjunct": "^6.0.0",
-    "type-fest": "^5.10.0"
+    "type-fest": "^6.0.3"
   },
   "devDependencies": {
     "@speclynx/apidom-core": "^7.1.0"
