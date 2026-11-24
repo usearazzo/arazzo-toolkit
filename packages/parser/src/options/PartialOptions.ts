@@ -1,8 +1,8 @@
 /**
- * An options bag merged over defaults: every group of `T` optional, and every
- * option in a group optional. An array is kept whole, as the merge replaces
- * it, and so is an option's own value: a class instance or a plain record of
- * free-form options.
+ * An options bag merged over defaults, made optional two levels deep: every
+ * field of `T`, and every field of a field whose value is an object (a group
+ * of options, such as `resolve` in ApiDOM's reference options). An array is
+ * kept whole, as the merge replaces it.
  * @public
  */
 export type PartialOptions<T> = {
