@@ -90,8 +90,8 @@ export interface RuntimeExpressionCalledWorkflowContext {
  * @public
  */
 export interface RuntimeExpressionContext {
-  readonly request?: RuntimeExpressionRequestContext;
-  readonly response?: RuntimeExpressionResponseContext;
+  readonly request?: RuntimeExpressionRequestContext | undefined;
+  readonly response?: RuntimeExpressionResponseContext | undefined;
   readonly inputs?: unknown;
   readonly outputs?: unknown;
   readonly steps?: Record<string, RuntimeExpressionStepContext>;

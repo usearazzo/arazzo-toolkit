@@ -42,7 +42,7 @@ export interface StepRetryRunnerOptions {
    * ignores the signal is not wrong, it merely delays the cancellation until its
    * wait is over.
    */
-  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  readonly sleep?: ((ms: number, signal?: AbortSignal) => Promise<void>) | undefined;
 }
 
 /**
@@ -53,7 +53,7 @@ export interface StepRetryRunnerOptions {
 export interface StepRetryRunContext {
   readonly stepId: string;
   readonly workflowId: string;
-  readonly signal?: AbortSignal;
+  readonly signal?: AbortSignal | undefined;
   /**
    * Runs a `retry` action's `stepId` / `workflowId` reference — "the reference
    * is executed and the context is returned, after which the current step is

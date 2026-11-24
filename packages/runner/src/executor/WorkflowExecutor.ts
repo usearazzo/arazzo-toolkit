@@ -1,5 +1,4 @@
 import { toValue } from '@speclynx/apidom-core';
-import { pick } from 'ramda';
 import { isPlainObject } from 'ramda-adjunct';
 import ShortUniqueId from 'short-unique-id';
 import {
@@ -628,7 +627,7 @@ class WorkflowExecutor {
     this.#now = options.now ?? WorkflowExecutor.#DEFAULT_NOW;
     this.#events = new EventChannel({ observer: options.observer, now: this.#now });
     this.#stepExecutor = options.stepExecutor;
-    this.#retryRunner = new StepRetryRunner(pick(['sleep'], options));
+    this.#retryRunner = new StepRetryRunner({ sleep: options.sleep });
   }
 
   /**
@@ -1065,7 +1064,7 @@ class WorkflowExecutor {
       const { outcome, action, attempts } = await this.#retryRunner.run(attempt, {
         stepId,
         workflowId,
-        ...(scope.signal === undefined ? {} : { signal: scope.signal }),
+        signal: scope.signal,
         runReference: this.#retryReference(steps, stepFrame, invocation, scope, retryReferences),
         onRetry: (retry, delayMs, attempt) => {
           const decided = { ...stepFrame, attempt };

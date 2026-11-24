@@ -136,7 +136,8 @@ export interface CriterionEvaluationRecord {
      * `CriterionErrorReason` or `RuntimeExpressionError.UnavailableExpression`
      * for an HTTP-exchange expression in a step that calls a workflow.
      */
-    readonly code?: CriterionErrorReason | typeof RuntimeExpressionError.UnavailableExpression;
+    readonly code?:
+      CriterionErrorReason | typeof RuntimeExpressionError.UnavailableExpression | undefined;
     /**
      * Human-readable: names the condition or expression and, for a syntax
      * error, what is wrong with it; never request or response data.
@@ -619,10 +620,7 @@ class StepExecutor {
         met,
         values,
         location,
-        diagnostic: {
-          ...(error.reason === undefined ? {} : { code: error.reason }),
-          message: error.message,
-        },
+        diagnostic: { code: error.reason, message: error.message },
       };
     } catch (error: unknown) {
       // a step that calls a workflow made no HTTP call, so a condition on one
