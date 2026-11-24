@@ -73,7 +73,7 @@ class OpenAPIOperationResponseNormalizer {
       headers,
       body: deserialized.body,
       content: text ?? bytes,
-      ...(request === undefined ? {} : { request }),
+      request,
     });
   }
 
