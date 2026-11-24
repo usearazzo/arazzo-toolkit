@@ -87,8 +87,6 @@ parseCriterionCondition('$statusCode == 200').result.success; // true
 parseCriterionCondition('$statusCode ===').result.success; // false, and nothing thrown
 ```
 
-`parseArazzo` and `parseOpenAPI` take ApiDOM's reference options with every group and option optional, typed `PartialOptions<ApiDOMReferenceOptions>`. The package exports `PartialOptions<T>`, which the resolver, validator and runner use for their options too.
-
 ## Documentation
 
 The examples above are the happy path. Everything else is in the docs at [usearazzo.com/docs](https://usearazzo.com/docs/):
