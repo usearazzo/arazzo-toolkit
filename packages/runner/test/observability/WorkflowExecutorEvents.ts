@@ -268,7 +268,7 @@ describe('WorkflowExecutor events', function () {
         time += ms;
       },
       now: () => time,
-      observer,
+      ...(observer === undefined ? {} : { observer }),
     });
     return { executor, calls: () => calls };
   };

@@ -1,4 +1,4 @@
-import { pick } from 'ramda';
+import { omit, pick } from 'ramda';
 
 import type ArazzoDocument from './document/ArazzoDocument.ts';
 import type { WorkflowId } from './document/ArazzoWorkflowIndex.ts';
@@ -148,8 +148,7 @@ class ArazzoRunner {
           new ArazzoDocumentRegistryProvider(providerOptions),
           new OpenAPIDocumentRegistryProvider(providerOptions),
         ],
-        observer: options.observer,
-        now: options.now,
+        ...pick(['observer', 'now'], options),
       }),
       sourceMap: _sourceMap,
       ...rest
@@ -176,15 +175,7 @@ class ArazzoRunner {
    * @throws InvalidEntryDocumentError - When `document` is not the entry document of `registry`
    */
   constructor(options: ArazzoRunnerOptions) {
-    const {
-      document,
-      registry,
-      reference,
-      httpClient,
-      requestInterceptor,
-      captureBodies,
-      ...workflowExecutorOptions
-    } = options;
+    const { document, registry, reference } = options;
 
     // a registry pins every entry document it acquires but reports only the
     // first as its entry, so one registry serves one entry document.
@@ -197,13 +188,8 @@ class ArazzoRunner {
 
     // `resolve` only, whatever else the given object carries
     const referenceOptions = pick(['resolve'], reference ?? {});
-    const { observer, now } = workflowExecutorOptions;
     const operationExecutor = new OpenAPIOperationExecutor({
-      httpClient,
-      requestInterceptor,
-      captureBodies,
-      observer,
-      now,
+      ...pick(['httpClient', 'requestInterceptor', 'captureBodies', 'observer', 'now'], options),
       operationNormalizer: new OpenAPIOperationNormalizer({
         openapi2: new OpenAPI2OperationNormalizer(referenceOptions),
         openapi30: new OpenAPI30OperationNormalizer(referenceOptions),
@@ -215,7 +201,7 @@ class ArazzoRunner {
     this.document = document;
     this.registry = registry;
     this.#executor = new WorkflowExecutor({
-      ...workflowExecutorOptions,
+      ...omit(['reference', 'httpClient', 'requestInterceptor', 'captureBodies'], options),
       document,
       registry,
       stepExecutor,

@@ -1,4 +1,5 @@
 import { toValue } from '@speclynx/apidom-core';
+import { pick } from 'ramda';
 import { isPlainObject } from 'ramda-adjunct';
 import ShortUniqueId from 'short-unique-id';
 import {
@@ -123,14 +124,14 @@ export interface WorkflowExecutorOptions {
    * default timer stops waiting when the run is cancelled; an injected sleep
    * that ignores it merely postpones the cancellation until its wait ends.
    */
-  readonly sleep?: ((ms: number, signal?: AbortSignal) => Promise<void>) | undefined;
+  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /**
    * Reads the current time in milliseconds, used for the `durationMs` of each
    * run and step. Injected so tests assert exact durations; defaults to
    * `performance.now`, which is monotonic — `Date.now` would yield a wrong or
    * negative duration if the system clock were adjusted mid-run.
    */
-  readonly now?: (() => number) | undefined;
+  readonly now?: () => number;
   /**
    * Receives the run's events, stamped with
    * {@link WorkflowExecutorOptions.now}: workflows, dependencies, steps,
@@ -139,7 +140,7 @@ export interface WorkflowExecutorOptions {
    * {@link WorkflowExecutionEvent}, and {@link ArazzoRunnerObserver} for how
    * events are delivered.
    */
-  readonly observer?: ArazzoRunnerObserver<WorkflowExecutionEvent> | undefined;
+  readonly observer?: ArazzoRunnerObserver<WorkflowExecutionEvent>;
 }
 
 /**
@@ -627,7 +628,7 @@ class WorkflowExecutor {
     this.#now = options.now ?? WorkflowExecutor.#DEFAULT_NOW;
     this.#events = new EventChannel({ observer: options.observer, now: this.#now });
     this.#stepExecutor = options.stepExecutor;
-    this.#retryRunner = new StepRetryRunner({ sleep: options.sleep });
+    this.#retryRunner = new StepRetryRunner(pick(['sleep'], options));
   }
 
   /**
@@ -1064,7 +1065,7 @@ class WorkflowExecutor {
       const { outcome, action, attempts } = await this.#retryRunner.run(attempt, {
         stepId,
         workflowId,
-        signal: scope.signal,
+        ...(scope.signal === undefined ? {} : { signal: scope.signal }),
         runReference: this.#retryReference(steps, stepFrame, invocation, scope, retryReferences),
         onRetry: (retry, delayMs, attempt) => {
           const decided = { ...stepFrame, attempt };
