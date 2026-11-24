@@ -136,8 +136,7 @@ export interface CriterionEvaluationRecord {
      * `CriterionErrorReason` or `RuntimeExpressionError.UnavailableExpression`
      * for an HTTP-exchange expression in a step that calls a workflow.
      */
-    readonly code?:
-      CriterionErrorReason | typeof RuntimeExpressionError.UnavailableExpression | undefined;
+    readonly code?: CriterionErrorReason | typeof RuntimeExpressionError.UnavailableExpression;
     /**
      * Human-readable: names the condition or expression and, for a syntax
      * error, what is wrong with it; never request or response data.

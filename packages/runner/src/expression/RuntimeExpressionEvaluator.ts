@@ -125,8 +125,8 @@ const HTTP_EXCHANGE_NODES: ReadonlySet<ASTNode['type']> = new Set([
 class RuntimeExpressionEvaluator {
   readonly #context: RuntimeExpressionContext;
   readonly #strict: boolean;
-  readonly #document: ArazzoDocument | undefined;
-  readonly #registry: DocumentRegistry | undefined;
+  readonly #document?: ArazzoDocument;
+  readonly #registry?: DocumentRegistry;
 
   constructor(context: RuntimeExpressionContext, options: RuntimeExpressionEvaluatorOptions = {}) {
     this.#context = context;

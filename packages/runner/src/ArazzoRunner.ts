@@ -1,4 +1,4 @@
-import { omit, pick } from 'ramda';
+import { pick } from 'ramda';
 
 import type ArazzoDocument from './document/ArazzoDocument.ts';
 import type { WorkflowId } from './document/ArazzoWorkflowIndex.ts';
@@ -148,7 +148,8 @@ class ArazzoRunner {
           new ArazzoDocumentRegistryProvider(providerOptions),
           new OpenAPIDocumentRegistryProvider(providerOptions),
         ],
-        ...pick(['observer', 'now'], options),
+        observer: options.observer,
+        now: options.now,
       }),
       sourceMap: _sourceMap,
       ...rest
@@ -175,7 +176,15 @@ class ArazzoRunner {
    * @throws InvalidEntryDocumentError - When `document` is not the entry document of `registry`
    */
   constructor(options: ArazzoRunnerOptions) {
-    const { document, registry, reference } = options;
+    const {
+      document,
+      registry,
+      reference,
+      httpClient,
+      requestInterceptor,
+      captureBodies,
+      ...workflowExecutorOptions
+    } = options;
 
     // a registry pins every entry document it acquires but reports only the
     // first as its entry, so one registry serves one entry document.
@@ -188,8 +197,13 @@ class ArazzoRunner {
 
     // `resolve` only, whatever else the given object carries
     const referenceOptions = pick(['resolve'], reference ?? {});
+    const { observer, now } = workflowExecutorOptions;
     const operationExecutor = new OpenAPIOperationExecutor({
-      ...pick(['httpClient', 'requestInterceptor', 'captureBodies', 'observer', 'now'], options),
+      httpClient,
+      requestInterceptor,
+      captureBodies,
+      observer,
+      now,
       operationNormalizer: new OpenAPIOperationNormalizer({
         openapi2: new OpenAPI2OperationNormalizer(referenceOptions),
         openapi30: new OpenAPI30OperationNormalizer(referenceOptions),
@@ -201,7 +215,7 @@ class ArazzoRunner {
     this.document = document;
     this.registry = registry;
     this.#executor = new WorkflowExecutor({
-      ...omit(['reference', 'httpClient', 'requestInterceptor', 'captureBodies'], options),
+      ...workflowExecutorOptions,
       document,
       registry,
       stepExecutor,

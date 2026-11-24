@@ -404,7 +404,7 @@ describe('ArazzoRunner document retrieval', function () {
               response.on('end', () => {
                 resolve(
                   new Response(Buffer.concat(chunks), {
-                    status: response.statusCode!,
+                    status: response.statusCode,
                     headers: { 'content-type': response.headers['content-type']! },
                   }),
                 );

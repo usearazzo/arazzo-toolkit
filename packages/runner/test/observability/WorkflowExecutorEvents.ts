@@ -118,7 +118,7 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
         if (!event.memoized && event.settledStatus !== 'failed') {
           completedDependencies.set(key, result);
         }
-        delete frame.dependencyRun;
+        frame.dependencyRun = undefined;
         break;
       }
       case 'step:start':
@@ -166,7 +166,7 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
           successful: event.successful,
           ...(reference.subWorkflow === undefined ? {} : { subWorkflow: reference.subWorkflow }),
         });
-        delete frame.reference;
+        frame.reference = undefined;
         break;
       }
       case 'step:settled': {
@@ -184,7 +184,7 @@ const fold = (events: readonly WorkflowExecutionEvent[]): WorkflowExecutionResul
           ...(step.subWorkflows.length > 0 ? { subWorkflows: step.subWorkflows } : {}),
           ...(step.retryReferences.length > 0 ? { retryReferences: step.retryReferences } : {}),
         });
-        delete frame.step;
+        frame.step = undefined;
         break;
       }
       default:
