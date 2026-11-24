@@ -99,7 +99,7 @@ function canonicalizeDocumentURI(source: string): string {
 export async function validateURI(
   uri: string,
   context: PartialOptions<LanguageServiceContext> = {},
-  resolveOptions: PartialOptions<ApiDOMReferenceResolveOptions> = {},
+  resolveOptions: Partial<ApiDOMReferenceResolveOptions> = {},
 ): Promise<Diagnostic[]> {
   const canonicalURI = canonicalizeDocumentURI(uri);
   const mergedOptions = mergeOptions(defaultParseArazzoOptions as ApiDOMReferenceOptions, {
