@@ -45,7 +45,7 @@ class OpenAPIOperationResponse {
     headers: Record<string, string>;
     body: unknown;
     content: string | Uint8Array;
-    request?: OpenAPIOperationRequestInfo;
+    request?: OpenAPIOperationRequestInfo | undefined;
   }) {
     this.ok = raw.ok;
     this.url = raw.url;

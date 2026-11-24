@@ -105,8 +105,8 @@ class WorkflowExecutionState {
     response?: RuntimeExpressionResponseContext,
   ): RuntimeExpressionContext {
     return {
-      request,
-      response,
+      ...(request === undefined ? {} : { request }),
+      ...(response === undefined ? {} : { response }),
       inputs: this.#inputs,
       outputs: this.#outputs,
       steps: Object.fromEntries([...this.#steps].map(([stepId, outputs]) => [stepId, { outputs }])),

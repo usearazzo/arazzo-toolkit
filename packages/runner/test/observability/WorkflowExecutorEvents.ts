@@ -53,9 +53,9 @@ interface WorkflowFrame {
   readonly start: WorkflowStartEvent;
   readonly steps: StepRunRecord[];
   readonly dependencies: WorkflowExecutionResult[];
-  step?: StepBuilder;
-  reference?: ReferenceBuilder;
-  dependencyRun?: WorkflowExecutionResult;
+  step?: StepBuilder | undefined;
+  reference?: ReferenceBuilder | undefined;
+  dependencyRun?: WorkflowExecutionResult | undefined;
   transferredTo?: WorkflowExecutionResult;
 }
 

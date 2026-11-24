@@ -261,12 +261,12 @@ export interface OpenAPIOperationExecutorOptions {
    * The transport that sends the built request and resolves with the raw
    * WHATWG `Response`. Defaults to {@link httpClientFetch} (global fetch).
    */
-  readonly httpClient?: HTTPClient;
+  readonly httpClient?: HTTPClient | undefined;
   /**
    * Decorates every built request (e.g. an `Authorization` header) before the
    * per-call interceptor from the execute options bag runs.
    */
-  readonly requestInterceptor?: RequestInterceptor;
+  readonly requestInterceptor?: RequestInterceptor | undefined;
   /**
    * Normalizes the raw `Response` into the runner's response model. Defaults
    * to a fresh {@link OpenAPIOperationResponseNormalizer}.
@@ -292,17 +292,17 @@ export interface OpenAPIOperationExecutorOptions {
    * normalization, its assembly, and the request sent and its response. See
    * {@link OpenAPIOperationEvent}.
    */
-  readonly observer?: ArazzoRunnerObserver<OpenAPIOperationEvent>;
+  readonly observer?: ArazzoRunnerObserver<OpenAPIOperationEvent> | undefined;
   /**
    * Reads the current time in milliseconds, stamped on each event. Defaults to
    * `performance.now`.
    */
-  readonly now?: () => number;
+  readonly now?: (() => number) | undefined;
   /**
    * Whether the `openapi:operation:request:*` events carry the request and
    * response bodies. Off by default.
    */
-  readonly captureBodies?: boolean;
+  readonly captureBodies?: boolean | undefined;
 }
 
 /**

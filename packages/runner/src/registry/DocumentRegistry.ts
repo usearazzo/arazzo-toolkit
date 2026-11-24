@@ -24,12 +24,12 @@ export interface DocumentRegistryOptions {
    * Receives the registry's events: the start and end of every document
    * load. Cache hits emit nothing. See {@link DocumentRegistryEvent}.
    */
-  readonly observer?: ArazzoRunnerObserver<DocumentRegistryEvent>;
+  readonly observer?: ArazzoRunnerObserver<DocumentRegistryEvent> | undefined;
   /**
    * Reads the current time in milliseconds, stamped on each event. Defaults to
    * `performance.now`.
    */
-  readonly now?: () => number;
+  readonly now?: (() => number) | undefined;
 }
 
 /**

@@ -123,14 +123,14 @@ export interface WorkflowExecutorOptions {
    * default timer stops waiting when the run is cancelled; an injected sleep
    * that ignores it merely postpones the cancellation until its wait ends.
    */
-  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  readonly sleep?: ((ms: number, signal?: AbortSignal) => Promise<void>) | undefined;
   /**
    * Reads the current time in milliseconds, used for the `durationMs` of each
    * run and step. Injected so tests assert exact durations; defaults to
    * `performance.now`, which is monotonic — `Date.now` would yield a wrong or
    * negative duration if the system clock were adjusted mid-run.
    */
-  readonly now?: () => number;
+  readonly now?: (() => number) | undefined;
   /**
    * Receives the run's events, stamped with
    * {@link WorkflowExecutorOptions.now}: workflows, dependencies, steps,
@@ -139,7 +139,7 @@ export interface WorkflowExecutorOptions {
    * {@link WorkflowExecutionEvent}, and {@link ArazzoRunnerObserver} for how
    * events are delivered.
    */
-  readonly observer?: ArazzoRunnerObserver<WorkflowExecutionEvent>;
+  readonly observer?: ArazzoRunnerObserver<WorkflowExecutionEvent> | undefined;
 }
 
 /**

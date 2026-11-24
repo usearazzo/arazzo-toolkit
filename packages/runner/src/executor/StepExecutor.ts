@@ -619,7 +619,10 @@ class StepExecutor {
         met,
         values,
         location,
-        diagnostic: { code: error.reason, message: error.message },
+        diagnostic: {
+          ...(error.reason === undefined ? {} : { code: error.reason }),
+          message: error.message,
+        },
       };
     } catch (error: unknown) {
       // a step that calls a workflow made no HTTP call, so a condition on one

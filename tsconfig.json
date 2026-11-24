@@ -11,6 +11,9 @@
     "noEmit": true,
     // Enable strictest settings like strictNullChecks & noImplicitAny.
     "strict": true,
+    // An optional property may be absent, never present as undefined: the
+    // codebase omits a field rather than set it to undefined.
+    "exactOptionalPropertyTypes": true,
     // Disallow features that require cross-file information for emit.
     "isolatedModules": true,
     // Import non-ES modules as default imports.

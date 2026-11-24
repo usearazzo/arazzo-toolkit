@@ -211,7 +211,7 @@ class ArazzoRunnerInstrumentation {
   // open in its run, read from the run rather than the active context for the
   // same reason as the parents above
   #active(
-    event: { readonly runId?: string },
+    event: { readonly runId?: string | undefined },
     kind: InstrumentedOperation['kind'],
   ): Span | undefined {
     const span = event.runId === undefined ? undefined : this.#runs.get(event.runId)?.at(-1);
@@ -309,7 +309,7 @@ class ArazzoRunnerInstrumentation {
   // an event of the step's span. It names its step, since a retry's stepId
   // reference reports under the referenced step within the retrying step
   #addEvent(
-    event: { readonly runId?: string; readonly stepId: string },
+    event: { readonly runId?: string | undefined; readonly stepId: string },
     name: string,
     attributes: Attributes,
   ): void {

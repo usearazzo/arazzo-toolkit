@@ -8,7 +8,11 @@ import { isInstrumented, notify } from './instrument.ts';
  * a union, so each member keeps its own discriminated shape.
  * @internal
  */
-export type UnstampedEvent<E> = E extends unknown ? Omit<E, 'timestamp'> : never;
+export type UnstampedEvent<E> = E extends unknown ? Unstamped<Omit<E, 'timestamp'>> : never;
+
+// an optional field may be passed as undefined: emit omits it
+type OptionalKeys<T> = { [K in keyof T]-?: {} extends Pick<T, K> ? K : never }[keyof T];
+type Unstamped<T> = Omit<T, OptionalKeys<T>> & { [K in OptionalKeys<T>]?: T[K] | undefined };
 
 /**
  * Options for the EventChannel.
