@@ -110,8 +110,7 @@
     "fontoxpath": "^3.34.0",
     "ramda": "^0.32.0",
     "ramda-adjunct": "^6.1.0",
-    "short-unique-id": "^5.3.2",
-    "type-fest": "^5.10.0"
+    "short-unique-id": "^5.3.2"
   },
   "files": [
     "src/**/*.mjs",

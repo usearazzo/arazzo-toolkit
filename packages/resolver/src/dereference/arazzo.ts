@@ -22,7 +22,7 @@ import JSONParser from '@speclynx/apidom-reference/parse/parsers/json';
 import YAMLParser from '@speclynx/apidom-reference/parse/parsers/yaml-1-2';
 import BinaryParser from '@speclynx/apidom-reference/parse/parsers/binary';
 import { isArazzoSpecification1Element, mediaTypes } from '@speclynx/apidom-ns-arazzo-1';
-import type { PartialDeep } from 'type-fest';
+import type { PartialOptions } from '@usearazzo/parser';
 import { defaultParseArazzoOptions as parserDefaultOptions } from '@usearazzo/parser';
 
 import DereferenceError from '../errors/DereferenceError.ts';
@@ -31,7 +31,7 @@ import DereferenceError from '../errors/DereferenceError.ts';
  * Options for dereferencing Arazzo Documents.
  * @public
  */
-export type Options = PartialDeep<ApiDOMReferenceOptions>;
+export type Options = PartialOptions<ApiDOMReferenceOptions>;
 
 /**
  * Default reference options for dereferencing Arazzo Documents.

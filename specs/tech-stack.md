@@ -22,7 +22,7 @@ Arazzo Toolkit uses the following technology choices based on the current reposi
 
 | Layer | Choice | Evidence / Rationale |
 |---|---|---|
-| Language | TypeScript 5.9, `strict`, `isolatedModules`, `module: nodenext`, `allowImportingTsExtensions` | root `tsconfig.json`; relative imports carry the `.ts` suffix |
+| Language | TypeScript, `strict`, `isolatedModules`, `module: nodenext`, `allowImportingTsExtensions` | root `tsconfig.json`; relative imports carry the `.ts` suffix |
 | Runtime | Node.js `>=20.10.0` for consumers, `=26.3.1` for development | `packages/*/package.json` `engines` vs `.nvmrc` and root `engines` — a deliberate split |
 | Data model | SpecLynx ApiDOM (`@speclynx/apidom-*` 7.x) | every package parses into and operates on `ParseResultElement` trees; nothing converts to plain JSON |
 | Build (code) | Babel 8 (`preset-env` + `preset-typescript`, `transform-runtime` over `core-js` 3) emitting `.mjs` and `.cjs` siblings next to each `.ts` | `babel.config.cjs`; `scripts/babel-plugin-add-import-extension.cjs` rewrites relative specifiers |

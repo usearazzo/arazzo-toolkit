@@ -14,8 +14,8 @@ import { detect as detectOpenApiYAML3_0 } from '@speclynx/apidom-parser-adapter-
 import { detect as detectOpenApiJSON2 } from '@speclynx/apidom-parser-adapter-openapi-json-2';
 import { detect as detectOpenApiYAML2 } from '@speclynx/apidom-parser-adapter-openapi-yaml-2';
 import { isPlainObject } from 'ramda-adjunct';
-import type { PartialDeep } from 'type-fest';
 
+import type { PartialOptions } from './options/PartialOptions.ts';
 import ParseError from './errors/ParseError.ts';
 import { mergeOptions } from './options/util.ts';
 import MemoryResolver from './resolve/resolvers/memory/index.ts';
@@ -25,7 +25,7 @@ import { defaultOptions as arazzoDefaultOptions } from './parse-arazzo.ts';
  * Options for parsing OpenAPI Documents.
  * @public
  */
-export type Options = PartialDeep<ApiDOMReferenceOptions>;
+export type Options = PartialOptions<ApiDOMReferenceOptions>;
 
 /**
  * Default reference options for parsing OpenAPI Documents.

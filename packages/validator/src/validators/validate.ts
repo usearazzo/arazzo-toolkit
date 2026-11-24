@@ -9,7 +9,7 @@ import {
   LogLevel,
   type LanguageServiceContext,
 } from '@speclynx/api-languageservice';
-import type { PartialDeep } from 'type-fest';
+import type { PartialOptions } from '@usearazzo/parser';
 import { mergeDeepRight } from 'ramda';
 
 import {
@@ -96,7 +96,7 @@ export const defaultLanguageServiceContext: Partial<LanguageServiceContext> = {
  */
 export async function validate(
   textDocument: TextDocument,
-  context: PartialDeep<LanguageServiceContext> = {},
+  context: PartialOptions<LanguageServiceContext> = {},
 ): Promise<Diagnostic[]> {
   const content = textDocument.getText();
   // classify with the language service's own detector so the two cannot diverge.

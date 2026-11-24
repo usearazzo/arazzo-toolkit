@@ -4,6 +4,7 @@
   "compilerOptions": {
     "declaration": true,
     "declarationDir": "types",
+    "rootDir": "src",
     "noEmit": false,
     "emitDeclarationOnly": true
   }

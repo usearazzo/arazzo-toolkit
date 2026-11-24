@@ -13,7 +13,7 @@ import {
   type JSONPointer,
 } from '@speclynx/apidom-json-pointer';
 import OpenAPI2DereferenceStrategy from '@speclynx/apidom-reference/dereference/strategies/openapi-2';
-import type { PartialDeep } from 'type-fest';
+import type { PartialOptions } from '@usearazzo/parser';
 import {
   isPathItemElement,
   refractorPluginNormalizeParameters,
@@ -31,7 +31,7 @@ import { providerOptionsOverride as openAPIProviderOptions } from '../registry/p
  * Options for normalizing an OpenAPI 2.0 operation.
  * @public
  */
-export type OpenAPI2OperationNormalizerOptions = PartialDeep<ApiDOMReferenceOptions>;
+export type OpenAPI2OperationNormalizerOptions = PartialOptions<ApiDOMReferenceOptions>;
 
 const normalizerOptionsOverride = mergeOptions(openAPIProviderOptions as ApiDOMReferenceOptions, {
   dereference: {
