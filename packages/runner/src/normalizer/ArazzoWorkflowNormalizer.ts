@@ -30,7 +30,10 @@ import { providerOptionsOverride as arazzoProviderOptions } from '../registry/pr
  * Options for normalizing an Arazzo workflow.
  * @public
  */
-export type ArazzoWorkflowNormalizerOptions = PartialDeep<ApiDOMReferenceOptions>;
+export type ArazzoWorkflowNormalizerOptions = PartialDeep<
+  ApiDOMReferenceOptions,
+  { recurseIntoArrays: false }
+>;
 
 /**
  * Default options for normalizing an Arazzo workflow.

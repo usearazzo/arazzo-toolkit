@@ -96,7 +96,7 @@ export const defaultLanguageServiceContext: Partial<LanguageServiceContext> = {
  */
 export async function validate(
   textDocument: TextDocument,
-  context: PartialDeep<LanguageServiceContext> = {},
+  context: PartialDeep<LanguageServiceContext, { recurseIntoArrays: false }> = {},
 ): Promise<Diagnostic[]> {
   const content = textDocument.getText();
   // classify with the language service's own detector so the two cannot diverge.

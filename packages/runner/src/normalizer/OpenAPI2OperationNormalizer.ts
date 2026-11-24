@@ -31,7 +31,10 @@ import { providerOptionsOverride as openAPIProviderOptions } from '../registry/p
  * Options for normalizing an OpenAPI 2.0 operation.
  * @public
  */
-export type OpenAPI2OperationNormalizerOptions = PartialDeep<ApiDOMReferenceOptions>;
+export type OpenAPI2OperationNormalizerOptions = PartialDeep<
+  ApiDOMReferenceOptions,
+  { recurseIntoArrays: false }
+>;
 
 const normalizerOptionsOverride = mergeOptions(openAPIProviderOptions as ApiDOMReferenceOptions, {
   dereference: {

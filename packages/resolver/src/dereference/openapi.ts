@@ -38,7 +38,7 @@ import DereferenceError from '../errors/DereferenceError.ts';
  * Options for dereferencing OpenAPI Documents.
  * @public
  */
-export type Options = PartialDeep<ApiDOMReferenceOptions>;
+export type Options = PartialDeep<ApiDOMReferenceOptions, { recurseIntoArrays: false }>;
 
 /**
  * Default reference options for dereferencing OpenAPI Documents.

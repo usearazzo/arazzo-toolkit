@@ -29,7 +29,7 @@ import MemoryResolver from './resolve/resolvers/memory/index.ts';
  * Options for parsing Arazzo Documents.
  * @public
  */
-export type Options = PartialDeep<ApiDOMReferenceOptions>;
+export type Options = PartialDeep<ApiDOMReferenceOptions, { recurseIntoArrays: false }>;
 
 /**
  * Default reference options for parsing Arazzo Documents.

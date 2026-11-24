@@ -20,7 +20,7 @@ import BundleError from '../errors/BundleError.ts';
  * Options for bundling Arazzo Documents.
  * @public
  */
-export type Options = PartialDeep<ApiDOMReferenceOptions>;
+export type Options = PartialDeep<ApiDOMReferenceOptions, { recurseIntoArrays: false }>;
 
 /**
  * Default reference options for bundling Arazzo Documents.

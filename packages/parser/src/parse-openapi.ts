@@ -25,7 +25,7 @@ import { defaultOptions as arazzoDefaultOptions } from './parse-arazzo.ts';
  * Options for parsing OpenAPI Documents.
  * @public
  */
-export type Options = PartialDeep<ApiDOMReferenceOptions>;
+export type Options = PartialDeep<ApiDOMReferenceOptions, { recurseIntoArrays: false }>;
 
 /**
  * Default reference options for parsing OpenAPI Documents.

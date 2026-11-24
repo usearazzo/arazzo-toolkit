@@ -98,8 +98,8 @@ function canonicalizeDocumentURI(source: string): string {
  */
 export async function validateURI(
   uri: string,
-  context: PartialDeep<LanguageServiceContext> = {},
-  resolveOptions: PartialDeep<ApiDOMReferenceResolveOptions> = {},
+  context: PartialDeep<LanguageServiceContext, { recurseIntoArrays: false }> = {},
+  resolveOptions: PartialDeep<ApiDOMReferenceResolveOptions, { recurseIntoArrays: false }> = {},
 ): Promise<Diagnostic[]> {
   const canonicalURI = canonicalizeDocumentURI(uri);
   const mergedOptions = mergeOptions(defaultParseArazzoOptions as ApiDOMReferenceOptions, {
@@ -119,7 +119,7 @@ export async function validateURI(
 
   // validateURI always has a real, resolvable document location, so it anchors
   // resolution of relative source descriptions to that location.
-  const uriDefaults: PartialDeep<LanguageServiceContext> = {
+  const uriDefaults: PartialDeep<LanguageServiceContext, { recurseIntoArrays: false }> = {
     validationContext: { baseURI: canonicalURI },
   };
 

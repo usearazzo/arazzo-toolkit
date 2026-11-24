@@ -20,7 +20,10 @@ export const circularReplacer = (ref: RefElement) =>
  * Options for a document registry provider.
  * @public
  */
-export type DocumentRegistryProviderOptions = PartialDeep<ApiDOMReferenceOptions>;
+export type DocumentRegistryProviderOptions = PartialDeep<
+  ApiDOMReferenceOptions,
+  { recurseIntoArrays: false }
+>;
 
 /**
  * Base class for document registry providers.

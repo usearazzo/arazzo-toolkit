@@ -24,7 +24,7 @@ import ResolveError from '../errors/ResolveError.ts';
  * Options for resolving Arazzo Documents.
  * @public
  */
-export type Options = PartialDeep<ApiDOMReferenceOptions>;
+export type Options = PartialDeep<ApiDOMReferenceOptions, { recurseIntoArrays: false }>;
 
 /**
  * Default reference options for resolving Arazzo Documents.
