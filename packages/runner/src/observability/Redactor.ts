@@ -66,7 +66,8 @@ export interface RedactorOptions {
  * - a request or response body that is JSON or a URL-encoded form, field by
  *   field, and any other body, or any object that is not plain data, whole.
  *
- * A credential under a name no pattern matches is carried as it is. The
+ * A settled event's `error` is carried as it is, the error `execute` rejects
+ * with. A credential under a name no pattern matches is carried as it is. The
  * masked value is `REDACTED`.
  * @public
  */
@@ -118,10 +119,11 @@ class Redactor {
   #walk(value: unknown, seen: WeakSet<object>): unknown {
     if (typeof value === 'string') return URL.canParse(value) ? this.#url(value) : value;
     if (typeof value !== 'object' || value === null) return value;
-    // an ApiDOM element (a selected action) is the document's own, and a date
-    // holds no credential; any other object that is not plain data cannot be
-    // walked field by field.
-    if (isElement(value) || value instanceof Date) return value;
+    // an ApiDOM element (a selected action) is the document's own, a date
+    // holds no credential, and an error is the one `execute` rejects with,
+    // unmasked; any other object that is not plain data cannot be walked
+    // field by field.
+    if (isElement(value) || value instanceof Date || value instanceof Error) return value;
     if (!Array.isArray(value) && !isPlainObject(value)) return Redactor.CENSOR;
     // only the objects on the current path: a shared, acyclic one is walked
     // again where it reappears, a cycle is cut.

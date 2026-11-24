@@ -164,6 +164,7 @@ Phases are intentionally small — each one is a shippable, independently review
 - Remaining Arazzo 1.1.0 runner constructs under #119, each a candidate phase via `/sdd-new-phase`: Selector Objects (#123), payload replacement targets beyond JSON Pointer (#124), `$self` (#121), step-level `dependsOn` (#104), implicit dependencies from output references (#112), step timeouts (#114), `Retry-After` header (#125).
 - AsyncAPI v3 steps (#122) — deliberately excluded; revisited only by an explicit decision.
 - Runner observability event stream (#85) and CLI progress rendering (#86); record/replay (#101); resumable execution (#96); request/response validation against OpenAPI schemas (#100); input schema validation (#97); retry delay policy (#98); cookie jar (#118).
+- A per-hook event-type filter for `instrument()` (an optional `types` list), so building blocks build and snapshot only the events some observer wants. It is an optimization for when the OpenTelemetry instrumentation is the only observer, picked up on request or when profiling shows the snapshots matter.
 - Ecosystem items from the website roadmap: GitHub Action, MCP server, MCP compiler, VS Code extension, language service, Arazzo transformers. Placement (this monorepo or a sibling repository) is decided per item when it is started.
 - Modeling Arazzo securities in the runner, only if a future Arazzo version defines a security model.
 

@@ -28,11 +28,41 @@
   "unpkg": "./dist/arazzo-runner.browser.min.js",
   "main": "./src/index.cjs",
   "exports": {
-    "types": "./types/runner.d.ts",
-    "import": "./src/index.mjs",
-    "require": "./src/index.cjs"
+    ".": {
+      "types": "./types/runner.d.ts",
+      "import": "./src/index.mjs",
+      "require": "./src/index.cjs"
+    },
+    "./observability/logging": {
+      "types": "./types/observability/logging/index.d.ts",
+      "import": "./src/observability/logging/index.mjs",
+      "require": "./src/observability/logging/index.cjs"
+    },
+    "./observability/stream": {
+      "types": "./types/observability/stream/index.d.ts",
+      "import": "./src/observability/stream/index.mjs",
+      "require": "./src/observability/stream/index.cjs"
+    },
+    "./observability/opentelemetry": {
+      "types": "./types/observability/opentelemetry/index.d.ts",
+      "import": "./src/observability/opentelemetry/index.mjs",
+      "require": "./src/observability/opentelemetry/index.cjs"
+    }
   },
   "types": "./types/runner.d.ts",
+  "typesVersions": {
+    "*": {
+      "observability/logging": [
+        "./types/observability/logging/index.d.ts"
+      ],
+      "observability/stream": [
+        "./types/observability/stream/index.d.ts"
+      ],
+      "observability/opentelemetry": [
+        "./types/observability/opentelemetry/index.d.ts"
+      ]
+    }
+  },
   "scripts": {
     "build": "npm run clean && npm run build:es && run-p --max-parallel ${CPU_CORES:-2} typescript:declaration build:cjs build:umd:browser",
     "build:es": "npm run build:swagger-client && cross-env BABEL_ENV=es babel src --out-dir src --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward'",
@@ -43,6 +73,7 @@
     "lint:fix": "eslint ./ --fix",
     "clean": "rimraf --glob 'src/**/*.mjs' 'src/**/*.cjs' 'test/**/*.mjs' ./dist ./types",
     "typescript:check-types": "tsc --noEmit",
+    "version": "node ../../scripts/version-update.mjs",
     "typescript:declaration": "tsc -p tsconfig.declaration.json && api-extractor run -l -c ./config/api-extractor/api-extractor.json",
     "test": "npm run build:es && cross-env BABEL_ENV=es babel test --out-dir test --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward' && cross-env NODE_ENV=test mocha",
     "test:e2e": "npm run build:es && cross-env BABEL_ENV=es babel test --out-dir test --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward' && cross-env NODE_ENV=test mocha --config .mocharc.e2e.json",
@@ -87,12 +118,26 @@
     "src/**/*.cjs",
     "dist/",
     "types/runner.d.ts",
+    "types/observability/logging/",
+    "types/observability/stream/",
+    "types/observability/opentelemetry/",
     "LICENSE",
     "NOTICE",
     "README.md",
     "CHANGELOG.md"
   ],
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.9.0"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/api": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@opentelemetry/api": "~1.9.0",
+    "@opentelemetry/context-async-hooks": "^2.12.1",
+    "@opentelemetry/sdk-trace-base": "^2.12.0",
     "swagger-client": "^3.39.0"
   }
 }

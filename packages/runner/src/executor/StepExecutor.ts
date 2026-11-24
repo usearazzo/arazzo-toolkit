@@ -119,7 +119,7 @@ export interface CriterionEvaluationRecord {
    *
    * A whole body (`$response.body`, `$request.body`) is recorded as the
    * placeholder `[body]`, so the trace never holds a body; the body and its
-   * size are in the attempt's `openapi-operation-request-settled` event.
+   * size are in the attempt's `openapi:operation:request:settled` event.
    */
   readonly values: Readonly<Record<string, unknown>>;
   /**

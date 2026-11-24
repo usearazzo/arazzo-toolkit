@@ -9,7 +9,7 @@ import type { ArazzoRunnerEventBase } from './ArazzoRunnerEvent.ts';
  * @public
  */
 export interface DocumentLoadStartEvent extends ArazzoRunnerEventBase {
-  readonly type: 'document-load-start';
+  readonly type: 'document:load:start';
   /**
    * The canonical URI of the document.
    */
@@ -23,7 +23,7 @@ export interface DocumentLoadStartEvent extends ArazzoRunnerEventBase {
  * @public
  */
 export interface DocumentLoadSettledEvent extends ArazzoRunnerEventBase {
-  readonly type: 'document-load-settled';
+  readonly type: 'document:load:settled';
   readonly uri: string;
 }
 

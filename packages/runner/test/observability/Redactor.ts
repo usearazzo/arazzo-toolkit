@@ -24,7 +24,7 @@ const operation = {
 const start = (
   request: Partial<OpenAPIOperationRequestStartEvent['request']>,
 ): OpenAPIOperationRequestStartEvent => ({
-  type: 'openapi-operation-request-start',
+  type: 'openapi:operation:request:start',
   timestamp: 1,
   ...operation,
   request: { method: 'GET', url: 'https://api.example.com/x', headers: {}, ...request },
@@ -33,7 +33,7 @@ const start = (
 const settled = (
   response: Partial<OpenAPIOperationRequestSettledEvent['response']>,
 ): OpenAPIOperationRequestSettledEvent => ({
-  type: 'openapi-operation-request-settled',
+  type: 'openapi:operation:request:settled',
   timestamp: 2,
   ...operation,
   response: { status: 200, headers: {}, size: 0, ...response },
@@ -117,12 +117,12 @@ describe('Redactor', function () {
 
     specify('should mask userinfo in document URIs and paths', function () {
       const event: DocumentLoadStartEvent = {
-        type: 'document-load-start',
+        type: 'document:load:start',
         timestamp: 1,
         uri: 'https://u:p@docs.example.com/flow.arazzo.yaml',
       };
       const step: StepStartEvent = {
-        type: 'step-start',
+        type: 'step:start',
         ...frame,
         path: ['w', 'https://u:p@docs.example.com/child.arazzo.yaml#child'],
         stepId: 's',
@@ -197,7 +197,7 @@ describe('Redactor', function () {
   context('workflow data', function () {
     specify('should mask outputs by field name, keeping own __proto__ keys as data', function () {
       const event: WorkflowSettledEvent = {
-        type: 'workflow-settled',
+        type: 'workflow:settled',
         ...frame,
         status: 'completed',
         settledStatus: 'completed',
@@ -215,7 +215,7 @@ describe('Redactor', function () {
       'should match every name an expression reads, and an unparsed $ key as is',
       function () {
         const event: WorkflowSettledEvent = {
-          type: 'workflow-settled',
+          type: 'workflow:settled',
           ...frame,
           status: 'completed',
           settledStatus: 'completed',
@@ -243,7 +243,7 @@ describe('Redactor', function () {
       const cyclic: Record<string, unknown> = { name: 'loop' };
       cyclic.self = cyclic;
       const event: WorkflowSettledEvent = {
-        type: 'workflow-settled',
+        type: 'workflow:settled',
         ...frame,
         status: 'completed',
         settledStatus: 'completed',
@@ -259,7 +259,7 @@ describe('Redactor', function () {
 
     specify('should mask whole an object that is not plain data', function () {
       const event: WorkflowSettledEvent = {
-        type: 'workflow-settled',
+        type: 'workflow:settled',
         ...frame,
         status: 'completed',
         settledStatus: 'completed',
@@ -272,9 +272,23 @@ describe('Redactor', function () {
       assert.instanceOf(outputs.at, Date);
     });
 
+    specify('should carry the error a settled event reports as it is', function () {
+      const error = new Error('step "login" failed');
+      const event: WorkflowSettledEvent = {
+        type: 'workflow:settled',
+        ...frame,
+        status: 'failed',
+        settledStatus: 'failed',
+        outputs: {},
+        error,
+      };
+
+      assert.strictEqual(new Redactor().event(event).error, error);
+    });
+
     specify('should mask criterion values by the name each expression reads', function () {
       const event: CriterionEvaluatedEvent = {
-        type: 'criterion-evaluated',
+        type: 'criterion:evaluated',
         ...frame,
         stepId: 's',
         attempt: 1,

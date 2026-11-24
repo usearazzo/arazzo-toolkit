@@ -1,4 +1,9 @@
 {
   "extends": "../../tsconfig.json",
-  "include": ["src/**/*", "test/**/*"]
+  "include": ["src/**/*", "test/**/*"],
+  "compilerOptions": {
+    // the subpath entries import the main entry by its package name, so their
+    // declarations keep one Redactor and event type; this resolves it to source
+    "paths": { "@usearazzo/runner": ["./src/index.ts"] }
+  }
 }
