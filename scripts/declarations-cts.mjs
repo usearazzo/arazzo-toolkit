@@ -1,6 +1,7 @@
 // Writes the CommonJS declarations of the package in the working directory:
-// for every `require` condition in its package.json `exports`, the `.d.cts`
-// its `types` names. TypeScript reads a `.d.ts` in a "type": "module" package
+// for every entry of its package.json `exports`, the `.d.cts` its `require`
+// condition names, beside the `.d.ts` its `import` condition names (the two
+// must match, or the build fails). TypeScript reads a `.d.ts` in a "type": "module" package
 // as ESM declarations, so `require` needs a `.d.cts`: a copy of the `.d.ts`
 // beside it, whose relative imports are rewritten to the `.d.cts` copies and
 // followed, so every file an entry point reaches gets its copy too. Imports
@@ -15,16 +16,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
-
-// every `types` under a `require` condition, however deeply nested
-const requireTypes = (conditions, required = false) => {
-  if (typeof conditions !== 'object' || conditions === null) return [];
-  return Object.entries(conditions).flatMap(([name, value]) =>
-    required && name === 'types' && typeof value === 'string'
-      ? [value]
-      : requireTypes(value, required || name === 'require'),
-  );
-};
 
 const isRelative = (specifier) =>
   specifier === '.' || specifier === '..' || /^\.\.?\//.test(specifier);
@@ -61,11 +52,24 @@ const convert = (declaration) => {
   writeFileSync(declaration.replace(/\.d\.ts$/, '.d.cts'), rewritten);
 };
 
+// the entries of `exports`: a map of subpaths, or the conditions of "." alone
 const { exports } = JSON.parse(readFileSync('package.json', 'utf8'));
-const targets = requireTypes(exports);
-if (targets.length === 0) throw new Error('package.json exports name no require types');
+const entries = Object.keys(exports).every((key) => key.startsWith('.'))
+  ? Object.entries(exports)
+  : [['.', exports]];
 
-for (const target of targets) {
-  if (!target.endsWith('.d.cts')) throw new Error(`require types "${target}" is not a .d.cts`);
-  convert(path.resolve(target.replace(/\.d\.cts$/, '.d.ts')));
-}
+// an entry that declares types names a .d.ts for import and the matching
+// .d.cts for require; one without types (a plain string such as
+// "./package.json", or a null that blocks a subpath) is skipped
+const declarations = entries.flatMap(([subpath, conditions]) => {
+  const esm = conditions?.import?.types;
+  const cjs = conditions?.require?.types;
+  if (esm === undefined && cjs === undefined) return [];
+  if (typeof esm !== 'string' || !esm.endsWith('.d.ts') || cjs !== esm.replace(/\.d\.ts$/, '.d.cts')) {
+    throw new Error(`${subpath} must name a .d.ts for import and the matching .d.cts for require`);
+  }
+  return [esm];
+});
+if (declarations.length === 0) throw new Error('package.json exports declare no types');
+
+for (const declaration of declarations) convert(path.resolve(declaration));
