@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.36](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.35...v1.0.1-alpha.36) (2026-11-26)
+
+### Bug Fixes
+
+- ship .d.cts declarations for CommonJS consumers ([126cd14](https://github.com/usearazzo/arazzo-toolkit/commit/126cd14d64e5c8fd9090f44ce79322e7d8ae4282)), closes [#373](https://github.com/usearazzo/arazzo-toolkit/issues/373)
+
 ## [1.0.1-alpha.35](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.34...v1.0.1-alpha.35) (2026-11-24)
 
 ### Features
