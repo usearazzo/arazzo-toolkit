@@ -2,5 +2,5 @@
   "extends": "../../tsconfig.json",
   "include": ["src/**/*", "test/**/*"],
   // checked against the built declarations by typescript:check-published-types
-  "exclude": ["test/types"]
+  "exclude": ["node_modules", "test/types"]
 }
