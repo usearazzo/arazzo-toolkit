@@ -145,3 +145,5 @@ jobs:
           node -e "require('@usearazzo/$pkg')"
           node --input-type=module -e "await import('@usearazzo/$pkg')"
         done
+    - name: Check published types
+      run: npm run typescript:check-published-types
