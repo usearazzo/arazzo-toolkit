@@ -29,24 +29,44 @@
   "main": "./src/index.cjs",
   "exports": {
     ".": {
-      "types": "./types/runner.d.ts",
-      "import": "./src/index.mjs",
-      "require": "./src/index.cjs"
+      "import": {
+        "types": "./types/runner.d.ts",
+        "default": "./src/index.mjs"
+      },
+      "require": {
+        "types": "./types/runner.d.cts",
+        "default": "./src/index.cjs"
+      }
     },
     "./observability/logging": {
-      "types": "./types/observability/logging/index.d.ts",
-      "import": "./src/observability/logging/index.mjs",
-      "require": "./src/observability/logging/index.cjs"
+      "import": {
+        "types": "./types/observability/logging/index.d.ts",
+        "default": "./src/observability/logging/index.mjs"
+      },
+      "require": {
+        "types": "./types/observability/logging/index.d.cts",
+        "default": "./src/observability/logging/index.cjs"
+      }
     },
     "./observability/stream": {
-      "types": "./types/observability/stream/index.d.ts",
-      "import": "./src/observability/stream/index.mjs",
-      "require": "./src/observability/stream/index.cjs"
+      "import": {
+        "types": "./types/observability/stream/index.d.ts",
+        "default": "./src/observability/stream/index.mjs"
+      },
+      "require": {
+        "types": "./types/observability/stream/index.d.cts",
+        "default": "./src/observability/stream/index.cjs"
+      }
     },
     "./observability/opentelemetry": {
-      "types": "./types/observability/opentelemetry/index.d.ts",
-      "import": "./src/observability/opentelemetry/index.mjs",
-      "require": "./src/observability/opentelemetry/index.cjs"
+      "import": {
+        "types": "./types/observability/opentelemetry/index.d.ts",
+        "default": "./src/observability/opentelemetry/index.mjs"
+      },
+      "require": {
+        "types": "./types/observability/opentelemetry/index.d.cts",
+        "default": "./src/observability/opentelemetry/index.cjs"
+      }
     }
   },
   "types": "./types/runner.d.ts",
@@ -74,7 +94,7 @@
     "clean": "rimraf --glob 'src/**/*.mjs' 'src/**/*.cjs' 'test/**/*.mjs' ./dist ./types",
     "typescript:check-types": "tsc --noEmit",
     "version": "node ../../scripts/version-update.mjs",
-    "typescript:declaration": "tsc -p tsconfig.declaration.json && api-extractor run -l -c ./config/api-extractor/api-extractor.json",
+    "typescript:declaration": "tsc -p tsconfig.declaration.json && api-extractor run -l -c ./config/api-extractor/api-extractor.json && node ../../scripts/declarations-cts.mjs types/runner.d.ts types/observability/logging types/observability/stream types/observability/opentelemetry",
     "test": "npm run build:es && cross-env BABEL_ENV=es babel test --out-dir test --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward' && cross-env NODE_ENV=test mocha",
     "test:e2e": "npm run build:es && cross-env BABEL_ENV=es babel test --out-dir test --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward' && cross-env NODE_ENV=test mocha --config .mocharc.e2e.json",
     "prepack": "copyfiles -u 2 ../../LICENSE . && copyfiles -u 2 ../../NOTICE .",
@@ -117,6 +137,7 @@
     "src/**/*.cjs",
     "dist/",
     "types/runner.d.ts",
+    "types/runner.d.cts",
     "types/observability/logging/",
     "types/observability/stream/",
     "types/observability/opentelemetry/",

@@ -26,9 +26,14 @@
   "unpkg": "./dist/arazzo-resolver.browser.min.js",
   "main": "./src/index.cjs",
   "exports": {
-    "types": "./types/resolver.d.ts",
-    "import": "./src/index.mjs",
-    "require": "./src/index.cjs"
+    "import": {
+      "types": "./types/resolver.d.ts",
+      "default": "./src/index.mjs"
+    },
+    "require": {
+      "types": "./types/resolver.d.cts",
+      "default": "./src/index.cjs"
+    }
   },
   "types": "./types/resolver.d.ts",
   "scripts": {
@@ -40,7 +45,7 @@
     "lint:fix": "eslint ./ --fix",
     "clean": "rimraf --glob 'src/**/*.mjs' 'src/**/*.cjs' 'test/**/*.mjs' ./dist ./types",
     "typescript:check-types": "tsc --noEmit",
-    "typescript:declaration": "tsc -p tsconfig.declaration.json && api-extractor run -l -c ./config/api-extractor/api-extractor.json",
+    "typescript:declaration": "tsc -p tsconfig.declaration.json && api-extractor run -l -c ./config/api-extractor/api-extractor.json && node ../../scripts/declarations-cts.mjs types/resolver.d.ts",
     "test": "npm run build:es && cross-env BABEL_ENV=es babel test --out-dir test --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward' && cross-env NODE_ENV=test mocha",
     "prepack": "copyfiles -u 2 ../../LICENSE . && copyfiles -u 2 ../../NOTICE .",
     "postpack": "rimraf NOTICE LICENSE"
@@ -71,6 +76,7 @@
     "src/**/*.cjs",
     "dist/",
     "types/resolver.d.ts",
+    "types/resolver.d.cts",
     "LICENSE",
     "NOTICE",
     "README.md",
