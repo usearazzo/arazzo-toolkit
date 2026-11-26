@@ -28,5 +28,7 @@ jobs:
         run: npm run lint
       - name: Check TypeScript types
         run: npm run typescript:check-types
+      - name: Check published types
+        run: npm run typescript:check-published-types
       - name: Execute tests in monorepo
         run: npm run test
