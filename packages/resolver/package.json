@@ -26,9 +26,14 @@
   "unpkg": "./dist/arazzo-resolver.browser.min.js",
   "main": "./src/index.cjs",
   "exports": {
-    "types": "./types/resolver.d.ts",
-    "import": "./src/index.mjs",
-    "require": "./src/index.cjs"
+    "import": {
+      "types": "./types/resolver.d.ts",
+      "default": "./src/index.mjs"
+    },
+    "require": {
+      "types": "./types/resolver.d.cts",
+      "default": "./src/index.cjs"
+    }
   },
   "types": "./types/resolver.d.ts",
   "scripts": {
@@ -40,7 +45,8 @@
     "lint:fix": "eslint ./ --fix",
     "clean": "rimraf --glob 'src/**/*.mjs' 'src/**/*.cjs' 'test/**/*.mjs' ./dist ./types",
     "typescript:check-types": "tsc --noEmit",
-    "typescript:declaration": "tsc -p tsconfig.declaration.json && api-extractor run -l -c ./config/api-extractor/api-extractor.json",
+    "typescript:declaration": "tsc -p tsconfig.declaration.json && api-extractor run -l -c ./config/api-extractor/api-extractor.json && node ../../scripts/declarations-cts.mjs",
+    "typescript:check-published-types": "attw --pack . --profile node16 && tsc -p test/types/tsconfig.json",
     "test": "npm run build:es && cross-env BABEL_ENV=es babel test --out-dir test --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward' && cross-env NODE_ENV=test mocha",
     "prepack": "copyfiles -u 2 ../../LICENSE . && copyfiles -u 2 ../../NOTICE .",
     "postpack": "rimraf NOTICE LICENSE"
@@ -54,23 +60,24 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@babel/runtime-corejs3": "^8.1.3",
-    "@speclynx/apidom-datamodel": "^7.1.0",
-    "@speclynx/apidom-error": "^7.1.0",
-    "@speclynx/apidom-ns-arazzo-1": "^7.1.0",
-    "@speclynx/apidom-ns-openapi-2": "^7.1.0",
-    "@speclynx/apidom-ns-openapi-3-0": "^7.1.0",
-    "@speclynx/apidom-ns-openapi-3-1": "^7.1.0",
-    "@speclynx/apidom-reference": "^7.1.0",
+    "@speclynx/apidom-datamodel": "^7.1.1",
+    "@speclynx/apidom-error": "^7.1.1",
+    "@speclynx/apidom-ns-arazzo-1": "^7.1.1",
+    "@speclynx/apidom-ns-openapi-2": "^7.1.1",
+    "@speclynx/apidom-ns-openapi-3-0": "^7.1.1",
+    "@speclynx/apidom-ns-openapi-3-1": "^7.1.1",
+    "@speclynx/apidom-reference": "^7.1.1",
     "@usearazzo/parser": "1.0.1-alpha.35"
   },
   "devDependencies": {
-    "@speclynx/apidom-core": "^7.1.0"
+    "@speclynx/apidom-core": "^7.1.1"
   },
   "files": [
     "src/**/*.mjs",
     "src/**/*.cjs",
     "dist/",
     "types/resolver.d.ts",
+    "types/resolver.d.cts",
     "LICENSE",
     "NOTICE",
     "README.md",

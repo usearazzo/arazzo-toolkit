@@ -21,6 +21,7 @@
     "lint:fix": "lerna run lint:fix",
     "typescript:check-types": "lerna run typescript:check-types",
     "typescript:declaration": "lerna run typescript:declaration",
+    "typescript:check-published-types": "lerna run typescript:check-published-types",
     "clean": "lerna run clean",
     "test": "lerna run test",
     "link": "npm link --workspaces",
@@ -41,6 +42,7 @@
     "./packages/*"
   ],
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@babel/cli": "=8.1.0",
     "@babel/core": "=8.1.3",
     "@babel/plugin-transform-runtime": "=8.1.2",

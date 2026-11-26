@@ -145,3 +145,9 @@ jobs:
           node -e "require('@usearazzo/$pkg')"
           node --input-type=module -e "await import('@usearazzo/$pkg')"
         done
+        for sub in logging stream opentelemetry; do
+          node -e "require('@usearazzo/runner/observability/$sub')"
+          node --input-type=module -e "await import('@usearazzo/runner/observability/$sub')"
+        done
+    - name: Check published types
+      run: npm run typescript:check-published-types

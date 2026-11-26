@@ -27,9 +27,14 @@
   "unpkg": "./dist/arazzo-parser.browser.min.js",
   "main": "./src/index.cjs",
   "exports": {
-    "types": "./types/parser.d.ts",
-    "import": "./src/index.mjs",
-    "require": "./src/index.cjs"
+    "import": {
+      "types": "./types/parser.d.ts",
+      "default": "./src/index.mjs"
+    },
+    "require": {
+      "types": "./types/parser.d.cts",
+      "default": "./src/index.cjs"
+    }
   },
   "types": "./types/parser.d.ts",
   "scripts": {
@@ -41,7 +46,8 @@
     "lint:fix": "eslint ./ --fix",
     "clean": "rimraf --glob 'src/**/*.mjs' 'src/**/*.cjs' 'test/**/*.mjs' ./dist ./types",
     "typescript:check-types": "tsc --noEmit",
-    "typescript:declaration": "tsc -p tsconfig.declaration.json && api-extractor run -l -c ./config/api-extractor/api-extractor.json",
+    "typescript:declaration": "tsc -p tsconfig.declaration.json && api-extractor run -l -c ./config/api-extractor/api-extractor.json && node ../../scripts/declarations-cts.mjs",
+    "typescript:check-published-types": "attw --pack . --profile node16 && tsc -p test/types/tsconfig.json",
     "test": "npm run build:es && cross-env BABEL_ENV=es babel test --out-dir test --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward' && cross-env NODE_ENV=test mocha",
     "prepack": "copyfiles -u 2 ../../LICENSE . && copyfiles -u 2 ../../NOTICE .",
     "postpack": "rimraf NOTICE LICENSE"
@@ -55,30 +61,31 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@babel/runtime-corejs3": "^8.1.3",
-    "@speclynx/apidom-datamodel": "^7.1.0",
-    "@speclynx/apidom-error": "^7.1.0",
-    "@speclynx/apidom-ns-arazzo-1": "^7.1.0",
-    "@speclynx/apidom-parser-adapter-arazzo-json-1": "^7.1.0",
-    "@speclynx/apidom-parser-adapter-arazzo-yaml-1": "^7.1.0",
-    "@speclynx/apidom-parser-adapter-openapi-json-2": "^7.1.0",
-    "@speclynx/apidom-parser-adapter-openapi-json-3-0": "^7.1.0",
-    "@speclynx/apidom-parser-adapter-openapi-json-3-1": "^7.1.0",
-    "@speclynx/apidom-parser-adapter-openapi-yaml-2": "^7.1.0",
-    "@speclynx/apidom-parser-adapter-openapi-yaml-3-0": "^7.1.0",
-    "@speclynx/apidom-parser-adapter-openapi-yaml-3-1": "^7.1.0",
-    "@speclynx/apidom-reference": "^7.1.0",
+    "@speclynx/apidom-datamodel": "^7.1.1",
+    "@speclynx/apidom-error": "^7.1.1",
+    "@speclynx/apidom-ns-arazzo-1": "^7.1.1",
+    "@speclynx/apidom-parser-adapter-arazzo-json-1": "^7.1.1",
+    "@speclynx/apidom-parser-adapter-arazzo-yaml-1": "^7.1.1",
+    "@speclynx/apidom-parser-adapter-openapi-json-2": "^7.1.1",
+    "@speclynx/apidom-parser-adapter-openapi-json-3-0": "^7.1.1",
+    "@speclynx/apidom-parser-adapter-openapi-json-3-1": "^7.1.1",
+    "@speclynx/apidom-parser-adapter-openapi-yaml-2": "^7.1.1",
+    "@speclynx/apidom-parser-adapter-openapi-yaml-3-0": "^7.1.1",
+    "@speclynx/apidom-parser-adapter-openapi-yaml-3-1": "^7.1.1",
+    "@speclynx/apidom-reference": "^7.1.1",
     "@swaggerexpert/arazzo-criterion": "^1.2.0",
     "@swaggerexpert/arazzo-runtime-expression": "^3.4.0",
     "ramda-adjunct": "^6.0.0"
   },
   "devDependencies": {
-    "@speclynx/apidom-core": "^7.1.0"
+    "@speclynx/apidom-core": "^7.1.1"
   },
   "files": [
     "src/**/*.mjs",
     "src/**/*.cjs",
     "dist/",
     "types/parser.d.ts",
+    "types/parser.d.cts",
     "LICENSE",
     "NOTICE",
     "README.md",

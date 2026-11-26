@@ -76,7 +76,8 @@ Always `source ~/.nvm/nvm.sh && nvm use` first (see `.claude/rules/nvm.md`). All
 | Lint check (all packages) | `npm run lint` |
 | Lint fix (all packages) | `npm run lint:fix` (Prettier runs via `eslint-plugin-prettier`) |
 | Type-check (all packages) | `npm run typescript:check-types` |
-| Generate declarations + api-extractor report | `npm run typescript:declaration` |
+| Generate declarations + api-extractor report (and the `.d.cts` copies for CommonJS consumers) | `npm run typescript:declaration` |
+| Check the published declarations (arethetypeswrong over each packed package, then a CommonJS consumer fixture under `module: node16`) | `npm run typescript:check-published-types` (after a build) |
 | Link packages globally for local consumers | `npm run link` / `npm run unlink` |
 
 Set `CPU_CORES` to your core count for faster parallel builds (`.env` holds `CPU_CORES=2` but npm does not load it).

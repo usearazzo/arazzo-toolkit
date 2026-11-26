@@ -27,9 +27,14 @@
   "unpkg": "./dist/arazzo-validator.browser.min.js",
   "main": "./src/index.cjs",
   "exports": {
-    "types": "./types/validator.d.ts",
-    "import": "./src/index.mjs",
-    "require": "./src/index.cjs"
+    "import": {
+      "types": "./types/validator.d.ts",
+      "default": "./src/index.mjs"
+    },
+    "require": {
+      "types": "./types/validator.d.cts",
+      "default": "./src/index.cjs"
+    }
   },
   "types": "./types/validator.d.ts",
   "scripts": {
@@ -41,7 +46,8 @@
     "lint:fix": "eslint ./ --fix",
     "clean": "rimraf --glob 'src/**/*.mjs' 'src/**/*.cjs' 'test/**/*.mjs' ./dist ./types",
     "typescript:check-types": "tsc --noEmit",
-    "typescript:declaration": "tsc -p tsconfig.declaration.json && api-extractor run -l -c ./config/api-extractor/api-extractor.json",
+    "typescript:declaration": "tsc -p tsconfig.declaration.json && api-extractor run -l -c ./config/api-extractor/api-extractor.json && node ../../scripts/declarations-cts.mjs",
+    "typescript:check-published-types": "attw --pack . --profile node16 && tsc -p test/types/tsconfig.json",
     "test": "npm run build:es && cross-env BABEL_ENV=es babel test --out-dir test --extensions '.ts' --out-file-extension '.mjs' --root-mode 'upward' && cross-env NODE_ENV=test mocha",
     "prepack": "copyfiles -u 2 ../../LICENSE . && copyfiles -u 2 ../../NOTICE .",
     "postpack": "rimraf NOTICE LICENSE"
@@ -55,10 +61,10 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@babel/runtime-corejs3": "^8.1.3",
-    "@speclynx/api-languageservice": "^3.0.5",
-    "@speclynx/apidom-error": "^7.1.0",
-    "@speclynx/apidom-ns-arazzo-1": "^7.1.0",
-    "@speclynx/apidom-reference": "^7.1.0",
+    "@speclynx/api-languageservice": "^3.0.6",
+    "@speclynx/apidom-error": "^7.1.1",
+    "@speclynx/apidom-ns-arazzo-1": "^7.1.1",
+    "@speclynx/apidom-reference": "^7.1.1",
     "@usearazzo/parser": "1.0.1-alpha.35",
     "ramda": "^0.32.0",
     "vscode-languageserver-textdocument": "^1.0.16",
@@ -69,6 +75,7 @@
     "src/**/*.cjs",
     "dist/",
     "types/validator.d.ts",
+    "types/validator.d.cts",
     "LICENSE",
     "NOTICE",
     "README.md",

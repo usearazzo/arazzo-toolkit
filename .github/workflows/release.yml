@@ -48,6 +48,8 @@ jobs:
         run: npm run build
       - name: Check TypeScript types
         run: npm run typescript:check-types
+      - name: Check published types
+        run: npm run typescript:check-published-types
       - name: Execute tests in monorepo
         run: npm run test
       - name: Execute runner end-to-end tests against the petstore
