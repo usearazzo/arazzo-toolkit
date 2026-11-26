@@ -1,6 +1,8 @@
 {
   "extends": "../../tsconfig.json",
   "include": ["src/**/*", "test/**/*"],
+  // checked against the built declarations by typescript:check-published-types
+  "exclude": ["test/types"],
   "compilerOptions": {
     // the subpath entries import the main entry by its package name, so their
     // declarations keep one Redactor and event type; this resolves it to source
