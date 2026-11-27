@@ -31,7 +31,7 @@ class ExecutionError extends ArazzoRunnerError {
   static readonly InvalidWorkflowReference = 'invalid-workflow-reference' as const;
   /** A workflow's `dependsOn` is not a list or holds a non-string entry. */
   static readonly MalformedDependsOn = 'malformed-dependsOn' as const;
-  /** A workflow's `steps` is not a list or holds an entry that is not a Step Object. */
+  /** A workflow's `steps` is absent, empty, not a list, or holds an entry that is not a Step Object. */
   static readonly MalformedSteps = 'malformed-steps' as const;
   /** A step run as an operation declares neither an `operationId` nor an `operationPath`. */
   static readonly MissingOperation = 'missing-operation' as const;

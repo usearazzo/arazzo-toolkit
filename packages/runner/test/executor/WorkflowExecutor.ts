@@ -182,17 +182,6 @@ describe('WorkflowExecutor', function () {
       // workflow outputs resolved against the final state.
       assert.deepEqual(result.outputs, { name: 'Rex', id: 7 });
     });
-
-    specify('should complete a workflow with no steps as a no-op', async function () {
-      const { executor, calls } = makeExecutor();
-
-      const result = await executor.execute('emptyWorkflow');
-
-      assert.strictEqual(result.status, 'completed');
-      assert.deepEqual(result.steps, []);
-      assert.strictEqual(calls.length, 0);
-      assert.deepEqual(result.outputs, {});
-    });
   });
 
   context('timing', function () {
@@ -549,6 +538,30 @@ describe('WorkflowExecutor', function () {
       const { executor } = makeExecutor();
 
       await rejects(executor.execute('scalarSteps'), ExecutionError, /non-list "steps"/);
+    });
+
+    specify('should throw malformed-steps for an empty "steps"', async function () {
+      // the validator reports an empty steps as an Error, so it does not run
+      // as a completed no-op.
+      const { executor, calls } = makeExecutor();
+
+      const error = await captureError(executor.execute('emptyWorkflow'));
+
+      assert.strictEqual(error.reason, 'malformed-steps');
+      assert.strictEqual(error.workflowId, 'emptyWorkflow');
+      assert.match(error.message, /empty "steps"/);
+      assert.strictEqual(calls.length, 0);
+    });
+
+    specify('should throw malformed-steps for a workflow without "steps"', async function () {
+      const { executor, calls } = makeExecutor();
+
+      const error = await captureError(executor.execute('missingSteps'));
+
+      assert.strictEqual(error.reason, 'malformed-steps');
+      assert.strictEqual(error.workflowId, 'missingSteps');
+      assert.match(error.message, /has no "steps"/);
+      assert.strictEqual(calls.length, 0);
     });
   });
 
@@ -1023,7 +1036,7 @@ describe('WorkflowExecutor', function () {
       const result = await executor.execute('transferOnFailure');
 
       assert.strictEqual(result.status, 'transferred');
-      assert.strictEqual(result.transferredTo?.workflowId, 'emptyWorkflow');
+      assert.strictEqual(result.transferredTo?.workflowId, 'minimalWorkflow');
       assert.strictEqual(result.transferredTo?.status, 'completed');
     });
 
@@ -1078,12 +1091,12 @@ describe('WorkflowExecutor', function () {
     );
 
     specify('should not charge the step budget for entering the target', async function () {
-      // maxSteps: 1 covers only the caller's own step; entering the (empty)
-      // target must not cost another unit, unlike a retry's workflowId
-      // reference, which does charge on entry.
-      const { executor } = makeExecutor(okResponse, { maxSteps: 1 });
+      // maxSteps: 2 covers the caller's own step and the target's one step;
+      // entering the target must not cost a third unit, unlike a retry's
+      // workflowId reference, which does charge on entry.
+      const { executor } = makeExecutor(okResponse, { maxSteps: 2 });
 
-      const result = await executor.execute('transfersToEmpty');
+      const result = await executor.execute('transfersToMinimal');
 
       assert.strictEqual(result.status, 'transferred');
       assert.strictEqual(result.transferredTo?.status, 'completed');
@@ -1315,20 +1328,17 @@ describe('WorkflowExecutor', function () {
       },
     );
 
-    specify(
-      'should charge the step budget for entering a workflowId reference, even an empty one',
-      async function () {
-        // maxSteps: 2 covers doomed's own initial attempt and, once the fix is
-        // in place, entering the reference; without that charge the run would
-        // complete as 'failed' once the single retry exhausts, rather than
-        // tripping the budget on doomed's own second attempt.
-        const { executor } = makeExecutor([serverErrorResponse], { maxSteps: 2 });
+    specify('should charge the step budget for entering a workflowId reference', async function () {
+      // maxSteps: 3 covers doomed's own initial attempt, entering the
+      // reference, and the reference's one step; without the entry charge the
+      // run would complete as 'failed' once the single retry exhausts, rather
+      // than tripping the budget on doomed's own second attempt.
+      const { executor } = makeExecutor([serverErrorResponse], { maxSteps: 3 });
 
-        const error = await captureError(executor.execute('retryWithBudgetedWorkflowReference'));
+      const error = await captureError(executor.execute('retryWithBudgetedWorkflowReference'));
 
-        assert.strictEqual(error.reason, 'step-budget');
-      },
-    );
+      assert.strictEqual(error.reason, 'step-budget');
+    });
 
     specify(
       "should feed a retried sub-workflow step's next attempt with the reference's repair",
@@ -1455,7 +1465,8 @@ describe('WorkflowExecutor', function () {
 
         const result = await executor.execute('freshOutputs', { inputs: { status: 'sold' } });
 
-        assert.strictEqual(calls.length, 2);
+        // fetch twice, then the transfer target's own step.
+        assert.strictEqual(calls.length, 3);
         assert.strictEqual(result.status, 'transferred');
         assert.deepInclude(result.transferredTo!.outputs, {
           code: 201,
@@ -1469,9 +1480,12 @@ describe('WorkflowExecutor', function () {
     specify(
       "should resolve a retry reference's parameters again on every firing",
       async function () {
+        // each failed attempt is followed by the reference's own step.
         const { executor } = makeActionExecutor([
           { status: 500, statusText: 'Internal Server Error', body: { name: 'A' } },
+          okResponse,
           { status: 503, statusText: 'Service Unavailable', body: { name: 'B' } },
+          okResponse,
           okResponse,
         ]);
 
@@ -1492,9 +1506,12 @@ describe('WorkflowExecutor', function () {
     specify(
       "should record a retry reference's resolved inputs under $workflows",
       async function () {
+        // each failed attempt is followed by the reference's own step.
         const { executor } = makeActionExecutor([
           { status: 500, statusText: 'Internal Server Error', body: { name: 'A' } },
+          okResponse,
           { status: 503, statusText: 'Service Unavailable', body: { name: 'B' } },
+          okResponse,
           okResponse,
         ]);
 
@@ -1508,7 +1525,14 @@ describe('WorkflowExecutor', function () {
     specify(
       'should keep earlier recorded inputs for a retry reference without parameters',
       async function () {
-        const { executor } = makeActionExecutor([serverErrorResponse, okResponse]);
+        // seed's sub-workflow step, the failing call, the reference's step,
+        // then the call again.
+        const { executor } = makeActionExecutor([
+          okResponse,
+          serverErrorResponse,
+          okResponse,
+          okResponse,
+        ]);
 
         const result = await executor.execute('retryReferenceWithoutParameters');
 
@@ -1527,7 +1551,14 @@ describe('WorkflowExecutor', function () {
     });
 
     specify('should resolve parameters: [] to empty inputs', async function () {
-      const { executor } = makeActionExecutor([serverErrorResponse, okResponse]);
+      // seed's sub-workflow step, the failing call, the reference's step, then
+      // the call again.
+      const { executor } = makeActionExecutor([
+        okResponse,
+        serverErrorResponse,
+        okResponse,
+        okResponse,
+      ]);
 
       const result = await executor.execute('retryReferenceEmptyParameters');
 
@@ -1672,7 +1703,8 @@ describe('WorkflowExecutor', function () {
 
         const result = await executor.execute('subWorkflowFreshOutputs');
 
-        assert.strictEqual(calls.length, 2);
+        // `call` twice, then the transfer target's own step.
+        assert.strictEqual(calls.length, 3);
         assert.strictEqual(result.status, 'transferred');
         assert.deepInclude(result.transferredTo!.outputs, { name: 'Fido', status: 'Fido' });
       },

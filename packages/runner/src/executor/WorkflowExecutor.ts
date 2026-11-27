@@ -1954,17 +1954,29 @@ class WorkflowExecutor {
   }
 
   /**
-   * The workflow's steps as an array in list order. An absent `steps` is a
-   * workflow with no steps — an empty list, a completed no-op run. A present but
-   * malformed `steps` (not a list, or holding a non-step entry) is an authoring
-   * error and throws rather than being silently treated as empty or partial.
+   * The workflow's steps as an array in list order. `steps` is a REQUIRED field
+   * holding at least one step, and the validator reports an absent or empty one
+   * as an Error, so neither runs as a completed no-op. Those, like a `steps`
+   * that is not a list or holds a non-step entry, are authoring errors and
+   * throw rather than being silently treated as empty or partial.
    */
   #orderedSteps(workflow: WorkflowElement, workflowId: string): StepElement[] {
-    if (!workflow.hasKey('steps')) return [];
+    if (!workflow.hasKey('steps')) {
+      throw new ExecutionError(`workflow "${workflowId}" has no "steps"`, {
+        workflowId,
+        reason: ExecutionError.MalformedSteps,
+      });
+    }
 
     const steps = workflow.steps;
     if (!isArrayElement(steps)) {
       throw new ExecutionError(`workflow "${workflowId}" has a non-list "steps"`, {
+        workflowId,
+        reason: ExecutionError.MalformedSteps,
+      });
+    }
+    if (steps.isEmpty) {
+      throw new ExecutionError(`workflow "${workflowId}" has an empty "steps"`, {
         workflowId,
         reason: ExecutionError.MalformedSteps,
       });
