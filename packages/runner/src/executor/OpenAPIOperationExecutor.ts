@@ -525,6 +525,7 @@ class OpenAPIOperationExecutor {
     } catch (error: unknown) {
       throw new ClientError('OpenAPI operation request failed', {
         operationPath: locator.jsonPointer,
+        uri: locator.document.uri,
         cause: error,
       });
     }
@@ -540,6 +541,7 @@ class OpenAPIOperationExecutor {
     } catch (error: unknown) {
       throw new ClientError('OpenAPI operation response could not be read', {
         operationPath: locator.jsonPointer,
+        uri: locator.document.uri,
         cause: error,
       });
     }

@@ -573,6 +573,9 @@ describe('OpenAPIOperationExecutor', function () {
         ClientError,
       );
       assert.strictEqual((thrown as ClientError).cause, cause);
+      // with the operation path, the document's URI locates the operation.
+      assert.strictEqual((thrown as ClientError).operationPath, locator.jsonPointer);
+      assert.strictEqual((thrown as ClientError).uri, locator.document.uri);
     });
 
     specify('should throw ClientError when the response body fails mid-read', async function () {
@@ -598,6 +601,7 @@ describe('OpenAPIOperationExecutor', function () {
       );
       assert.strictEqual((thrown as ClientError).cause, cause);
       assert.strictEqual((thrown as ClientError).operationPath, locator.jsonPointer);
+      assert.strictEqual((thrown as ClientError).uri, locator.document.uri);
       // told apart from a request that never got a response by its message.
       assert.strictEqual(
         (thrown as ClientError).message,
