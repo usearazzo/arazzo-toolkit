@@ -574,6 +574,30 @@ describe('OpenAPIOperationExecutor', function () {
       );
       assert.strictEqual((thrown as ClientError).cause, cause);
     });
+
+    specify('should throw ClientError when the response body fails mid-read', async function () {
+      // the transport resolves once the headers are in, so a connection lost
+      // while the body streams fails the read, not the request.
+      const cause = new TypeError('terminated');
+      const { executor } = makeExecutor({
+        respond: () =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.error(cause);
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      });
+
+      const thrown = await rejects(
+        executor.execute(locator, { parameters: { status: 'available' } }),
+        ClientError,
+      );
+      assert.strictEqual((thrown as ClientError).cause, cause);
+      assert.strictEqual((thrown as ClientError).operationPath, locator.jsonPointer);
+    });
   });
 
   context('request interceptors and capture', function () {
