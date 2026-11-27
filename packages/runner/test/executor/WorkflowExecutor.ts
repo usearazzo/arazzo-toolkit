@@ -1130,6 +1130,21 @@ describe('WorkflowExecutor', function () {
         assert.strictEqual(settledResult(result).workflowId, 'failBreak');
       },
     );
+
+    specify(
+      'should record a step without successCriteria as successful on a 500',
+      async function () {
+        const { executor } = makeExecutor(serverErrorResponse);
+
+        const result = await executor.execute('transfersToFailing');
+
+        // the step asserts nothing, so the 500 took its onSuccess goto; the
+        // empty records are how the trace shows that nothing was judged.
+        assert.isTrue(result.steps[0].successful);
+        assert.deepEqual(result.steps[0].successCriteria, []);
+        assert.strictEqual(result.status, 'transferred');
+      },
+    );
   });
 
   context('retry reference', function () {
