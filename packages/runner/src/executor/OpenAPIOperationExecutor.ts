@@ -316,7 +316,8 @@ export interface OpenAPIOperationExecutorOptions {
  * sends it through the pluggable {@link HTTPClient}, and normalizes the raw
  * `Response` into the runner's response model. A non-2xx status is a valid
  * outcome (judged by a step's `successCriteria`) and is returned, never
- * thrown; a transport failure is wrapped as a {@link ClientError}.
+ * thrown; a transport failure, a response body that cannot be read in full
+ * included, is wrapped as a {@link ClientError}.
  *
  * The executor is Arazzo-agnostic: it neither locates the operation (that is
  * the operation locator normalizer's concern) nor resolves parameters or
@@ -524,11 +525,26 @@ class OpenAPIOperationExecutor {
     } catch (error: unknown) {
       throw new ClientError('OpenAPI operation request failed', {
         operationPath: locator.jsonPointer,
+        uri: locator.document.uri,
         cause: error,
       });
     }
 
-    const response = await this.#responseNormalizer.normalize(rawResponse, requestInfo);
+    // the transport resolves once the headers are in, so a connection lost
+    // while the body streams fails here, inside the normalizer that reads it,
+    // and is as much a transport failure as a request that never got a
+    // response. Anything else the normalizer throws is reported the same way:
+    // either way there is no response to hand to the step.
+    let response: OpenAPIOperationResponse;
+    try {
+      response = await this.#responseNormalizer.normalize(rawResponse, requestInfo);
+    } catch (error: unknown) {
+      throw new ClientError('OpenAPI operation response could not be read', {
+        operationPath: locator.jsonPointer,
+        uri: locator.document.uri,
+        cause: error,
+      });
+    }
     if (this.#events.hasObservers) {
       this.#events.emit({
         type: 'openapi:operation:request:settled',
