@@ -268,6 +268,16 @@ export interface StepRunRecord {
    * Where the step is written.
    */
   readonly location: DocumentLocation;
+  /**
+   * Whether the step succeeded in its last attempt: every one of its
+   * `successCriteria` was met and, for a step calling a workflow, that
+   * workflow's run did not settle as failed (see
+   * {@link WorkflowExecutionResult.settledStatus}). A step without
+   * `successCriteria` asserts nothing, so its records are empty: one calling an
+   * operation is then successful on any received response, whatever its status
+   * code, and one calling a workflow unless that workflow's run settled as
+   * failed.
+   */
   readonly successful: boolean;
   readonly action: SelectedAction | undefined;
   /**

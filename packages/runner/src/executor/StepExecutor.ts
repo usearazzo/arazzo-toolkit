@@ -152,6 +152,12 @@ export interface CriterionEvaluationRecord {
 export interface StepExecutionResult {
   readonly stepId: string;
   readonly response: OpenAPIOperationResponse;
+  /**
+   * Whether every one of the step's `successCriteria` was met. A step without
+   * `successCriteria` asserts nothing, so it is successful on any received
+   * response, whatever its status code; its `successCriteria` records are then
+   * empty.
+   */
   readonly successful: boolean;
   readonly outputs: Record<string, unknown>;
   /**
