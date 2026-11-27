@@ -584,6 +584,7 @@ describe('OpenAPIOperationExecutor', function () {
           new Response(
             new ReadableStream({
               start(controller) {
+                controller.enqueue(new TextEncoder().encode('{"partial":'));
                 controller.error(cause);
               },
             }),
@@ -597,6 +598,11 @@ describe('OpenAPIOperationExecutor', function () {
       );
       assert.strictEqual((thrown as ClientError).cause, cause);
       assert.strictEqual((thrown as ClientError).operationPath, locator.jsonPointer);
+      // told apart from a request that never got a response by its message.
+      assert.strictEqual(
+        (thrown as ClientError).message,
+        'OpenAPI operation response could not be read',
+      );
     });
   });
 

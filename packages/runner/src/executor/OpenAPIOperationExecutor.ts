@@ -530,8 +530,10 @@ class OpenAPIOperationExecutor {
     }
 
     // the transport resolves once the headers are in, so a connection lost
-    // while the body streams fails here, and is as much a transport failure as
-    // a request that never got a response.
+    // while the body streams fails here, inside the normalizer that reads it,
+    // and is as much a transport failure as a request that never got a
+    // response. Anything else the normalizer throws is reported the same way:
+    // either way there is no response to hand to the step.
     let response: OpenAPIOperationResponse;
     try {
       response = await this.#responseNormalizer.normalize(rawResponse, requestInfo);
