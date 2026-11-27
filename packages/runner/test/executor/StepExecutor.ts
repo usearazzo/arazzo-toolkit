@@ -543,6 +543,56 @@ describe('StepExecutor', function () {
     });
   });
 
+  context('without successCriteria', function () {
+    specify('should be successful on any received response', async function () {
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        outputs: { status: '$statusCode' },
+      }) as StepElement;
+      const { executor } = makeExecutor(notFoundResponse);
+
+      const result = await executor.execute(step, state());
+
+      // the author asserted nothing, so a 404 is an outcome, not a failure;
+      // the empty records are how the trace shows that nothing was judged.
+      assert.isTrue(result.successful);
+      assert.deepEqual(result.successCriteria, []);
+      assert.strictEqual(result.outputs.status, 404);
+    });
+
+    specify('should select the onSuccess action, not the onFailure one', async function () {
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        onSuccess: [{ name: 'done', type: 'end' }],
+        onFailure: [{ name: 'again', type: 'retry', retryAfter: 1, retryLimit: 3 }],
+      }) as StepElement;
+      const { executor } = makeExecutor(notFoundResponse);
+
+      const result = await executor.execute(step, state());
+
+      assert.strictEqual(toValue(result.action?.name), 'done');
+    });
+
+    specify('should treat an empty list as no successCriteria', async function () {
+      const step = refractStep({
+        stepId: 'findPets',
+        operationId: 'findPetsByStatus',
+        parameters: [{ name: 'status', in: 'query', value: 'available' }],
+        successCriteria: [],
+      }) as StepElement;
+      const { executor } = makeExecutor(notFoundResponse);
+
+      const result = await executor.execute(step, state());
+
+      assert.isTrue(result.successful);
+      assert.deepEqual(result.successCriteria, []);
+    });
+  });
+
   context('criterion records', function () {
     specify('should record a whole body as a placeholder', async function () {
       const step = refractStep({
