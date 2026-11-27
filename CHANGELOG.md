@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.37](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.36...v1.0.1-alpha.37) (2026-11-27)
+
+### Bug Fixes
+
+- **runner:** wrap a response body read failure as ClientError ([#390](https://github.com/usearazzo/arazzo-toolkit/issues/390)) ([a203801](https://github.com/usearazzo/arazzo-toolkit/commit/a203801bcbeed381b85e19c39c0d6d3ab62e8e1a)), closes [#389](https://github.com/usearazzo/arazzo-toolkit/issues/389)
+
 ## [1.0.1-alpha.36](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.35...v1.0.1-alpha.36) (2026-11-26)
 
 ### Bug Fixes
