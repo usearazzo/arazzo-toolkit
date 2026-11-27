@@ -890,6 +890,41 @@ workflows:
       - stepId: only
         operationId: getInventory
 
+  # the four ways a workflow enters another one, each reaching a workflow
+  # without steps: rejected when that workflow is entered.
+  - workflowId: dependsOnEmpty
+    dependsOn:
+      - emptyWorkflow
+    steps:
+      - stepId: only
+        operationId: getInventory
+
+  - workflowId: callsMissingSteps
+    steps:
+      - stepId: call
+        workflowId: missingSteps
+
+  - workflowId: transfersToEmpty
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: emptyWorkflow
+
+  - workflowId: retryReferencesEmpty
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: repair
+            type: retry
+            retryLimit: 1
+            workflowId: emptyWorkflow
+
   # a present but non-list "steps" — malformed, an authoring error (not a no-op).
   - workflowId: scalarSteps
     steps: not-a-list

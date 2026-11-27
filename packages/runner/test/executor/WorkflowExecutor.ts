@@ -563,6 +563,48 @@ describe('WorkflowExecutor', function () {
       assert.match(error.message, /has no "steps"/);
       assert.strictEqual(calls.length, 0);
     });
+
+    specify('should reject a dependsOn prerequisite without steps', async function () {
+      const { executor, calls } = makeExecutor();
+
+      const error = await captureError(executor.execute('dependsOnEmpty'));
+
+      assert.strictEqual(error.reason, 'malformed-steps');
+      assert.strictEqual(error.workflowId, 'emptyWorkflow');
+      assert.strictEqual(calls.length, 0);
+    });
+
+    specify('should reject a called workflow without steps', async function () {
+      const { executor, calls } = makeExecutor();
+
+      const error = await captureError(executor.execute('callsMissingSteps'));
+
+      assert.strictEqual(error.reason, 'malformed-steps');
+      assert.strictEqual(error.workflowId, 'missingSteps');
+      assert.strictEqual(calls.length, 0);
+    });
+
+    specify('should reject a goto transfer to a workflow without steps', async function () {
+      // the target is checked when it is entered, so the step whose action
+      // names it has already sent its request.
+      const { executor, calls } = makeExecutor();
+
+      const error = await captureError(executor.execute('transfersToEmpty'));
+
+      assert.strictEqual(error.reason, 'malformed-steps');
+      assert.strictEqual(error.workflowId, 'emptyWorkflow');
+      assert.strictEqual(calls.length, 1);
+    });
+
+    specify('should reject a retry reference to a workflow without steps', async function () {
+      const { executor, calls } = makeExecutor(serverErrorResponse);
+
+      const error = await captureError(executor.execute('retryReferencesEmpty'));
+
+      assert.strictEqual(error.reason, 'malformed-steps');
+      assert.strictEqual(error.workflowId, 'emptyWorkflow');
+      assert.strictEqual(calls.length, 1);
+    });
   });
 
   context('retry', function () {
