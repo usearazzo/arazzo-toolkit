@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.38](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.37...v1.0.1-alpha.38) (2026-11-27)
+
+### Bug Fixes
+
+- **runner:** reject a workflow without steps ([#391](https://github.com/usearazzo/arazzo-toolkit/issues/391)) ([ac3927f](https://github.com/usearazzo/arazzo-toolkit/commit/ac3927f1d3a894f348ae95f627e4558078304773)), closes [#338](https://github.com/usearazzo/arazzo-toolkit/issues/338)
+
 ## [1.0.1-alpha.37](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.36...v1.0.1-alpha.37) (2026-11-27)
 
 ### Bug Fixes

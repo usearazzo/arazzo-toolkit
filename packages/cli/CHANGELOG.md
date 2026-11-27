@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.0.1-alpha.38](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.37...v1.0.1-alpha.38) (2026-11-27)
+
+**Note:** Version bump only for package @usearazzo/cli
+
 ## [1.0.1-alpha.37](https://github.com/usearazzo/arazzo-toolkit/compare/v1.0.1-alpha.36...v1.0.1-alpha.37) (2026-11-27)
 
 **Note:** Version bump only for package @usearazzo/cli
