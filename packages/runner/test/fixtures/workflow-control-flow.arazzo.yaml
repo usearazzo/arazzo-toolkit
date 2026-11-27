@@ -215,7 +215,7 @@ workflows:
         onFailure:
           - name: jump
             type: goto
-            workflowId: emptyWorkflow
+            workflowId: minimalWorkflow
 
   # transfers to a workflow whose own chain settles 'failed' — the top-level
   # result is 'transferred', not 'failed'; a caller checking the settled
@@ -261,17 +261,17 @@ workflows:
             type: goto
             workflowId: noSuchWorkflow
 
-  # a goto transfer to a workflow with no steps of its own — entering it must
-  # NOT be charged against the step budget, unlike a retry's workflowId
-  # reference: a goto fires once per step evaluation, not repeatedly.
-  - workflowId: transfersToEmpty
+  # a goto transfer to a one-step workflow — entering it must NOT be charged
+  # against the step budget, unlike a retry's workflowId reference: a goto
+  # fires once per step evaluation, not repeatedly.
+  - workflowId: transfersToMinimal
     steps:
       - stepId: only
         operationId: getInventory
         onSuccess:
           - name: jump
             type: goto
-            workflowId: emptyWorkflow
+            workflowId: minimalWorkflow
 
   # the step fails then succeeds within the retry budget: the operation is
   # re-run until a 200 arrives, and the run completes.
@@ -561,8 +561,8 @@ workflows:
             stepId: doomed
             workflowId: repairFlow
 
-  # a retry's workflowId reference to a workflow with no steps of its own —
-  # entering it must still be charged, proving it isn't a free ride.
+  # a retry's workflowId reference to a one-step workflow — entering it must
+  # be charged on top of that step, proving it isn't a free ride.
   - workflowId: retryWithBudgetedWorkflowReference
     steps:
       - stepId: doomed
@@ -573,7 +573,7 @@ workflows:
           - name: repair
             type: retry
             retryLimit: 1
-            workflowId: emptyWorkflow
+            workflowId: minimalWorkflow
 
   # a workflowId-targeting step's inputs must reflect a retry reference's
   # repair on the next attempt, not the state as it stood at the step's first
@@ -875,9 +875,55 @@ workflows:
           - name: bogus
             type: teleport
 
-  # a workflow with no steps at all — a completed, no-op run.
+  # a workflow with an empty "steps" — malformed, an authoring error (not a no-op).
   - workflowId: emptyWorkflow
     steps: []
+
+  # a workflow with no "steps" at all — malformed the same way.
+  - workflowId: missingSteps
+    summary: has no steps
+
+  # the smallest workflow that runs: one step, used as a transfer and
+  # reference target.
+  - workflowId: minimalWorkflow
+    steps:
+      - stepId: only
+        operationId: getInventory
+
+  # the four ways a workflow enters another one, each reaching a workflow
+  # without steps: rejected when that workflow is entered.
+  - workflowId: dependsOnEmpty
+    dependsOn:
+      - emptyWorkflow
+    steps:
+      - stepId: only
+        operationId: getInventory
+
+  - workflowId: callsMissingSteps
+    steps:
+      - stepId: call
+        workflowId: missingSteps
+
+  - workflowId: transfersToEmpty
+    steps:
+      - stepId: only
+        operationId: getInventory
+        onSuccess:
+          - name: jump
+            type: goto
+            workflowId: emptyWorkflow
+
+  - workflowId: retryReferencesEmpty
+    steps:
+      - stepId: doomed
+        operationId: getInventory
+        successCriteria:
+          - condition: $statusCode == 200
+        onFailure:
+          - name: repair
+            type: retry
+            retryLimit: 1
+            workflowId: emptyWorkflow
 
   # a present but non-list "steps" — malformed, an authoring error (not a no-op).
   - workflowId: scalarSteps

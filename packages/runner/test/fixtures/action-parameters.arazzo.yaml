@@ -37,10 +37,12 @@ components:
         - reference: $components.parameters.sharedStatus
           value: from-components-action
 workflows:
-  # the target of every goto transfer: no steps, so its outputs are exactly
-  # the inputs it received.
+  # the target of every goto transfer: its one step has no outputs, so the
+  # workflow's outputs are exactly the inputs it received.
   - workflowId: echoTarget
-    steps: []
+    steps:
+      - stepId: only
+        operationId: getInventory
     outputs:
       status: $inputs.status
       code: $inputs.code
@@ -50,7 +52,9 @@ workflows:
 
   # the target of every retry reference; echoes its inputs the same way.
   - workflowId: repairEcho
-    steps: []
+    steps:
+      - stepId: only
+        operationId: getInventory
     outputs:
       code: $inputs.code
       name: $inputs.name

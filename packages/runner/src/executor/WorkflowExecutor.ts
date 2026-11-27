@@ -1314,8 +1314,8 @@ class WorkflowExecutor {
    *   it is named a call cycle, not a dependency one, and charged one unit
    *   for entering the reference itself, matching the "1 for the step itself
    *   plus whatever its sub-run spends" convention a sub-workflow step
-   *   already follows (without it, a reference to a workflow with few or no
-   *   steps of its own would cost nothing to fire). Its inputs are the
+   *   already follows (without it, a reference to a one-step workflow would
+   *   cost no more than that step to fire). Its inputs are the
    *   action's `parameters` (`#115`), resolved again on every firing
    *   against the attempt that fired it — `{}` without them. Its outputs are
    *   recorded via `state.setWorkflow`, which *is* "context transfers back",
@@ -1954,17 +1954,34 @@ class WorkflowExecutor {
   }
 
   /**
-   * The workflow's steps as an array in list order. An absent `steps` is a
-   * workflow with no steps — an empty list, a completed no-op run. A present but
-   * malformed `steps` (not a list, or holding a non-step entry) is an authoring
-   * error and throws rather than being silently treated as empty or partial.
+   * The workflow's steps as an array in list order. `steps` is a REQUIRED field
+   * holding at least one step, and the validator reports an absent or empty one
+   * as an Error, so neither runs as a completed no-op. Those, like a `steps`
+   * that is not a list or holds a non-step entry, are authoring errors and
+   * throw rather than being silently treated as empty or partial.
+   *
+   * Checked when the workflow is entered, before any of its own prerequisites
+   * or steps. A workflow another one only references (a `goto` target, a retry
+   * reference) is therefore rejected when the run reaches it, after the
+   * requests sent on the way there.
    */
   #orderedSteps(workflow: WorkflowElement, workflowId: string): StepElement[] {
-    if (!workflow.hasKey('steps')) return [];
+    if (!workflow.hasKey('steps')) {
+      throw new ExecutionError(`workflow "${workflowId}" has no "steps"`, {
+        workflowId,
+        reason: ExecutionError.MalformedSteps,
+      });
+    }
 
     const steps = workflow.steps;
     if (!isArrayElement(steps)) {
       throw new ExecutionError(`workflow "${workflowId}" has a non-list "steps"`, {
+        workflowId,
+        reason: ExecutionError.MalformedSteps,
+      });
+    }
+    if (steps.isEmpty) {
+      throw new ExecutionError(`workflow "${workflowId}" has an empty "steps"`, {
         workflowId,
         reason: ExecutionError.MalformedSteps,
       });
